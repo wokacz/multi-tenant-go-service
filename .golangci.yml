@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint # catches == comparisons on wrapped errors
+    - gocritic
+    - misspell
+    - nilerr
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - unparam
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true # models are self-describing; revisit once the API grows
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/wokacz/go-example

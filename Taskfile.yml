@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+vars:
+  BIN: bin/api
+
+tasks:
+  default:
+    desc: List the available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the API binary into bin/
+    cmds:
+      - go build -o {{.BIN}} ./cmd/api
+
+  run:
+    desc: Run the API
+    cmds:
+      - go run ./cmd/api
+
+  test:
+    desc: Run the test suite
+    cmds:
+      - go test ./... -race
+
+  cover:
+    desc: Run the tests and open an HTML coverage report
+    cmds:
+      - go test ./... -coverprofile=coverage.out -covermode=atomic
+      - go tool cover -func=coverage.out # render coverage report as text
+      - go tool cover -html=coverage.out # render coverage report as HTML
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Apply the formatters configured in .golangci.yml
+    cmds:
+      - golangci-lint fmt ./...
+
+  tidy:
+    desc: Tidy and verify go.mod
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  check:
+    desc: Everything CI should run
+    cmds:
+      - task: tidy
+      - task: lint
+      - task: test
+
+  clean:
+    desc: Remove build and coverage artefacts
+    cmds:
+      - rm -rf bin coverage.out

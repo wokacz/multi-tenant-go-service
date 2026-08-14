@@ -1,0 +1,9 @@
+# Secrets — commit .env.example instead
+.env
+
+# Build artefacts
+/bin/
+
+# Coverage
+coverage.out
+coverage.html
