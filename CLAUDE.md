@@ -50,7 +50,7 @@ Atlas for migrations.
 `internal/api/architecture_test.go` fails the build if:
 
 - anything under `internal/` outside `internal/api` imports **huma**
-- `internal/api` or `internal/user` imports **gorm**
+- anything under `internal/` outside `internal/store` imports **gorm**
 
 These are not style rules. Before touching imports in those trees, understand
 why the boundary exists rather than working around the test.
@@ -59,35 +59,43 @@ why the boundary exists rather than working around the test.
 
 An error changes vocabulary exactly twice:
 
-1. **Repository** (`internal/store/user.go`) turns driver errors into domain
+1. **Repository** (`internal/store/repositories/user.go`) turns driver errors into domain
    errors: `gorm.ErrDuplicatedKey` → `user.ErrEmailTaken`. GORM's error types
    stop here.
-2. **`internal/api/apierr`** turns domain errors into HTTP statuses:
+2. **`internal/api/problem`** turns domain errors into HTTP statuses:
    `user.ErrNotFound` → 404. It knows nothing about databases.
 
 Anything unmapped becomes an opaque 500 with the real error logged against the
 request id. That is deliberate — raw errors carry table names and query
-fragments. To add a mapping, add a domain error and a case in `apierr.Error`.
+fragments. To add a mapping, add a domain error and a case in `problem.Error`.
 
-`apierr` is a separate package rather than part of `internal/api` because
+`problem` is a separate package rather than `internal/api/errors.go` because
 `internal/api` imports `internal/api/v1` to register routes, so `v1` cannot
-import its parent.
+import its parent. A file in package `api` would be an import cycle; a package
+named `errors` would shadow the standard library. The name is the RFC 7807
+document this layer actually emits (`application/problem+json`).
 
 ### Who owns which interface
 
-`internal/user/repository.go` declares `Repository`; `internal/store/user.go`
-implements it. **The consumer owns the interface**, so the store depends on the
-domain and never the reverse. New domain modules follow the same shape:
-`internal/<thing>/repository.go` for the interface, `internal/store/<thing>.go`
-for the GORM implementation, with a `var _ <thing>.Repository = (*T)(nil)`
-assertion.
+`internal/domain/user/repository.go` declares `Repository`;
+`internal/store/repositories/user.go` implements it. **The consumer owns the
+interface**, so the store depends on the domain and never the reverse. New
+modules follow the same shape: `internal/domain/<thing>/repository.go` for the
+interface, `internal/store/repositories/<thing>.go` for the GORM implementation,
+with a `var _ <thing>.Repository = (*T)(nil)` assertion.
+
+`internal/` splits plumbing from business: `api`, `auth`, `config` and `store`
+are infrastructure; every entity lives under `internal/domain/`. That keeps a
+domain `config` from colliding with process configuration, and keeps `auth`
+(token crypto) out of the domain tree.
 
 ### The API contract
 
 - **Versioned from the first route.** `/v1` lives in the path *and* the
   directory tree (`internal/api/v1`). A v2 is a new package beside it.
-  Operational endpoints (`/health`, the OpenAPI document) sit outside the
-  version deliberately — probes should not break on a contract bump.
+Operational endpoints (`/health`) sit outside the version deliberately —
+probes should not break on a contract bump. The OpenAPI document is committed
+and is not served in production.
 - **DTOs never leave `internal/api`.** `v1/dto.go` holds the wire types and the
   single model→DTO function. `models.User` carries `PasswordHash`,
   `IsProtected` and `DeletedAt`; it must not be marshalled.
@@ -116,8 +124,9 @@ rule follows the directory tree, not the module boundary.
 
 `config.Load()` returns **all** validation errors at once via `errors.Join`,
 because configuration is fixed by editing a file and restarting. Timeouts, pool
-sizes and `Env` live there; `Env` gates the log format and whether `/docs` is
-served (production returns 404 for the UI but keeps `/openapi.json`).
+sizes and `Env` live there; `Env` gates the log format, whether `/docs` and
+`/openapi.json` are served (production serves neither), TLS and secret
+requirements.
 
 `cmd/api/main.go` only assembles dependencies — no logic, not even the logger
 construction (that is `config.NewLogger`). It does set `time.Local = time.UTC`,

@@ -2,13 +2,15 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/api/apierr"
-	"github.com/wokacz/go-example/internal/user"
+	"github.com/wokacz/go-example/internal/api/problem"
+	"github.com/wokacz/go-example/internal/auth"
+	"github.com/wokacz/go-example/internal/domain/user"
 )
 
 type GetUserInput struct {
@@ -23,17 +25,6 @@ type CreateUserInput struct {
 	Body CreateUserRequest
 }
 
-type CreateUserOutput struct {
-	// Location points at the created resource, so a client can follow up
-	// without reassembling the URL from the body.
-	Location string `header:"Location"`
-	Body     UserResponse
-}
-
-type userHandlers struct {
-	users *user.Service
-}
-
 func registerUsers(api huma.API, users *user.Service) {
 	h := &userHandlers{users: users}
 
@@ -42,41 +33,58 @@ func registerUsers(api huma.API, users *user.Service) {
 		Method:      http.MethodGet,
 		Path:        Prefix + "/users/{id}",
 		Summary:     "Fetch a user",
-		Tags:        []string{"users"},
-		// Every status the handler can produce has to be listed, or it is
-		// missing from the spec and from any generated client.
-		Errors: []int{http.StatusNotFound},
+		Description: "Returns the authenticated user's own record. Another user's " +
+			"id is indistinguishable from a missing one.",
+		Tags: []string{"users"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
+		Errors: []int{http.StatusUnauthorized, http.StatusNotFound},
 	}, h.get)
 
 	huma.Register(api, huma.Operation{
-		OperationID:   "create-user",
-		Method:        http.MethodPost,
-		Path:          Prefix + "/users",
-		Summary:       "Register a user",
+		OperationID: "create-user",
+		Method:      http.MethodPost,
+		Path:        Prefix + "/users",
+		Summary:     "Register a user",
+		Description: "Creates an account. A duplicate email is reported as success " +
+			"so the response cannot be used to discover registered addresses. " +
+			"Sign in with POST /v1/sessions to obtain a token.",
 		Tags:          []string{"users"},
-		DefaultStatus: http.StatusCreated,
-		Errors:        []int{http.StatusConflict, http.StatusUnprocessableEntity},
+		DefaultStatus: http.StatusNoContent,
+		Errors:        []int{http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 	}, h.create)
 }
 
+type userHandlers struct {
+	users *user.Service
+}
+
 func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutput, error) {
+	caller, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, problem.Error(ctx, user.ErrUnauthorized)
+	}
+
+	// Do not look up another user's id: a 403-vs-404 split would disclose
+	// whether that account exists.
+	if caller != in.ID {
+		return nil, problem.Error(ctx, user.ErrNotFound)
+	}
+
 	u, err := h.users.ByID(ctx, in.ID)
 	if err != nil {
-		// The handler never decides a status itself; apierr owns that mapping.
-		return nil, apierr.Error(ctx, err)
+		return nil, problem.Error(ctx, err)
 	}
 
 	return &GetUserOutput{Body: newUserResponse(u)}, nil
 }
 
-func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*CreateUserOutput, error) {
-	u, err := h.users.Create(ctx, in.Body.Name, in.Body.Email, in.Body.Password)
-	if err != nil {
-		return nil, apierr.Error(ctx, err)
+func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*struct{}, error) {
+	_, err := h.users.Create(ctx, in.Body.Name, in.Body.Email, in.Body.Password)
+	if err != nil && !errors.Is(err, user.ErrEmailTaken) {
+		return nil, problem.Error(ctx, err)
 	}
 
-	return &CreateUserOutput{
-		Location: Prefix + "/users/" + u.ID.String(),
-		Body:     newUserResponse(u),
-	}, nil
+	return nil, nil
 }

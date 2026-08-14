@@ -7,7 +7,8 @@ package v1
 import (
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/wokacz/go-example/internal/user"
+	"github.com/wokacz/go-example/internal/auth"
+	"github.com/wokacz/go-example/internal/domain/user"
 )
 
 // Prefix is the path every operation in this package lives under. Operational
@@ -19,10 +20,12 @@ const Prefix = "/v1"
 // Deps are the domain services this version needs. A struct rather than a
 // parameter list so adding a module later does not ripple through every caller.
 type Deps struct {
-	Users *user.Service
+	Users  *user.Service
+	Tokens *auth.Signer
 }
 
 // Register attaches every v1 operation to the API.
 func Register(api huma.API, deps Deps) {
 	registerUsers(api, deps.Users)
+	registerSessions(api, deps.Users, deps.Tokens)
 }

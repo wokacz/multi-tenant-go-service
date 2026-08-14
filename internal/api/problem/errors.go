@@ -1,7 +1,10 @@
-// Package apierr translates domain errors into HTTP responses. It sits in its
-// own package so both internal/api and the versioned route packages under it
-// can use it without an import cycle.
-package apierr
+// Package problem maps domain errors onto HTTP Problem Details
+// (RFC 7807 / application/problem+json).
+//
+// It cannot live as internal/api/errors.go: package api imports v1 to
+// register routes, so v1 cannot import api. A package named errors would
+// shadow the standard library.
+package problem
 
 import (
 	"context"
@@ -12,8 +15,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/wokacz/go-example/internal/domain/user"
 	"github.com/wokacz/go-example/internal/store/models"
-	"github.com/wokacz/go-example/internal/user"
 )
 
 // statusClientClosedRequest is nginx's convention for "the client hung up
@@ -51,14 +54,23 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, user.ErrNotFound):
 		return huma.Error404NotFound("user not found")
 
-	case errors.Is(err, user.ErrEmailTaken):
-		return huma.Error409Conflict("email already registered")
+	case errors.Is(err, user.ErrUnauthorized):
+		return huma.Error401Unauthorized("unauthorized")
+
+	case errors.Is(err, user.ErrInvalidCredentials):
+		return huma.Error401Unauthorized("invalid credentials")
 
 	case errors.Is(err, user.ErrPasswordTooShort):
 		return huma.Error422UnprocessableEntity("password is too short")
 
 	case errors.Is(err, user.ErrPasswordTooLong):
 		return huma.Error422UnprocessableEntity("password is too long")
+
+	case errors.Is(err, user.ErrNameEmpty):
+		return huma.Error422UnprocessableEntity("name is empty")
+
+	case errors.Is(err, user.ErrNameTooLong):
+		return huma.Error422UnprocessableEntity("name is too long")
 
 	case errors.Is(err, models.ErrProtected):
 		return huma.Error409Conflict("record is protected from deletion")
@@ -83,12 +95,16 @@ func Error(ctx context.Context, err error) error {
 	return huma.Error500InternalServerError("internal server error")
 }
 
-// WriteProblem renders a huma.ErrorModel by hand for the responses chi produces
+// Write renders a huma.ErrorModel by hand for the responses chi produces
 // before huma ever sees the request — an unmatched path and an unmatched
 // method. Left to chi they come back as plain text, and would be the only
 // non-JSON bodies the API ever emits.
-func WriteProblem(w http.ResponseWriter, status int, detail string) {
+func Write(w http.ResponseWriter, status int, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
+	if status == http.StatusTooManyRequests {
+		w.Header().Set("Retry-After", "60")
+	}
+
 	w.WriteHeader(status)
 
 	_ = json.NewEncoder(w).Encode(huma.ErrorModel{

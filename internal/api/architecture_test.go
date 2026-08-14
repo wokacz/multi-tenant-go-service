@@ -34,8 +34,7 @@ func TestHumaStaysInsideTheAPIPackage(t *testing.T) {
 // was involved. An import of gorm above the store means some error is crossing
 // that boundary untranslated.
 func TestGormStaysInsideTheStore(t *testing.T) {
-	forbidImport(t, apiRoot, "", "gorm.io")
-	forbidImport(t, filepath.Join(internalRoot, "user"), "", "gorm.io")
+	forbidImport(t, internalRoot, filepath.Join(internalRoot, "store"), "gorm.io")
 }
 
 // forbidImport fails the test if any Go file under root imports a path

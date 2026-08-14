@@ -14,10 +14,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/wokacz/go-example/internal/api/apierr"
+	"github.com/wokacz/go-example/internal/api/problem"
 	v1 "github.com/wokacz/go-example/internal/api/v1"
+	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
-	"github.com/wokacz/go-example/internal/user"
+	"github.com/wokacz/go-example/internal/domain/user"
 )
 
 // Version is reported in the OpenAPI document. It describes the API contract,
@@ -42,26 +43,35 @@ type Pinger interface {
 type Deps struct {
 	// DB backs the health check only. Repositories reach the database through
 	// the domain services.
-	DB    Pinger
-	Users *user.Service
+	DB     Pinger
+	Users  *user.Service
+	Tokens *auth.Signer
 }
 
 // Server owns the HTTP listener and the huma API registered on it. huma appears
 // in this package and the ones beneath it and nowhere else: everything below
 // deals in domain types and domain errors, and the translation to HTTP happens
-// here and in apierr. internal/api/architecture_test.go enforces that.
+// here and in problem. internal/api/architecture_test.go enforces that.
 type Server struct {
-	cfg  *config.Config
-	log  *slog.Logger
-	deps Deps
-	http *http.Server
-	api  huma.API
+	cfg           *config.Config
+	log           *slog.Logger
+	deps          Deps
+	http          *http.Server
+	api           huma.API
+	registerLimit *limiter
+	loginLimit    *limiter
 }
 
 // NewServer wires the router, the middleware chain and the huma adapter. It
 // does not bind a port — that happens in Run.
 func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
-	s := &Server{cfg: cfg, log: log, deps: deps}
+	s := &Server{
+		cfg:           cfg,
+		log:           log,
+		deps:          deps,
+		registerLimit: newLimiter(cfg.RegisterPerMinute),
+		loginLimit:    newLimiter(cfg.LoginPerMinute),
+	}
 
 	router := chi.NewMux()
 
@@ -75,7 +85,10 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	// from known proxy addresses — do not reach for RealIP.
 	router.Use(middleware.RequestID)
 	router.Use(middleware.CleanPath)
+	router.Use(s.securityHeaders)
+	router.Use(s.maxBytes)
 	router.Use(s.requestLogger)
+	router.Use(s.rateLimit)
 	router.Use(middleware.Recoverer)
 
 	humaCfg := s.openAPIConfig()
@@ -83,13 +96,14 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	// chi answers these itself, before huma is involved, so they need the same
 	// error shape wired up explicitly.
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		apierr.WriteProblem(w, http.StatusNotFound, "no operation matches "+r.URL.Path)
+		problem.Write(w, http.StatusNotFound, "no operation matches "+r.URL.Path)
 	})
 	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		apierr.WriteProblem(w, http.StatusMethodNotAllowed, r.Method+" is not allowed on "+r.URL.Path)
+		problem.Write(w, http.StatusMethodNotAllowed, r.Method+" is not allowed on "+r.URL.Path)
 	})
 
 	s.api = humachi.New(router, humaCfg)
+	s.api.UseMiddleware(s.requireBearer)
 	s.registerRoutes()
 
 	s.http = &http.Server{
@@ -114,6 +128,20 @@ func (s *Server) API() huma.API { return s.api }
 func (s *Server) openAPIConfig() huma.Config {
 	cfg := huma.DefaultConfig(s.cfg.APIName, Version)
 
+	if cfg.Components == nil {
+		cfg.Components = &huma.Components{}
+	}
+
+	if cfg.Components.SecuritySchemes == nil {
+		cfg.Components.SecuritySchemes = map[string]*huma.SecurityScheme{}
+	}
+
+	cfg.Components.SecuritySchemes["bearer"] = &huma.SecurityScheme{
+		Type:         "http",
+		Scheme:       "bearer",
+		BearerFormat: "JWT",
+	}
+
 	// Swagger UI in place of huma's default Stoplight Elements. Huma serves it
 	// with the asset versions pinned, subresource integrity hashes attached and
 	// a matching CSP header — worth using as-is rather than hand-rolling the
@@ -131,9 +159,12 @@ func (s *Server) openAPIConfig() huma.Config {
 	}
 
 	if s.cfg.Env.IsProduction() {
-		// Only the browsable UI goes away; /openapi.json stays, so generated
-		// clients keep working without publishing an explorable map of the API.
+		// The browsable UI and the machine-readable map both go away. Generated
+		// clients are built from the committed api/openapi.yaml, not from a
+		// live document the process would otherwise publish.
 		cfg.DocsPath = ""
+		cfg.OpenAPIPath = ""
+		cfg.SchemasPath = ""
 
 		return cfg
 	}
@@ -193,7 +224,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 		// ErrServerClosed is what a graceful Shutdown looks like from here, so
 		// it is not worth waking the select for.
-		if err := s.http.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := s.serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}
 	}()
@@ -216,6 +247,14 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *Server) serve(ln net.Listener) error {
+	if s.cfg.TLSEnabled() {
+		return s.http.ServeTLS(ln, s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+	}
+
+	return s.http.Serve(ln)
 }
 
 // requestLogger records one line per request and puts a logger carrying the
@@ -241,7 +280,7 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 			)
 		}()
 
-		next.ServeHTTP(ww, r.WithContext(apierr.WithLogger(r.Context(), log)))
+		next.ServeHTTP(ww, r.WithContext(problem.WithLogger(r.Context(), log)))
 	})
 }
 
@@ -260,15 +299,14 @@ func remoteIP(r *http.Request) string {
 // HealthOutput is the body of the health check.
 type HealthOutput struct {
 	Body struct {
-		Status   string `json:"status" example:"ok" doc:"Overall health of the service"`
-		Database string `json:"database" example:"ok" doc:"Reachability of the database"`
+		Status string `json:"status" example:"ok" doc:"Overall health of the service"`
 	}
 }
 
 func (s *Server) registerRoutes() {
 	// Versioned operations live in their own package; a future v2 registers
 	// beside this line rather than replacing it.
-	v1.Register(s.api, v1.Deps{Users: s.deps.Users})
+	v1.Register(s.api, v1.Deps{Users: s.deps.Users, Tokens: s.deps.Tokens})
 
 	// Health stays outside /v1 on purpose — see v1.Prefix.
 	huma.Register(s.api, huma.Operation{
@@ -300,12 +338,11 @@ func (s *Server) health(ctx context.Context, _ *struct{}) (*HealthOutput, error)
 
 		// A failing status has to be a failing code — a probe reads the status
 		// line, not the body.
-		return nil, huma.Error503ServiceUnavailable("database unavailable")
+		return nil, huma.Error503ServiceUnavailable("unavailable")
 	}
 
 	out := &HealthOutput{}
 	out.Body.Status = "ok"
-	out.Body.Database = "ok"
 
 	return out, nil
 }

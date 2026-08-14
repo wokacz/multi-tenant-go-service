@@ -2,10 +2,9 @@
 
 A small Go service tracking users, their known devices, and login history.
 
-> **Status: work in progress.** Users are implemented end to end — model,
-> repository, service and `/v1/users` routes — and serve as the template for
-> the modules that follow. Devices and login events have models but no
-> repository or routes yet.
+> **Status: work in progress.** Users can register, sign in, and fetch their
+> own profile. Devices and login events have models but no repository or
+> routes yet.
 
 The API is built on [chi](https://github.com/go-chi/chi) for routing and
 middleware and [huma](https://huma.rocks/) for operations, validation and the
@@ -23,10 +22,17 @@ rewrite. `internal/api/architecture_test.go` parses every import under
 `internal/` and fails on a violation, naming the file.
 
 **2. A repository interface belongs to the package that uses it.**
-[`internal/user/repository.go`](internal/user/repository.go) declares what the
-user module needs; [`internal/store/user.go`](internal/store/user.go) implements
-it. The dependency points inwards — the store knows about the domain, never the
-reverse — and the interface lists only what is actually used.
+[`internal/domain/user/repository.go`](internal/domain/user/repository.go)
+declares what the user module needs;
+[`internal/store/repositories/user.go`](internal/store/repositories/user.go)
+implements it. The dependency points inwards — the store knows about the domain,
+never the reverse — and the interface lists only what is actually used. New
+modules follow the same pair: `internal/domain/<thing>/` and
+`internal/store/repositories/<thing>.go`.
+
+Infrastructure (`api`, `auth`, `config`, `store`) stays at the top of
+`internal/`. Domain modules live under `internal/domain/`, so a future
+`config` entity cannot collide with application configuration.
 
 **3. DTOs never leave `internal/api`; models never reach JSON.**
 [`v1/dto.go`](internal/api/v1/dto.go) holds the wire types and the single
@@ -37,10 +43,11 @@ column cannot silently widen the API.
 
 **4. Storage errors are translated at the storage boundary.**
 Repositories turn `gorm.ErrRecordNotFound` into `user.ErrNotFound`, so
-[`apierr`](internal/api/apierr/errors.go) maps domain vocabulary onto status
-codes without knowing a database exists. Anything unmapped becomes an opaque
-500 with the real error in the log — unmapped errors carry table names and
-query fragments.
+[`problem`](internal/api/problem/errors.go) maps domain vocabulary onto status
+codes without knowing a database exists. It is a sibling package, not
+`internal/api/errors.go`: `api` imports `v1`, so `v1` cannot import `api`.
+Anything unmapped becomes an opaque 500 with the real error in the log —
+unmapped errors carry table names and query fragments.
 
 **5. The API is versioned from the first route.**
 `/v1` appears in the path and in the directory tree
@@ -90,9 +97,9 @@ serving a hand-written page: huma pins the asset versions, attaches subresource
 integrity hashes and sends a matching `Content-Security-Policy`, all of which a
 hand-rolled page tends to drop.
 
-**In production (`ENV=production`) `/docs` returns 404** while
-`/openapi.json` keeps working, so generated clients still build without
-publishing an explorable map of the API.
+**In production (`ENV=production`) `/docs`, `/openapi.json` and `/schemas`
+are not served.** The committed [`api/openapi.yaml`](api/openapi.yaml) is the
+contract; the running process does not publish a map of itself.
 
 Two things are worth keeping up as operations are added, because both flow
 straight into the docs and into generated clients:
@@ -107,8 +114,9 @@ straight into the docs and into generated clients:
 | Method | Path              | Description                                           |
 | ------ | ----------------- | ----------------------------------------------------- |
 | `GET`  | `/health`         | 200 when the service can serve traffic, 503 when not. |
-| `POST` | `/v1/users`       | Register a user. 201 with `Location`, 409 on a duplicate email. |
-| `GET`  | `/v1/users/{id}`  | Fetch a user. 404 when there is none.                 |
+| `POST` | `/v1/users`       | Register. 204 whether the email is new or already taken. Rate limited. |
+| `POST` | `/v1/sessions`    | Sign in. 201 with a Bearer token, 401 on bad credentials. Rate limited. |
+| `GET`  | `/v1/users/{id}`  | Fetch the authenticated user. 401 without a token; another id is 404. |
 
 `/health` reaches the database rather than only reporting that the process is
 up — an instance that cannot query Postgres cannot serve anything, and should
@@ -150,8 +158,9 @@ task run
 ```
 
 The API refuses to start without a reachable database, so bring the compose
-stack up first. If port 5432 is already taken by another project, change
-`POSTGRES_PORT` in `.env` — both the app and compose read it.
+stack up first. It binds to `127.0.0.1` by default. If port 5432 is already
+taken by another project, change `POSTGRES_PORT` in `.env` — both the app and
+compose read it.
 
 ## Tasks
 
@@ -203,20 +212,24 @@ cmd/
   api/                 entrypoint — wiring only
   openapi/             writes api/openapi.yaml
 internal/
-  config/              environment-backed configuration, logger construction
+  config/              process configuration — not a domain module
+  auth/                signed session tokens — not a domain module
   api/                 the only place huma appears
     server.go          router, middleware, OpenAPI config, health, lifecycle
     architecture_test.go  enforces the import rules
-    apierr/            domain error → HTTP status, in one place
+    problem/           domain error → RFC 7807 problem; own package to avoid a cycle with v1
     v1/                version 1 of the contract
       router.go        what /v1 consists of
       dto.go           wire types and the model → DTO conversion
       users.go         user operations
-  user/                user domain: Repository interface + Service
-  store/               persistence
+      sessions.go      sign-in
+  domain/              business modules; one directory per entity
+    user/              Repository interface + Service
+  store/               persistence — the only place gorm appears
     postgres.go        connection pool, GORM setup
-    user.go            implements user.Repository
-    models/            domain models and their invariants
+    repositories/      one file per domain module, implements its Repository
+      user.go
+    models/            GORM models (schema source of truth) and their invariants
 loader/                separate module: prints model DDL for Atlas
 migrations/            Atlas migrations
 ```

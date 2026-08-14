@@ -1,12 +1,36 @@
 components:
   schemas:
+    CreateSessionRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/CreateSessionRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Email address
+          format: email
+          maxLength: 255
+          type: string
+        password:
+          description: Plain-text password
+          maxLength: 72
+          minLength: 1
+          type: string
+      required:
+        - email
+        - password
+      type: object
     CreateUserRequest:
       additionalProperties: false
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/CreateUserRequest.json
+            - https://example.com/CreateUserRequest.json
           format: uri
           readOnly: true
           type: string
@@ -48,7 +72,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/ErrorModel.json
+            - https://example.com/ErrorModel.json
           format: uri
           readOnly: true
           type: string
@@ -95,14 +119,9 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/HealthOutputBody.json
+            - https://example.com/HealthOutputBody.json
           format: uri
           readOnly: true
-          type: string
-        database:
-          description: Reachability of the database
-          examples:
-            - ok
           type: string
         status:
           description: Overall health of the service
@@ -111,7 +130,30 @@ components:
           type: string
       required:
         - status
-        - database
+      type: object
+    SessionResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/SessionResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        expires_at:
+          description: When the token stops being accepted
+          format: date-time
+          type: string
+        token:
+          description: Bearer token for subsequent requests
+          type: string
+        user:
+          $ref: "#/components/schemas/UserResponse"
+      required:
+        - token
+        - expires_at
+        - user
       type: object
     UserResponse:
       additionalProperties: false
@@ -119,7 +161,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/UserResponse.json
+            - https://example.com/UserResponse.json
           format: uri
           readOnly: true
           type: string
@@ -144,6 +186,11 @@ components:
         - email
         - created_at
       type: object
+  securitySchemes:
+    bearer:
+      bearerFormat: JWT
+      scheme: bearer
+      type: http
 info:
   description: Tracks users, their known devices, and login history.
   license:
@@ -179,8 +226,53 @@ paths:
       summary: Health check
       tags:
         - meta
+  /v1/sessions:
+    post:
+      description: Exchanges an email and password for a Bearer token. Wrong passwords and unknown addresses share one error.
+      operationId: create-session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      summary: Sign in
+      tags:
+        - users
   /v1/users:
     post:
+      description: Creates an account. A duplicate email is reported as success so the response cannot be used to discover registered addresses. Sign in with POST /v1/sessions to obtain a token.
       operationId: create-user
       requestBody:
         content:
@@ -189,28 +281,20 @@ paths:
               $ref: "#/components/schemas/CreateUserRequest"
         required: true
       responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserResponse"
-          description: Created
-          headers:
-            Location:
-              schema:
-                type: string
-        "409":
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ErrorModel"
-          description: Conflict
+        "204":
+          description: No Content
         "422":
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Too Many Requests
         "500":
           content:
             application/problem+json:
@@ -222,6 +306,7 @@ paths:
         - users
   /v1/users/{id}:
     get:
+      description: Returns the authenticated user's own record. Another user's id is indistinguishable from a missing one.
       operationId: get-user
       parameters:
         - description: User id
@@ -239,6 +324,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserResponse"
           description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
         "404":
           content:
             application/problem+json:
@@ -257,6 +348,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Internal Server Error
+      security:
+        - bearer: []
       summary: Fetch a user
       tags:
         - users

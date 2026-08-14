@@ -1,4 +1,4 @@
-package store
+package repositories
 
 import (
 	"context"
@@ -8,27 +8,28 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/go-example/internal/store"
 	"github.com/wokacz/go-example/internal/store/models"
-	"github.com/wokacz/go-example/internal/user"
 )
 
-// UserRepository implements user.Repository. The interface it satisfies is
-// declared in internal/user, so the dependency points inwards: the domain does
-// not know this type exists.
-type UserRepository struct {
-	db *DB
+// User implements user.Repository. The interface it satisfies is declared in
+// internal/domain/user, so the dependency points inwards: the domain does not
+// know this type exists.
+type User struct {
+	db *store.DB
 }
 
-func NewUserRepository(db *DB) *UserRepository {
-	return &UserRepository{db: db}
+func NewUser(db *store.DB) *User {
+	return &User{db: db}
 }
 
 // Compile-time check that this still satisfies the interface the domain
 // declares. Without it, a drifting signature would only surface at the call
 // site in main, far from either definition.
-var _ user.Repository = (*UserRepository)(nil)
+var _ user.Repository = (*User)(nil)
 
-func (r *UserRepository) Create(ctx context.Context, u *models.User) error {
+func (r *User) Create(ctx context.Context, u *models.User) error {
 	err := r.db.WithContext(ctx).Create(u).Error
 	if err == nil {
 		return nil
@@ -44,7 +45,7 @@ func (r *UserRepository) Create(ctx context.Context, u *models.User) error {
 	return fmt.Errorf("store: create user: %w", err)
 }
 
-func (r *UserRepository) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+func (r *User) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	var u models.User
 
 	// GORM applies the soft-delete scope on its own, so rows with deleted_at
@@ -59,4 +60,19 @@ func (r *UserRepository) ByID(ctx context.Context, id uuid.UUID) (*models.User, 
 	}
 
 	return nil, fmt.Errorf("store: user by id: %w", err)
+}
+
+func (r *User) ByEmail(ctx context.Context, email string) (*models.User, error) {
+	var u models.User
+
+	err := r.db.WithContext(ctx).First(&u, "email = ?", email).Error
+	if err == nil {
+		return &u, nil
+	}
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, user.ErrNotFound
+	}
+
+	return nil, fmt.Errorf("store: user by email: %w", err)
 }

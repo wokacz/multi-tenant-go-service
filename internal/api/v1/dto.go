@@ -5,14 +5,15 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/go-example/internal/domain/user"
 	"github.com/wokacz/go-example/internal/store/models"
-	"github.com/wokacz/go-example/internal/user"
 )
 
 // minPasswordLength mirrors the minLength tag on CreateUserRequest.Password. A
 // struct tag cannot reference a constant, so the two are tied together by the
 // compile-time assertion below instead.
 const minPasswordLength = 12
+const maxNameLength = 100
 
 // If the domain rule and the documented schema ever disagree, one of these
 // subtractions underflows and the package stops compiling. The alternative is a
@@ -20,6 +21,8 @@ const minPasswordLength = 12
 const (
 	_ = uint(user.MinPasswordLength - minPasswordLength)
 	_ = uint(minPasswordLength - user.MinPasswordLength)
+	_ = uint(user.MaxNameLength - maxNameLength)
+	_ = uint(maxNameLength - user.MaxNameLength)
 )
 
 // UserResponse is the wire representation of a user.
@@ -58,4 +61,20 @@ type CreateUserRequest struct {
 	// multi-byte password can satisfy this and still be rejected by the domain.
 	// That path returns 422 rather than a 500.
 	Password string `json:"password" minLength:"12" maxLength:"72" doc:"Plain-text password, hashed before storage"`
+}
+
+// CreateSessionRequest is the body of POST /v1/sessions. minLength is 1 rather
+// than 12: repeating the registration policy here would tell a caller whether
+// an address was registered under the current rules.
+type CreateSessionRequest struct {
+	Email    string `json:"email" format:"email" maxLength:"255" doc:"Email address"`
+	Password string `json:"password" minLength:"1" maxLength:"72" doc:"Plain-text password"`
+}
+
+// SessionResponse is returned after a successful login. The token is a JWT;
+// the user is included so the client does not need a second round-trip.
+type SessionResponse struct {
+	Token     string       `json:"token" doc:"Bearer token for subsequent requests"`
+	ExpiresAt time.Time    `json:"expires_at" doc:"When the token stops being accepted"`
+	User      UserResponse `json:"user"`
 }

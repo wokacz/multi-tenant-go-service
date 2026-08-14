@@ -12,7 +12,8 @@ import (
 
 // Env names the deployment environment. It gates the handful of behaviours that
 // must differ between a laptop and production on purpose rather than by
-// accident — log format, and whether the browsable API docs are published.
+// accident — log format, whether the API docs are published, TLS and secret
+// requirements.
 type Env string
 
 const (
@@ -22,11 +23,39 @@ const (
 
 func (e Env) IsProduction() bool { return e == EnvProduction }
 
+// devAuthTokenSecret is the development fallback. Production rejects it so a
+// forgotten AUTH_TOKEN_SECRET cannot ship with a value that is in the repo.
+const devAuthTokenSecret = "dev-only-not-for-production-use-32bytes"
+
+const minAuthTokenSecretBytes = 32
+
 // Config holds the configuration values for the application.
 type Config struct {
 	Env     Env
 	APIName string
+	APIHost string
 	APIPort int
+
+	// TLSCertFile and TLSKeyFile enable HTTPS on the listener. Both must be
+	// set, or neither. Production listening on a non-loopback address requires
+	// them: passwords otherwise travel in the clear. A reverse proxy that
+	// terminates TLS should keep API_HOST on loopback instead.
+	TLSCertFile string
+	TLSKeyFile  string
+
+	// AuthTokenSecret signs session tokens. Development fills in a well-known
+	// value when unset; production refuses to start without a unique secret.
+	AuthTokenSecret string
+	AuthTokenTTL    time.Duration
+
+	// RegisterPerMinute / LoginPerMinute cap bcrypt-heavy endpoints per peer
+	// address. Zero disables the limiter, which is only for tests.
+	RegisterPerMinute int
+	LoginPerMinute    int
+
+	// MaxRequestBytes bounds the request body so a client cannot pin memory
+	// with an unbounded JSON document.
+	MaxRequestBytes int64
 
 	// ReadHeaderTimeout is the one timeout that is a security control rather
 	// than a nicety: without it a client can pin a connection open forever by
@@ -82,7 +111,18 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Env:     Env(getEnv("ENV", string(EnvDevelopment))),
 		APIName: getEnv("API_NAME", "Example"),
+		APIHost: getEnv("API_HOST", "127.0.0.1"),
 		APIPort: getInt("API_PORT", 4000),
+
+		TLSCertFile: getEnv("TLS_CERT_FILE", ""),
+		TLSKeyFile:  getEnv("TLS_KEY_FILE", ""),
+
+		AuthTokenSecret: os.Getenv("AUTH_TOKEN_SECRET"),
+		AuthTokenTTL:    time.Hour,
+
+		RegisterPerMinute: getInt("REGISTER_PER_MINUTE", 5),
+		LoginPerMinute:    getInt("LOGIN_PER_MINUTE", 5),
+		MaxRequestBytes:   int64(getInt("MAX_REQUEST_BYTES", 1<<20)),
 
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -104,6 +144,13 @@ func Load() (*Config, error) {
 		DBConnMaxIdleTime:    5 * time.Minute,
 		DBSlowQueryThreshold: 200 * time.Millisecond,
 		DBConnectTimeout:     10 * time.Second,
+	}
+
+	// Fill the development secret before validation so a laptop start without
+	// AUTH_TOKEN_SECRET still signs tokens, while production sees the empty
+	// value and refuses.
+	if cfg.AuthTokenSecret == "" && !cfg.Env.IsProduction() {
+		cfg.AuthTokenSecret = devAuthTokenSecret
 	}
 
 	errs = append(errs, cfg.validate()...)
@@ -129,6 +176,38 @@ func (c *Config) validate() []error {
 		errs = append(errs, errors.New("config: API_NAME must not be empty"))
 	}
 
+	if c.APIHost == "" {
+		errs = append(errs, errors.New("config: API_HOST must not be empty"))
+	}
+
+	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
+		errs = append(errs, errors.New("config: TLS_CERT_FILE and TLS_KEY_FILE must both be set, or both empty"))
+	}
+
+	if c.Env.IsProduction() && !c.BindsLoopback() && !c.TLSEnabled() {
+		errs = append(errs, errors.New("config: production requires TLS_CERT_FILE and TLS_KEY_FILE unless API_HOST is loopback"))
+	}
+
+	if len(c.AuthTokenSecret) < minAuthTokenSecretBytes {
+		errs = append(errs, fmt.Errorf("config: AUTH_TOKEN_SECRET must be at least %d bytes", minAuthTokenSecretBytes))
+	}
+
+	if c.Env.IsProduction() && c.AuthTokenSecret == devAuthTokenSecret {
+		errs = append(errs, errors.New("config: AUTH_TOKEN_SECRET must not use the development default"))
+	}
+
+	if c.RegisterPerMinute < 0 {
+		errs = append(errs, fmt.Errorf("config: REGISTER_PER_MINUTE must be >= 0, got %d", c.RegisterPerMinute))
+	}
+
+	if c.LoginPerMinute < 0 {
+		errs = append(errs, fmt.Errorf("config: LOGIN_PER_MINUTE must be >= 0, got %d", c.LoginPerMinute))
+	}
+
+	if c.MaxRequestBytes < 1024 {
+		errs = append(errs, fmt.Errorf("config: MAX_REQUEST_BYTES must be at least 1024, got %d", c.MaxRequestBytes))
+	}
+
 	for _, p := range []struct {
 		key   string
 		value int
@@ -143,6 +222,14 @@ func (c *Config) validate() []error {
 
 	if c.PostgresDatabaseName == "" {
 		errs = append(errs, errors.New("config: POSTGRES_DATABASE_NAME must not be empty"))
+	}
+
+	if c.Env.IsProduction() && !postgresSSLModeSecure(c.PostgresSSLMode) {
+		errs = append(errs, fmt.Errorf("config: POSTGRES_SSL_MODE must be require, verify-ca or verify-full in production, got %q", c.PostgresSSLMode))
+	}
+
+	if c.Env.IsProduction() && weakPostgresPassword(c.PostgresPassword) {
+		errs = append(errs, errors.New("config: POSTGRES_PASSWORD is too weak for production"))
 	}
 
 	if c.DBMaxOpenConns < 1 {
@@ -160,10 +247,45 @@ func (c *Config) validate() []error {
 	return errs
 }
 
-// Addr is the address the HTTP server binds to. The host is left empty so the
-// listener accepts on every interface.
+// Addr is the address the HTTP server binds to.
 func (c *Config) Addr() string {
-	return net.JoinHostPort("", strconv.Itoa(c.APIPort))
+	return net.JoinHostPort(c.APIHost, strconv.Itoa(c.APIPort))
+}
+
+// TLSEnabled reports whether the process will serve HTTPS itself.
+func (c *Config) TLSEnabled() bool {
+	return c.TLSCertFile != "" && c.TLSKeyFile != ""
+}
+
+// BindsLoopback is true when the listener cannot be reached from another
+// machine. Production may skip in-process TLS in that case, because a proxy
+// on the same host is expected to terminate it.
+func (c *Config) BindsLoopback() bool {
+	host := c.APIHost
+	if host == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func postgresSSLModeSecure(mode string) bool {
+	switch mode {
+	case "require", "verify-ca", "verify-full":
+		return true
+	default:
+		return false
+	}
+}
+
+func weakPostgresPassword(password string) bool {
+	switch password {
+	case "", "postgres", "password", "change-me", "changeme", "admin", "secret":
+		return true
+	default:
+		return false
+	}
 }
 
 // DSN builds the Postgres connection string.

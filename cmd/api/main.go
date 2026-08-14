@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/wokacz/go-example/internal/api"
+	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
+	"github.com/wokacz/go-example/internal/domain/user"
 	"github.com/wokacz/go-example/internal/store"
-	"github.com/wokacz/go-example/internal/user"
+	"github.com/wokacz/go-example/internal/store/repositories"
 )
 
 func main() {
@@ -61,9 +63,15 @@ func run() error {
 		}
 	}()
 
+	tokens, err := auth.NewSigner(cfg.AuthTokenSecret, cfg.AuthTokenTTL)
+	if err != nil {
+		return err
+	}
+
 	deps := api.Deps{
-		DB:    db,
-		Users: user.NewService(store.NewUserRepository(db)),
+		DB:     db,
+		Users:  user.NewService(repositories.NewUser(db)),
+		Tokens: tokens,
 	}
 
 	return api.NewServer(cfg, log, deps).Run(ctx)
