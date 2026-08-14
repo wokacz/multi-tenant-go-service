@@ -12,6 +12,7 @@ import (
 	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
 	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/go-example/internal/mail"
 	"github.com/wokacz/go-example/internal/store"
 	"github.com/wokacz/go-example/internal/store/repositories"
 )
@@ -70,8 +71,9 @@ func run() error {
 
 	deps := api.Deps{
 		DB:     db,
-		Users:  user.NewService(repositories.NewUser(db)),
+		Users:  user.NewService(repositories.NewUser(db), []byte(cfg.AuthTokenSecret)),
 		Tokens: tokens,
+		Mail:   mail.New(cfg, log),
 	}
 
 	return api.NewServer(cfg, log, deps).Run(ctx)

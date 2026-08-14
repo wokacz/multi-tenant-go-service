@@ -20,13 +20,34 @@ import (
 	"github.com/wokacz/go-example/internal/store/models"
 )
 
+var testPepper = []byte("0123456789abcdef0123456789abcdef")
+
 type okPinger struct{}
 
 func (okPinger) Ping(context.Context) error { return nil }
 
+type capturingMailer struct {
+	to, code string
+}
+
+func (c *capturingMailer) SendPasswordReset(_ context.Context, to, code string) error {
+	c.to, c.code = to, code
+
+	return nil
+}
+
 type stubRepo struct {
 	byID    map[uuid.UUID]*models.User
 	byEmail map[string]*models.User
+	resets  map[uuid.UUID]*models.PasswordReset
+}
+
+func newStubRepo() *stubRepo {
+	return &stubRepo{
+		byID:    map[uuid.UUID]*models.User{},
+		byEmail: map[string]*models.User{},
+		resets:  map[uuid.UUID]*models.PasswordReset{},
+	}
 }
 
 func (s *stubRepo) Create(_ context.Context, u *models.User) error {
@@ -59,7 +80,44 @@ func (s *stubRepo) ByEmail(_ context.Context, email string) (*models.User, error
 	return u, nil
 }
 
-func newTestServer(t *testing.T) *Server {
+func (s *stubRepo) ReplacePasswordReset(_ context.Context, reset *models.PasswordReset) error {
+	if reset.ID == uuid.Nil {
+		reset.ID = uuid.Must(uuid.NewV7())
+	}
+
+	s.resets[reset.UserID] = reset
+
+	return nil
+}
+
+func (s *stubRepo) ActivePasswordReset(_ context.Context, userID uuid.UUID, now time.Time) (*models.PasswordReset, error) {
+	reset, ok := s.resets[userID]
+	if !ok || reset.ConsumedAt != nil || !reset.ExpiresAt.After(now) {
+		return nil, user.ErrNotFound
+	}
+
+	return reset, nil
+}
+
+func (s *stubRepo) SavePasswordReset(_ context.Context, reset *models.PasswordReset) error {
+	s.resets[reset.UserID] = reset
+
+	return nil
+}
+
+func (s *stubRepo) ConsumePasswordReset(_ context.Context, reset *models.PasswordReset, passwordHash string) error {
+	u, ok := s.byID[reset.UserID]
+	if !ok {
+		return user.ErrNotFound
+	}
+
+	u.PasswordHash = passwordHash
+	s.resets[reset.UserID] = reset
+
+	return nil
+}
+
+func newTestServer(t *testing.T) (*Server, *capturingMailer) {
 	t.Helper()
 
 	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour)
@@ -67,11 +125,7 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatalf("NewSigner() = %v", err)
 	}
 
-	repo := &stubRepo{
-		byID:    map[uuid.UUID]*models.User{},
-		byEmail: map[string]*models.User{},
-	}
-
+	mailer := &capturingMailer{}
 	cfg := &config.Config{
 		Env:               config.EnvDevelopment,
 		APIName:           "test",
@@ -85,15 +139,29 @@ func newTestServer(t *testing.T) *Server {
 		IdleTimeout:       time.Second,
 	}
 
-	return NewServer(cfg, slog.New(slog.DiscardHandler), Deps{
+	s := NewServer(cfg, slog.New(slog.DiscardHandler), Deps{
 		DB:     okPinger{},
-		Users:  user.NewService(repo),
+		Users:  user.NewService(newStubRepo(), testPepper),
 		Tokens: tokens,
+		Mail:   mailer,
 	})
+
+	return s, mailer
+}
+
+func postJSON(t *testing.T, handler http.Handler, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	return rec
 }
 
 func TestGetUserRequiresBearer(t *testing.T) {
-	s := newTestServer(t)
+	s, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/v1/users/"+uuid.Must(uuid.NewV7()).String(), nil)
 	rec := httptest.NewRecorder()
 	s.http.Handler.ServeHTTP(rec, req)
@@ -104,38 +172,38 @@ func TestGetUserRequiresBearer(t *testing.T) {
 }
 
 func TestCreateUserHidesDuplicateEmail(t *testing.T) {
-	s := newTestServer(t)
-	body := []byte(`{"name":"Ada","email":"ada@example.com","password":"twelve-chars"}`)
+	s, _ := newTestServer(t)
+	body := `{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`
 
 	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/v1/users", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		s.http.Handler.ServeHTTP(rec, req)
-
+		rec := postJSON(t, s.http.Handler, "/v1/users", body)
 		if rec.Code != http.StatusNoContent {
-			t.Fatalf("attempt %d: status = %d, want 204", i+1, rec.Code)
+			t.Fatalf("attempt %d: status = %d, want 204 body %s", i+1, rec.Code, rec.Body.Bytes())
 		}
 	}
 }
 
+func TestCreateUserRequiresPasswordConfirmation(t *testing.T) {
+	s, _ := newTestServer(t)
+	rec := postJSON(t, s.http.Handler, "/v1/users",
+		`{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-charZ"}`)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+}
+
 func TestSessionThenSelfFetch(t *testing.T) {
-	s := newTestServer(t)
-	create := httptest.NewRequest(http.MethodPost, "/v1/users", strings.NewReader(
-		`{"name":"Ada","email":"ada@example.com","password":"twelve-chars"}`))
-	create.Header.Set("Content-Type", "application/json")
-	created := httptest.NewRecorder()
-	s.http.Handler.ServeHTTP(created, create)
+	s, _ := newTestServer(t)
+	created := postJSON(t, s.http.Handler, "/v1/users",
+		`{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`)
 
 	if created.Code != http.StatusNoContent {
 		t.Fatalf("create status = %d, want 204", created.Code)
 	}
 
-	login := httptest.NewRequest(http.MethodPost, "/v1/sessions", strings.NewReader(
-		`{"email":"ada@example.com","password":"twelve-chars"}`))
-	login.Header.Set("Content-Type", "application/json")
-	logged := httptest.NewRecorder()
-	s.http.Handler.ServeHTTP(logged, login)
+	logged := postJSON(t, s.http.Handler, "/v1/sessions",
+		`{"email":"ada@example.com","password":"twelve-chars"}`)
 
 	if logged.Code != http.StatusCreated {
 		t.Fatalf("login status = %d body = %s", logged.Code, logged.Body.Bytes())
@@ -151,13 +219,22 @@ func TestSessionThenSelfFetch(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	self := httptest.NewRequest(http.MethodGet, "/v1/users/"+session.User.ID.String(), nil)
+	self := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
 	self.Header.Set("Authorization", "Bearer "+session.Token)
 	got := httptest.NewRecorder()
 	s.http.Handler.ServeHTTP(got, self)
 
 	if got.Code != http.StatusOK {
-		t.Fatalf("self fetch status = %d, want 200", got.Code)
+		t.Fatalf("GET /v1/me status = %d, want 200", got.Code)
+	}
+
+	byID := httptest.NewRequest(http.MethodGet, "/v1/users/"+session.User.ID.String(), nil)
+	byID.Header.Set("Authorization", "Bearer "+session.Token)
+	gotID := httptest.NewRecorder()
+	s.http.Handler.ServeHTTP(gotID, byID)
+
+	if gotID.Code != http.StatusOK {
+		t.Fatalf("self fetch by id status = %d, want 200", gotID.Code)
 	}
 
 	other := httptest.NewRequest(http.MethodGet, "/v1/users/"+uuid.Must(uuid.NewV7()).String(), nil)
@@ -170,8 +247,52 @@ func TestSessionThenSelfFetch(t *testing.T) {
 	}
 }
 
+func TestPasswordResetDeliversCodeAndChangesPassword(t *testing.T) {
+	s, mailer := newTestServer(t)
+	if rec := postJSON(t, s.http.Handler, "/v1/users",
+		`{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`); rec.Code != http.StatusNoContent {
+		t.Fatalf("create status = %d", rec.Code)
+	}
+
+	unknown := postJSON(t, s.http.Handler, "/v1/password-resets", `{"email":"missing@example.com"}`)
+	if unknown.Code != http.StatusNoContent {
+		t.Fatalf("unknown email status = %d, want 204", unknown.Code)
+	}
+
+	if mailer.code != "" {
+		t.Fatal("a code was delivered for an unknown address")
+	}
+
+	requested := postJSON(t, s.http.Handler, "/v1/password-resets", `{"email":"ada@example.com"}`)
+	if requested.Code != http.StatusNoContent {
+		t.Fatalf("reset request status = %d body %s", requested.Code, requested.Body.Bytes())
+	}
+
+	if mailer.code == "" || mailer.to != "ada@example.com" {
+		t.Fatalf("mailer got to=%q code=%q", mailer.to, mailer.code)
+	}
+
+	confirm := postJSON(t, s.http.Handler, "/v1/password-resets/confirm",
+		`{"email":"ada@example.com","code":"`+mailer.code+`","password":"another-passw","password_confirm":"another-passw"}`)
+	if confirm.Code != http.StatusNoContent {
+		t.Fatalf("confirm status = %d body %s", confirm.Code, confirm.Body.Bytes())
+	}
+
+	old := postJSON(t, s.http.Handler, "/v1/sessions",
+		`{"email":"ada@example.com","password":"twelve-chars"}`)
+	if old.Code != http.StatusUnauthorized {
+		t.Fatalf("old password status = %d, want 401", old.Code)
+	}
+
+	logged := postJSON(t, s.http.Handler, "/v1/sessions",
+		`{"email":"ada@example.com","password":"another-passw"}`)
+	if logged.Code != http.StatusCreated {
+		t.Fatalf("new password status = %d body %s", logged.Code, logged.Body.Bytes())
+	}
+}
+
 func TestHealthOmitsDependencyName(t *testing.T) {
-	s := newTestServer(t)
+	s, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 	s.http.Handler.ServeHTTP(rec, req)
@@ -205,7 +326,7 @@ func TestProductionHidesOpenAPI(t *testing.T) {
 		ReadHeaderTimeout: time.Second,
 	}, slog.New(slog.DiscardHandler), Deps{
 		DB:     okPinger{},
-		Users:  user.NewService(&stubRepo{byID: map[uuid.UUID]*models.User{}, byEmail: map[string]*models.User{}}),
+		Users:  user.NewService(newStubRepo(), testPepper),
 		Tokens: tokens,
 	})
 
@@ -217,5 +338,18 @@ func TestProductionHidesOpenAPI(t *testing.T) {
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s status = %d, want 404", path, rec.Code)
 		}
+	}
+}
+
+func TestCreateUserRejectsMissingConfirmField(t *testing.T) {
+	s, _ := newTestServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/v1/users", bytes.NewReader(
+		[]byte(`{"name":"Ada","email":"ada@example.com","password":"twelve-chars"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.http.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity && rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 or 422", rec.Code)
 	}
 }

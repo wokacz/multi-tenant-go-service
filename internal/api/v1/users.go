@@ -17,6 +17,8 @@ type GetUserInput struct {
 	ID uuid.UUID `path:"id" format:"uuid" doc:"User id"`
 }
 
+type GetMeInput struct{}
+
 type GetUserOutput struct {
 	Body UserResponse
 }
@@ -27,6 +29,19 @@ type CreateUserInput struct {
 
 func registerUsers(api huma.API, users *user.Service) {
 	h := &userHandlers{users: users}
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-me",
+		Method:      http.MethodGet,
+		Path:        Prefix + "/me",
+		Summary:     "Fetch the authenticated user",
+		Description: "Returns the account that owns the Bearer token.",
+		Tags:        []string{"users"},
+		Security: []map[string][]string{
+			{"bearer": {}},
+		},
+		Errors: []int{http.StatusUnauthorized, http.StatusNotFound},
+	}, h.me)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-user",
@@ -47,10 +62,11 @@ func registerUsers(api huma.API, users *user.Service) {
 		Method:      http.MethodPost,
 		Path:        Prefix + "/users",
 		Summary:     "Register a user",
-		Description: "Creates an account. A duplicate email is reported as success " +
-			"so the response cannot be used to discover registered addresses. " +
-			"Sign in with POST /v1/sessions to obtain a token.",
-		Tags:          []string{"users"},
+		Description: "Creates an account. password and password_confirm must match. " +
+			"A duplicate email is reported as success so the response cannot be " +
+			"used to discover registered addresses. Sign in with POST /v1/sessions " +
+			"to obtain a token.",
+		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Errors:        []int{http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 	}, h.create)
@@ -58,6 +74,20 @@ func registerUsers(api huma.API, users *user.Service) {
 
 type userHandlers struct {
 	users *user.Service
+}
+
+func (h *userHandlers) me(ctx context.Context, _ *GetMeInput) (*GetUserOutput, error) {
+	caller, ok := auth.UserIDFrom(ctx)
+	if !ok {
+		return nil, problem.Error(ctx, user.ErrUnauthorized)
+	}
+
+	u, err := h.users.ByID(ctx, caller)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return &GetUserOutput{Body: newUserResponse(u)}, nil
 }
 
 func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutput, error) {
@@ -81,7 +111,7 @@ func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutpu
 }
 
 func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*struct{}, error) {
-	_, err := h.users.Create(ctx, in.Body.Name, in.Body.Email, in.Body.Password)
+	_, err := h.users.Create(ctx, in.Body.Name, in.Body.Email, in.Body.Password, in.Body.PasswordConfirm)
 	if err != nil && !errors.Is(err, user.ErrEmailTaken) {
 		return nil, problem.Error(ctx, err)
 	}

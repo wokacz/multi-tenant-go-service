@@ -35,7 +35,7 @@ func registerSessions(api huma.API, users *user.Service, tokens *auth.Signer) {
 		Summary:     "Sign in",
 		Description: "Exchanges an email and password for a Bearer token. Wrong " +
 			"passwords and unknown addresses share one error.",
-		Tags:          []string{"users"},
+		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusCreated,
 		Errors: []int{
 			http.StatusUnauthorized,

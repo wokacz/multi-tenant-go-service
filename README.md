@@ -2,9 +2,9 @@
 
 A small Go service tracking users, their known devices, and login history.
 
-> **Status: work in progress.** Users can register, sign in, and fetch their
-> own profile. Devices and login events have models but no repository or
-> routes yet.
+> **Status: work in progress.** Users can register, sign in, reset a password,
+> and fetch their own profile. Devices and login events have models but no
+> repository or routes yet.
 
 The API is built on [chi](https://github.com/go-chi/chi) for routing and
 middleware and [huma](https://huma.rocks/) for operations, validation and the
@@ -18,7 +18,7 @@ harmless on its own.
 
 **1. huma stays inside `internal/api`, gorm stays inside `internal/store`.**
 A framework that reaches the domain turns "we could replace huma" into a
-rewrite. `internal/api/architecture_test.go` parses every import under
+rewrite. [`internal/architecture_test.go`](internal/architecture_test.go) parses every import under
 `internal/` and fails on a violation, naming the file.
 
 **2. A repository interface belongs to the package that uses it.**
@@ -111,12 +111,15 @@ straight into the docs and into generated clients:
 
 ### Endpoints
 
-| Method | Path              | Description                                           |
-| ------ | ----------------- | ----------------------------------------------------- |
-| `GET`  | `/health`         | 200 when the service can serve traffic, 503 when not. |
-| `POST` | `/v1/users`       | Register. 204 whether the email is new or already taken. Rate limited. |
-| `POST` | `/v1/sessions`    | Sign in. 201 with a Bearer token, 401 on bad credentials. Rate limited. |
-| `GET`  | `/v1/users/{id}`  | Fetch the authenticated user. 401 without a token; another id is 404. |
+| Method | Path                          | Description |
+| ------ | ----------------------------- | ----------- |
+| `GET`  | `/health`                     | 200 when the service can serve traffic, 503 when not. |
+| `POST` | `/v1/users`                   | Register. `password` and `password_confirm` must match. 204 whether the email is new or already taken. Rate limited. |
+| `POST` | `/v1/sessions`                | Sign in. 201 with a Bearer token, 401 on bad credentials. Rate limited. |
+| `POST` | `/v1/password-resets`         | Request a reset code. Always 204. Delivered by SMTP, or logged in development when SMTP is unset. |
+| `POST` | `/v1/password-resets/confirm` | Spend the code and set a new password (`password` + `password_confirm`). |
+| `GET`  | `/v1/me`                      | Fetch the authenticated user. 401 without a token. |
+| `GET`  | `/v1/users/{id}`              | Same record as `/v1/me` when `{id}` is the caller; another id is 404. |
 
 `/health` reaches the database rather than only reporting that the process is
 up — an instance that cannot query Postgres cannot serve anything, and should
@@ -212,17 +215,19 @@ cmd/
   api/                 entrypoint — wiring only
   openapi/             writes api/openapi.yaml
 internal/
+  architecture_test.go import-boundary tests (huma, gorm)
   config/              process configuration — not a domain module
   auth/                signed session tokens — not a domain module
+  mail/                SMTP, or log-to-terminal in development
   api/                 the only place huma appears
     server.go          router, middleware, OpenAPI config, health, lifecycle
-    architecture_test.go  enforces the import rules
     problem/           domain error → RFC 7807 problem; own package to avoid a cycle with v1
     v1/                version 1 of the contract
       router.go        what /v1 consists of
       dto.go           wire types and the model → DTO conversion
-      users.go         user operations
+      users.go         profile + registration
       sessions.go      sign-in
+      password_resets.go
   domain/              business modules; one directory per entity
     user/              Repository interface + Service
   store/               persistence — the only place gorm appears

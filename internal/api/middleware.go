@@ -55,6 +55,9 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 			lim = s.registerLimit
 		case r.Method == http.MethodPost && r.URL.Path == v1.Prefix+"/sessions":
 			lim = s.loginLimit
+		case r.Method == http.MethodPost && (r.URL.Path == v1.Prefix+"/password-resets" ||
+			r.URL.Path == v1.Prefix+"/password-resets/confirm"):
+			lim = s.resetLimit
 		}
 
 		if lim != nil && !lim.Allow(remoteIP(r)) {

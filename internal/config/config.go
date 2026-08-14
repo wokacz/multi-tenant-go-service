@@ -52,6 +52,7 @@ type Config struct {
 	// address. Zero disables the limiter, which is only for tests.
 	RegisterPerMinute int
 	LoginPerMinute    int
+	ResetPerMinute    int
 
 	// MaxRequestBytes bounds the request body so a client cannot pin memory
 	// with an unbounded JSON document.
@@ -89,6 +90,12 @@ type Config struct {
 	// DBSlowQueryThreshold is the point at which a query is logged as slow.
 	DBSlowQueryThreshold time.Duration
 	DBConnectTimeout     time.Duration
+
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 // Load reads the configuration from the environment.
@@ -122,6 +129,7 @@ func Load() (*Config, error) {
 
 		RegisterPerMinute: getInt("REGISTER_PER_MINUTE", 5),
 		LoginPerMinute:    getInt("LOGIN_PER_MINUTE", 5),
+		ResetPerMinute:    getInt("RESET_PER_MINUTE", 5),
 		MaxRequestBytes:   int64(getInt("MAX_REQUEST_BYTES", 1<<20)),
 
 		ReadHeaderTimeout: 5 * time.Second,
@@ -144,6 +152,12 @@ func Load() (*Config, error) {
 		DBConnMaxIdleTime:    5 * time.Minute,
 		DBSlowQueryThreshold: 200 * time.Millisecond,
 		DBConnectTimeout:     10 * time.Second,
+
+		SMTPHost:     getEnv("SMTP_HOST", ""),
+		SMTPPort:     getInt("SMTP_PORT", 587),
+		SMTPUser:     getEnv("SMTP_USER", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnv("SMTP_FROM", ""),
 	}
 
 	// Fill the development secret before validation so a laptop start without
@@ -204,6 +218,10 @@ func (c *Config) validate() []error {
 		errs = append(errs, fmt.Errorf("config: LOGIN_PER_MINUTE must be >= 0, got %d", c.LoginPerMinute))
 	}
 
+	if c.ResetPerMinute < 0 {
+		errs = append(errs, fmt.Errorf("config: RESET_PER_MINUTE must be >= 0, got %d", c.ResetPerMinute))
+	}
+
 	if c.MaxRequestBytes < 1024 {
 		errs = append(errs, fmt.Errorf("config: MAX_REQUEST_BYTES must be at least 1024, got %d", c.MaxRequestBytes))
 	}
@@ -220,6 +238,10 @@ func (c *Config) validate() []error {
 		}
 	}
 
+	if c.SMTPHost != "" && (c.SMTPPort < 1 || c.SMTPPort > 65535) {
+		errs = append(errs, fmt.Errorf("config: SMTP_PORT must be between 1 and 65535, got %d", c.SMTPPort))
+	}
+
 	if c.PostgresDatabaseName == "" {
 		errs = append(errs, errors.New("config: POSTGRES_DATABASE_NAME must not be empty"))
 	}
@@ -230,6 +252,14 @@ func (c *Config) validate() []error {
 
 	if c.Env.IsProduction() && weakPostgresPassword(c.PostgresPassword) {
 		errs = append(errs, errors.New("config: POSTGRES_PASSWORD is too weak for production"))
+	}
+
+	if c.Env.IsProduction() && c.SMTPHost == "" {
+		errs = append(errs, errors.New("config: SMTP_HOST is required in production so password-reset codes can be delivered"))
+	}
+
+	if c.SMTPHost != "" && c.SMTPFrom == "" {
+		errs = append(errs, errors.New("config: SMTP_FROM must not be empty when SMTP_HOST is set"))
 	}
 
 	if c.DBMaxOpenConns < 1 {

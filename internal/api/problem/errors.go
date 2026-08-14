@@ -16,7 +16,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/store/models"
 )
 
 // statusClientClosedRequest is nginx's convention for "the client hung up
@@ -72,11 +71,11 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, user.ErrNameTooLong):
 		return huma.Error422UnprocessableEntity("name is too long")
 
-	case errors.Is(err, models.ErrProtected):
-		return huma.Error409Conflict("record is protected from deletion")
+	case errors.Is(err, user.ErrPasswordMismatch):
+		return huma.Error422UnprocessableEntity("passwords do not match")
 
-	case errors.Is(err, models.ErrDeviceRevoked):
-		return huma.Error409Conflict("device is revoked")
+	case errors.Is(err, user.ErrInvalidResetCode):
+		return huma.Error401Unauthorized("invalid reset code")
 
 	case errors.Is(err, context.Canceled):
 		return huma.NewError(statusClientClosedRequest, http.StatusText(statusClientClosedRequest))
@@ -87,9 +86,6 @@ func Error(ctx context.Context, err error) error {
 		return huma.Error504GatewayTimeout("request timed out")
 	}
 
-	// models.ErrBatchDeleteUnsupported lands here on purpose: it means a caller
-	// issued a delete without a primary key, which is a bug in our code rather
-	// than something the client did wrong.
 	LoggerFrom(ctx).Error("unhandled error", "error", err)
 
 	return huma.Error500InternalServerError("internal server error")

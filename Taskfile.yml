@@ -105,4 +105,4 @@ tasks:
   clean:
     desc: Remove build and coverage artefacts
     cmds:
-      - rm -rf bin coverage.out
+      - rm -rf bin coverage.out coverage.html loader/loader

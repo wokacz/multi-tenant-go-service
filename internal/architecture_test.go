@@ -1,4 +1,4 @@
-package api_test
+package architecture_test
 
 import (
 	"go/parser"
@@ -10,11 +10,11 @@ import (
 	"testing"
 )
 
-// internalRoot is internal/, one level up from this package.
-const internalRoot = ".."
-
-// apiRoot is the one subtree allowed to know about HTTP framework types.
-var apiRoot = filepath.Join(internalRoot, "api")
+const (
+	internalRoot = "."
+	apiRoot      = "api"
+	storeRoot    = "store"
+)
 
 // TestHumaStaysInsideTheAPIPackage keeps the web framework from spreading.
 //
@@ -34,7 +34,7 @@ func TestHumaStaysInsideTheAPIPackage(t *testing.T) {
 // was involved. An import of gorm above the store means some error is crossing
 // that boundary untranslated.
 func TestGormStaysInsideTheStore(t *testing.T) {
-	forbidImport(t, internalRoot, filepath.Join(internalRoot, "store"), "gorm.io")
+	forbidImport(t, internalRoot, storeRoot, "gorm.io")
 }
 
 // forbidImport fails the test if any Go file under root imports a path

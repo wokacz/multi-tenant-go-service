@@ -19,6 +19,7 @@ import (
 	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
 	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/go-example/internal/mail"
 )
 
 // Version is reported in the OpenAPI document. It describes the API contract,
@@ -46,12 +47,13 @@ type Deps struct {
 	DB     Pinger
 	Users  *user.Service
 	Tokens *auth.Signer
+	Mail   mail.Sender
 }
 
 // Server owns the HTTP listener and the huma API registered on it. huma appears
 // in this package and the ones beneath it and nowhere else: everything below
 // deals in domain types and domain errors, and the translation to HTTP happens
-// here and in problem. internal/api/architecture_test.go enforces that.
+// here and in problem. internal/architecture_test.go enforces that.
 type Server struct {
 	cfg           *config.Config
 	log           *slog.Logger
@@ -60,6 +62,7 @@ type Server struct {
 	api           huma.API
 	registerLimit *limiter
 	loginLimit    *limiter
+	resetLimit    *limiter
 }
 
 // NewServer wires the router, the middleware chain and the huma adapter. It
@@ -71,6 +74,7 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 		deps:          deps,
 		registerLimit: newLimiter(cfg.RegisterPerMinute),
 		loginLimit:    newLimiter(cfg.LoginPerMinute),
+		resetLimit:    newLimiter(cfg.ResetPerMinute),
 	}
 
 	router := chi.NewMux()
@@ -155,6 +159,7 @@ func (s *Server) openAPIConfig() huma.Config {
 
 	cfg.Tags = []*huma.Tag{
 		{Name: "meta", Description: "Service health and introspection"},
+		{Name: "auth", Description: "Registration, sign-in and password reset"},
 		{Name: "users", Description: "User accounts"},
 	}
 
@@ -306,7 +311,7 @@ type HealthOutput struct {
 func (s *Server) registerRoutes() {
 	// Versioned operations live in their own package; a future v2 registers
 	// beside this line rather than replacing it.
-	v1.Register(s.api, v1.Deps{Users: s.deps.Users, Tokens: s.deps.Tokens})
+	v1.Register(s.api, v1.Deps{Users: s.deps.Users, Tokens: s.deps.Tokens, Mail: s.deps.Mail})
 
 	// Health stays outside /v1 on purpose — see v1.Prefix.
 	huma.Register(s.api, huma.Operation{

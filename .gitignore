@@ -3,7 +3,8 @@
 
 # Build artefacts
 /bin/
+loader/loader
 
 # Coverage
 coverage.out
-coverage.htmlloader/loader
+coverage.html

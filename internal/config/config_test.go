@@ -71,6 +71,16 @@ func TestProductionAcceptsLoopbackWithoutTLS(t *testing.T) {
 	}
 }
 
+func TestProductionRejectsMissingSMTP(t *testing.T) {
+	c := productionConfig()
+	c.SMTPHost = ""
+	c.SMTPFrom = ""
+
+	if errs := c.validate(); len(errs) == 0 {
+		t.Fatal("validate() accepted production without SMTP")
+	}
+}
+
 func TestProductionRejectsDevTokenSecret(t *testing.T) {
 	c := productionConfig()
 	c.AuthTokenSecret = devAuthTokenSecret
@@ -89,11 +99,15 @@ func productionConfig() *Config {
 		AuthTokenSecret:      "production-secret-must-be-at-least-32b",
 		RegisterPerMinute:    5,
 		LoginPerMinute:       5,
+		ResetPerMinute:       5,
 		MaxRequestBytes:      1 << 20,
 		PostgresPort:         5432,
 		PostgresDatabaseName: "notes",
 		PostgresSSLMode:      "require",
 		PostgresPassword:     "not-a-default-password",
+		SMTPHost:             "smtp.example.com",
+		SMTPPort:             587,
+		SMTPFrom:             "noreply@example.com",
 		DBMaxOpenConns:       25,
 		DBMaxIdleConns:       25,
 	}

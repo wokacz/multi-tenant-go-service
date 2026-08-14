@@ -1,5 +1,41 @@
 components:
   schemas:
+    ConfirmPasswordResetRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ConfirmPasswordResetRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        code:
+          description: The code delivered after requesting a reset
+          maxLength: 6
+          minLength: 6
+          type: string
+        email:
+          description: Email address
+          format: email
+          maxLength: 255
+          type: string
+        password:
+          description: New password
+          maxLength: 72
+          minLength: 12
+          type: string
+        password_confirm:
+          description: Must match password
+          maxLength: 72
+          minLength: 12
+          type: string
+      required:
+        - email
+        - code
+        - password
+        - password_confirm
+      type: object
     CreateSessionRequest:
       additionalProperties: false
       properties:
@@ -49,10 +85,16 @@ components:
           maxLength: 72
           minLength: 12
           type: string
+        password_confirm:
+          description: Must match password
+          maxLength: 72
+          minLength: 12
+          type: string
       required:
         - name
         - email
         - password
+        - password_confirm
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -130,6 +172,24 @@ components:
           type: string
       required:
         - status
+      type: object
+    RequestPasswordResetRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/RequestPasswordResetRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Email address
+          format: email
+          maxLength: 255
+          type: string
+      required:
+        - email
       type: object
     SessionResponse:
       additionalProperties: false
@@ -226,6 +286,114 @@ paths:
       summary: Health check
       tags:
         - meta
+  /v1/me:
+    get:
+      description: Returns the account that owns the Bearer token.
+      operationId: get-me
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Fetch the authenticated user
+      tags:
+        - users
+  /v1/password-resets:
+    post:
+      description: Sends a one-time code to the address if it is registered. The response is always 204 so the call cannot be used to discover accounts. In development without SMTP the code is written to the process log.
+      operationId: request-password-reset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestPasswordResetRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      summary: Request a password reset
+      tags:
+        - auth
+  /v1/password-resets/confirm:
+    post:
+      description: Spends the code and sets a new password. password and password_confirm must match. Unknown addresses, expired codes and wrong codes share one error.
+      operationId: confirm-password-reset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmPasswordResetRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      summary: Confirm a password reset
+      tags:
+        - auth
   /v1/sessions:
     post:
       description: Exchanges an email and password for a Bearer token. Wrong passwords and unknown addresses share one error.
@@ -269,10 +437,10 @@ paths:
           description: Internal Server Error
       summary: Sign in
       tags:
-        - users
+        - auth
   /v1/users:
     post:
-      description: Creates an account. A duplicate email is reported as success so the response cannot be used to discover registered addresses. Sign in with POST /v1/sessions to obtain a token.
+      description: Creates an account. password and password_confirm must match. A duplicate email is reported as success so the response cannot be used to discover registered addresses. Sign in with POST /v1/sessions to obtain a token.
       operationId: create-user
       requestBody:
         content:
@@ -303,7 +471,7 @@ paths:
           description: Internal Server Error
       summary: Register a user
       tags:
-        - users
+        - auth
   /v1/users/{id}:
     get:
       description: Returns the authenticated user's own record. Another user's id is indistinguishable from a missing one.
@@ -356,5 +524,7 @@ paths:
 tags:
   - description: Service health and introspection
     name: meta
+  - description: Registration, sign-in and password reset
+    name: auth
   - description: User accounts
     name: users

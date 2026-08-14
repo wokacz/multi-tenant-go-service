@@ -6,6 +6,7 @@ package user
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -25,6 +26,8 @@ var (
 	ErrNameTooLong        = errors.New("user: name is too long")
 	ErrInvalidCredentials = errors.New("user: invalid credentials")
 	ErrUnauthorized       = errors.New("user: unauthorized")
+	ErrPasswordMismatch   = errors.New("user: passwords do not match")
+	ErrInvalidResetCode   = errors.New("user: invalid reset code")
 )
 
 // MaxNameLength is enforced here rather than only at the API boundary.
@@ -52,4 +55,20 @@ type Repository interface {
 
 	// ByEmail returns ErrNotFound when no live user has that address.
 	ByEmail(ctx context.Context, email string) (*models.User, error)
+
+	// ReplacePasswordReset drops unused codes for the user and stores the new
+	// one. A user may only have one live reset at a time.
+	ReplacePasswordReset(ctx context.Context, reset *models.PasswordReset) error
+
+	// ActivePasswordReset is the unused, unexpired code for userID, or
+	// ErrNotFound.
+	ActivePasswordReset(ctx context.Context, userID uuid.UUID, now time.Time) (*models.PasswordReset, error)
+
+	// SavePasswordReset persists attempt counters and similar bookkeeping.
+	SavePasswordReset(ctx context.Context, reset *models.PasswordReset) error
+
+	// ConsumePasswordReset writes the new password hash and marks the code used
+	// in one transaction, so a crash cannot leave a consumed code with the old
+	// password still in force.
+	ConsumePasswordReset(ctx context.Context, reset *models.PasswordReset, passwordHash string) error
 }

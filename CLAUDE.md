@@ -22,7 +22,7 @@ Single test / package:
 
 ```bash
 go test ./internal/store/models -run TestDeviceTrustLifecycle -v
-go test ./internal/api -run TestHumaStaysInsideTheAPIPackage -v
+go test ./internal -run TestHumaStaysInsideTheAPIPackage -v
 ```
 
 Tests need no database — the model tests use `schema.Parse` in memory, and the
@@ -53,7 +53,8 @@ Atlas for migrations.
 - anything under `internal/` outside `internal/store` imports **gorm**
 
 These are not style rules. Before touching imports in those trees, understand
-why the boundary exists rather than working around the test.
+why the boundary exists rather than working around the test. The test lives in
+`internal/architecture_test.go`.
 
 ### The error chain is the spine of the design
 

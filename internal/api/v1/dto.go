@@ -14,6 +14,7 @@ import (
 // compile-time assertion below instead.
 const minPasswordLength = 12
 const maxNameLength = 100
+const resetCodeLength = 6
 
 // If the domain rule and the documented schema ever disagree, one of these
 // subtractions underflows and the package stops compiling. The alternative is a
@@ -23,6 +24,8 @@ const (
 	_ = uint(minPasswordLength - user.MinPasswordLength)
 	_ = uint(user.MaxNameLength - maxNameLength)
 	_ = uint(maxNameLength - user.MaxNameLength)
+	_ = uint(user.ResetCodeLength - resetCodeLength)
+	_ = uint(resetCodeLength - user.ResetCodeLength)
 )
 
 // UserResponse is the wire representation of a user.
@@ -60,7 +63,8 @@ type CreateUserRequest struct {
 	// maxLength counts characters while bcrypt's limit is 72 *bytes*, so a
 	// multi-byte password can satisfy this and still be rejected by the domain.
 	// That path returns 422 rather than a 500.
-	Password string `json:"password" minLength:"12" maxLength:"72" doc:"Plain-text password, hashed before storage"`
+	Password        string `json:"password" minLength:"12" maxLength:"72" doc:"Plain-text password, hashed before storage"`
+	PasswordConfirm string `json:"password_confirm" minLength:"12" maxLength:"72" doc:"Must match password"`
 }
 
 // CreateSessionRequest is the body of POST /v1/sessions. minLength is 1 rather
@@ -69,6 +73,20 @@ type CreateUserRequest struct {
 type CreateSessionRequest struct {
 	Email    string `json:"email" format:"email" maxLength:"255" doc:"Email address"`
 	Password string `json:"password" minLength:"1" maxLength:"72" doc:"Plain-text password"`
+}
+
+// RequestPasswordResetRequest starts the reset flow. The response is always
+// 204, whether or not the address is registered.
+type RequestPasswordResetRequest struct {
+	Email string `json:"email" format:"email" maxLength:"255" doc:"Email address"`
+}
+
+// ConfirmPasswordResetRequest spends a reset code and sets a new password.
+type ConfirmPasswordResetRequest struct {
+	Email           string `json:"email" format:"email" maxLength:"255" doc:"Email address"`
+	Code            string `json:"code" minLength:"6" maxLength:"6" doc:"The code delivered after requesting a reset"`
+	Password        string `json:"password" minLength:"12" maxLength:"72" doc:"New password"`
+	PasswordConfirm string `json:"password_confirm" minLength:"12" maxLength:"72" doc:"Must match password"`
 }
 
 // SessionResponse is returned after a successful login. The token is a JWT;

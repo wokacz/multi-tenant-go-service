@@ -9,6 +9,7 @@ import (
 
 	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/go-example/internal/mail"
 )
 
 // Prefix is the path every operation in this package lives under. Operational
@@ -22,10 +23,12 @@ const Prefix = "/v1"
 type Deps struct {
 	Users  *user.Service
 	Tokens *auth.Signer
+	Mail   mail.Sender
 }
 
 // Register attaches every v1 operation to the API.
 func Register(api huma.API, deps Deps) {
 	registerUsers(api, deps.Users)
 	registerSessions(api, deps.Users, deps.Tokens)
+	registerPasswordResets(api, deps.Users, deps.Mail)
 }
