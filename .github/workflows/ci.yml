@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the first: the older run's verdict is
+# about to be irrelevant anyway.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GOLANGCI_LINT_VERSION: v2.12.2
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Read from go.mod rather than pinned here, so the toolchain version
+          # lives in one place.
+          go-version-file: go.mod
+          cache: true
+
+      - name: Modules are tidy
+        run: |
+          go mod tidy
+          go mod tidy -C loader
+          git diff --exit-code -- go.mod go.sum loader/go.mod loader/go.sum
+
+      - name: Lint
+        # Installed rather than taken from golangci-lint-action, whose major
+        # versions are tied to the linter's: the v2 config in .golangci.yml
+        # needs the /v2/ module path, and the old path silently installs v1.
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
+          golangci-lint run ./...
+
+      # This also runs the architecture tests, which are where the "huma stays
+      # inside internal/api" rule is actually enforced.
+      - name: Test
+        run: go test ./... -race
+
+      - name: OpenAPI document is current
+        run: |
+          go run ./cmd/openapi > api/openapi.yaml
+          git diff --exit-code -- api/openapi.yaml \
+            || { echo "::error::The API contract changed. Run 'task openapi' and commit api/openapi.yaml."; exit 1; }
+
+      - uses: ariga/setup-atlas@v0
+
+      - name: Migrations match the GORM models
+        run: |
+          atlas migrate validate --env local
+          atlas migrate diff ci_drift --env local
+          # A synced directory produces no file at all, so anything new here
+          # means a model changed without the migration that goes with it.
+          # git diff alone would miss it: the new file is untracked.
+          if [ -n "$(git status --porcelain -- migrations/)" ]; then
+            git status --porcelain -- migrations/
+            echo "::error::A GORM model changed without a migration. Run 'task migrate:diff NAME=<name>' and commit the result."
+            exit 1
+          fi

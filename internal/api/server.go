@@ -1,0 +1,311 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/wokacz/go-example/internal/api/apierr"
+	v1 "github.com/wokacz/go-example/internal/api/v1"
+	"github.com/wokacz/go-example/internal/config"
+	"github.com/wokacz/go-example/internal/user"
+)
+
+// Version is reported in the OpenAPI document. It describes the API contract,
+// not the build, so it only moves when the shape of the API changes.
+const Version = "0.1.0"
+
+// specAPIName is the title used when rendering the committed OpenAPI document.
+// It is fixed rather than taken from API_NAME so the file does not change
+// depending on whose environment generated it.
+const specAPIName = "Example"
+
+// Pinger is the slice of the store the health check actually needs. Depending
+// on the one method rather than on *store.DB keeps this package testable with a
+// stub and lets the store grow without touching the server.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// Deps are everything the API needs from the rest of the process. A struct
+// keeps NewServer's signature stable as modules are added, and keeps main.go to
+// assembling values rather than threading a growing parameter list.
+type Deps struct {
+	// DB backs the health check only. Repositories reach the database through
+	// the domain services.
+	DB    Pinger
+	Users *user.Service
+}
+
+// Server owns the HTTP listener and the huma API registered on it. huma appears
+// in this package and the ones beneath it and nowhere else: everything below
+// deals in domain types and domain errors, and the translation to HTTP happens
+// here and in apierr. internal/api/architecture_test.go enforces that.
+type Server struct {
+	cfg  *config.Config
+	log  *slog.Logger
+	deps Deps
+	http *http.Server
+	api  huma.API
+}
+
+// NewServer wires the router, the middleware chain and the huma adapter. It
+// does not bind a port — that happens in Run.
+func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
+	s := &Server{cfg: cfg, log: log, deps: deps}
+
+	router := chi.NewMux()
+
+	// Order is outermost first. RequestID has to lead so every later layer can
+	// stamp the same id, and Recoverer sits inside the logger so a panic is
+	// still logged as the 500 it turns into.
+	//
+	// chi's RealIP is deliberately absent: it rewrites RemoteAddr from
+	// X-Forwarded-For, which any client can set, so it would make the logged IP
+	// forgeable. Behind a proxy, replace it with one that only trusts headers
+	// from known proxy addresses — do not reach for RealIP.
+	router.Use(middleware.RequestID)
+	router.Use(middleware.CleanPath)
+	router.Use(s.requestLogger)
+	router.Use(middleware.Recoverer)
+
+	humaCfg := s.openAPIConfig()
+
+	// chi answers these itself, before huma is involved, so they need the same
+	// error shape wired up explicitly.
+	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		apierr.WriteProblem(w, http.StatusNotFound, "no operation matches "+r.URL.Path)
+	})
+	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		apierr.WriteProblem(w, http.StatusMethodNotAllowed, r.Method+" is not allowed on "+r.URL.Path)
+	})
+
+	s.api = humachi.New(router, humaCfg)
+	s.registerRoutes()
+
+	s.http = &http.Server{
+		Addr:              cfg.Addr(),
+		Handler:           router,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	}
+
+	return s
+}
+
+// API exposes the huma API so route packages can register operations on it.
+func (s *Server) API() huma.API { return s.api }
+
+// openAPIConfig describes the API itself. Everything here ends up in
+// /openapi.json and therefore in Swagger UI and in any generated client, so it
+// is worth more than the bare title and version huma defaults to.
+func (s *Server) openAPIConfig() huma.Config {
+	cfg := huma.DefaultConfig(s.cfg.APIName, Version)
+
+	// Swagger UI in place of huma's default Stoplight Elements. Huma serves it
+	// with the asset versions pinned, subresource integrity hashes attached and
+	// a matching CSP header — worth using as-is rather than hand-rolling the
+	// page, which is how those protections get dropped.
+	cfg.DocsRenderer = huma.DocsRendererSwaggerUI
+
+	cfg.Info.Description = "Tracks users, their known devices, and login history."
+	// Identifier rather than URL: OpenAPI 3.1 allows only one of the two, and an
+	// SPDX id needs no guess at where the licence text is hosted.
+	cfg.Info.License = &huma.License{Name: "MIT", Identifier: "MIT"}
+
+	cfg.Tags = []*huma.Tag{
+		{Name: "meta", Description: "Service health and introspection"},
+		{Name: "users", Description: "User accounts"},
+	}
+
+	if s.cfg.Env.IsProduction() {
+		// Only the browsable UI goes away; /openapi.json stays, so generated
+		// clients keep working without publishing an explorable map of the API.
+		cfg.DocsPath = ""
+
+		return cfg
+	}
+
+	// Servers drives the target of Swagger UI's "Try it out". It is only
+	// declared for development, where the address is known — in production the
+	// public URL is whatever sits in front of the process, so leaving it out
+	// lets clients fall back to the origin they fetched the document from.
+	cfg.Servers = []*huma.Server{
+		{URL: fmt.Sprintf("http://localhost:%d", s.cfg.APIPort), Description: "Local development"},
+	}
+
+	return cfg
+}
+
+// Spec renders the OpenAPI document that this build serves, for committing to
+// the repository.
+//
+// It is generated from a fixed configuration rather than the running one, so
+// the committed file is a property of the code alone. Reading the live config
+// would make the output depend on which port the developer happened to use, and
+// `git diff --exit-code` would then fail for reasons that have nothing to do
+// with the contract.
+func Spec() ([]byte, error) {
+	cfg := &config.Config{
+		APIName: specAPIName,
+		// Production semantics: no servers block, so the document does not
+		// hard-code anyone's localhost.
+		Env: config.EnvProduction,
+	}
+
+	// Deps stay zero. Registration only reads the handler types to build the
+	// schemas; nothing is invoked, so no service or database is needed.
+	s := NewServer(cfg, slog.New(slog.DiscardHandler), Deps{})
+
+	out, err := s.api.OpenAPI().YAML()
+	if err != nil {
+		return nil, fmt.Errorf("api: render openapi: %w", err)
+	}
+
+	return out, nil
+}
+
+// Run serves until ctx is cancelled, then drains in-flight requests.
+func (s *Server) Run(ctx context.Context) error {
+	// Bind before announcing anything: a port clash should fail here rather
+	// than after a log line claiming the server is listening.
+	ln, err := net.Listen("tcp", s.http.Addr)
+	if err != nil {
+		return fmt.Errorf("api: listen on %s: %w", s.http.Addr, err)
+	}
+
+	serveErr := make(chan error, 1)
+
+	go func() {
+		s.log.Info("api listening", "addr", ln.Addr().String(), "env", string(s.cfg.Env))
+
+		// ErrServerClosed is what a graceful Shutdown looks like from here, so
+		// it is not worth waking the select for.
+		if err := s.http.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+		}
+	}()
+
+	select {
+	case err := <-serveErr:
+		return fmt.Errorf("api: serve: %w", err)
+	case <-ctx.Done():
+	}
+
+	// A fresh context: ctx is already cancelled, and passing it would abort the
+	// drain immediately instead of giving open requests their grace period.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
+	defer cancel()
+
+	s.log.Info("api shutting down", "timeout", s.cfg.ShutdownTimeout)
+
+	if err := s.http.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("api: shutdown: %w", err)
+	}
+
+	return nil
+}
+
+// requestLogger records one line per request and puts a logger carrying the
+// request id into the context, so anything downstream — errors.go in
+// particular — logs against the request it belongs to.
+func (s *Server) requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log := s.log.With(
+			"request_id", middleware.GetReqID(r.Context()),
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		start := time.Now()
+
+		defer func() {
+			log.Info("request",
+				"status", ww.Status(),
+				"bytes", ww.BytesWritten(),
+				"duration_ms", time.Since(start).Milliseconds(),
+				"remote_ip", remoteIP(r),
+			)
+		}()
+
+		next.ServeHTTP(ww, r.WithContext(apierr.WithLogger(r.Context(), log)))
+	})
+}
+
+// remoteIP is the peer address with the ephemeral port dropped — that port is
+// noise for correlating requests. This is the real TCP peer, never a header, so
+// behind a proxy it is the proxy's address rather than the client's.
+func remoteIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+
+	return host
+}
+
+// HealthOutput is the body of the health check.
+type HealthOutput struct {
+	Body struct {
+		Status   string `json:"status" example:"ok" doc:"Overall health of the service"`
+		Database string `json:"database" example:"ok" doc:"Reachability of the database"`
+	}
+}
+
+func (s *Server) registerRoutes() {
+	// Versioned operations live in their own package; a future v2 registers
+	// beside this line rather than replacing it.
+	v1.Register(s.api, v1.Deps{Users: s.deps.Users})
+
+	// Health stays outside /v1 on purpose — see v1.Prefix.
+	huma.Register(s.api, huma.Operation{
+		OperationID: "health",
+		Method:      http.MethodGet,
+		Path:        "/health",
+		Summary:     "Health check",
+		Description: "Reports whether the service can serve traffic. Returns 503 " +
+			"when a dependency it cannot work without is unreachable.",
+		Tags: []string{"meta"},
+		// Without this the 503 below is missing from the OpenAPI document, so
+		// Swagger UI and any generated client would only know about the 200.
+		Errors: []int{http.StatusServiceUnavailable},
+	}, s.health)
+}
+
+// health answers the probe. It reaches the database rather than reporting on
+// the process alone: this process is useless without one, and a check that only
+// proves the HTTP server is up would keep a broken instance in the load
+// balancer's rotation.
+func (s *Server) health(ctx context.Context, _ *struct{}) (*HealthOutput, error) {
+	// Its own deadline, not the request's. Whatever is polling this is usually
+	// waiting on a much shorter clock than an ordinary API caller.
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.HealthTimeout)
+	defer cancel()
+
+	if err := s.deps.DB.Ping(ctx); err != nil {
+		s.log.Error("health check failed", "dependency", "database", "error", err)
+
+		// A failing status has to be a failing code — a probe reads the status
+		// line, not the body.
+		return nil, huma.Error503ServiceUnavailable("database unavailable")
+	}
+
+	out := &HealthOutput{}
+	out.Body.Status = "ok"
+	out.Body.Database = "ok"
+
+	return out, nil
+}

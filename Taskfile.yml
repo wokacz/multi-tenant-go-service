@@ -2,8 +2,20 @@
 
 version: "3"
 
+# Nothing else reads .env — the app takes its configuration straight from the
+# environment, so without this the README's "cp .env.example .env" has no effect.
+dotenv: [".env"]
+
 vars:
   BIN: bin/api
+  SPEC: api/openapi.yaml
+  # Assembled from the same variables the application reads, so the migrations
+  # can never be applied to a different database than the one it talks to.
+  #
+  # The defaults mirror internal/config: an .env predating a variable would
+  # otherwise interpolate to an empty string and produce a URL that fails in a
+  # way that points nowhere near the cause.
+  DB_URL: postgres://{{.POSTGRES_USER | default "postgres"}}:{{.POSTGRES_PASSWORD | default "postgres"}}@{{.POSTGRES_HOST | default "localhost"}}:{{.POSTGRES_PORT | default "5432"}}/{{.POSTGRES_DATABASE_NAME | default "postgres"}}?sslmode={{.POSTGRES_SSL_MODE | default "disable"}}
 
 tasks:
   default:
@@ -49,6 +61,38 @@ tasks:
     cmds:
       - go mod tidy
       - go mod verify
+      # The loader is a separate module and would otherwise drift unnoticed.
+      - go mod tidy -C loader
+
+  openapi:
+    desc: Regenerate the committed OpenAPI document from the code
+    cmds:
+      - go run ./cmd/openapi > {{.SPEC}}
+
+  openapi:check:
+    desc: Fail if the committed OpenAPI document is out of date
+    cmds:
+      - task: openapi
+      # The contract is code-first but reviewable: any change to a handler shows
+      # up as a diff in the pull request instead of being invisible.
+      - git diff --exit-code -- {{.SPEC}}
+
+  migrate:
+    desc: Apply pending migrations
+    cmds:
+      - atlas migrate apply --env local --url "{{.DB_URL}}"
+
+  migrate:diff:
+    desc: Generate a migration from changes to the GORM models (NAME=... required)
+    requires:
+      vars: [NAME]
+    cmds:
+      - atlas migrate diff {{.NAME}} --env local
+
+  migrate:status:
+    desc: Show which migrations have been applied
+    cmds:
+      - atlas migrate status --env local --url "{{.DB_URL}}"
 
   check:
     desc: Everything CI should run
@@ -56,6 +100,7 @@ tasks:
       - task: tidy
       - task: lint
       - task: test
+      - task: openapi:check
 
   clean:
     desc: Remove build and coverage artefacts

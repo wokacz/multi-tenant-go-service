@@ -1,0 +1,35 @@
+# Updates arrive as pull requests, so a dependency bump is a reviewed change
+# with CI behind it rather than something that happens on the next `go get`.
+
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the patch noise, individual PRs for anything that can
+      # actually change behaviour.
+      patch:
+        update-types: [patch]
+    ignore:
+      # huma is deliberately excluded from automatic minor bumps: it generates
+      # the OpenAPI document, so a minor release can move the committed
+      # contract. Update it on purpose, then run `task openapi` and read the
+      # diff. Patch releases still come through the group above.
+      - dependency-name: github.com/danielgtaylor/huma/v2
+        update-types: [version-update:semver-minor, version-update:semver-major]
+
+  # The Atlas loader is a module of its own and would otherwise never be
+  # updated.
+  - package-ecosystem: gomod
+    directory: /loader
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
