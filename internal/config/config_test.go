@@ -4,7 +4,38 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestAuthTokenTTLRejectsBareNumbers(t *testing.T) {
+	t.Setenv("AUTH_TOKEN_TTL", "30")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AUTH_TOKEN_TTL") {
+		t.Fatalf("Load() = %v, want an AUTH_TOKEN_TTL parse error", err)
+	}
+}
+
+func TestAuthTokenTTLReadsADuration(t *testing.T) {
+	t.Setenv("AUTH_TOKEN_TTL", "45m")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() = %v", err)
+	}
+
+	if cfg.AuthTokenTTL != 45*time.Minute {
+		t.Errorf("AuthTokenTTL = %s, want 45m", cfg.AuthTokenTTL)
+	}
+}
+
+func TestValidateRejectsNonPositiveTokenTTL(t *testing.T) {
+	c := productionConfig()
+	c.AuthTokenTTL = 0
+
+	if got := errorsJoin(c.validate()); !strings.Contains(got, "AUTH_TOKEN_TTL") {
+		t.Fatalf("validate() = %q, want an AUTH_TOKEN_TTL error", got)
+	}
+}
 
 func TestAddrUsesConfiguredHost(t *testing.T) {
 	c := &Config{APIHost: "127.0.0.1", APIPort: 4000}
@@ -90,6 +121,24 @@ func TestProductionRejectsDevTokenSecret(t *testing.T) {
 	}
 }
 
+func TestProductionRejectsDevResetSecret(t *testing.T) {
+	c := productionConfig()
+	c.AuthResetSecret = devAuthResetSecret
+
+	if errs := c.validate(); len(errs) == 0 {
+		t.Fatal("validate() accepted the development reset secret")
+	}
+}
+
+func TestProductionRejectsShortResetSecret(t *testing.T) {
+	c := productionConfig()
+	c.AuthResetSecret = "too-short"
+
+	if errs := c.validate(); len(errs) == 0 {
+		t.Fatal("validate() accepted a short reset secret")
+	}
+}
+
 func productionConfig() *Config {
 	return &Config{
 		Env:                  EnvProduction,
@@ -97,6 +146,8 @@ func productionConfig() *Config {
 		APIHost:              "127.0.0.1",
 		APIPort:              4000,
 		AuthTokenSecret:      "production-secret-must-be-at-least-32b",
+		AuthResetSecret:      "production-reset-must-be-at-least-32b",
+		AuthTokenTTL:         time.Hour,
 		RegisterPerMinute:    5,
 		LoginPerMinute:       5,
 		ResetPerMinute:       5,

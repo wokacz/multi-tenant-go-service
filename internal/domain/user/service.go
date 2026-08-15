@@ -45,14 +45,38 @@ type Service struct {
 	dummyHash []byte
 }
 
-func NewService(repo Repository, pepper []byte) *Service {
-	return newService(repo, bcrypt.DefaultCost, pepper)
+// Option adjusts how a Service is built.
+type Option func(*options)
+
+type options struct {
+	cost int
+}
+
+// WithBcryptCost overrides the hashing cost.
+//
+// Production should leave it alone: the default is what makes a stolen hash
+// expensive. It exists because the cost is the one parameter that legitimately
+// has to move — upwards as hardware gets faster, and downwards in tests, which
+// would otherwise spend most of their time deriving keys nobody checks.
+func WithBcryptCost(cost int) Option {
+	return func(o *options) { o.cost = cost }
+}
+
+func NewService(repo Repository, pepper []byte, opts ...Option) *Service {
+	resolved := options{cost: bcrypt.DefaultCost}
+	for _, opt := range opts {
+		opt(&resolved)
+	}
+
+	return newService(repo, resolved.cost, pepper)
 }
 
 func newService(repo Repository, cost int, pepper []byte) *Service {
 	if len(pepper) < 32 {
-		// Same floor as AUTH_TOKEN_SECRET: a short pepper makes HMAC of a
-		// six-digit code cheaper to brute-force offline.
+		// Same floor as AUTH_RESET_SECRET: a short pepper makes HMAC of a
+		// six-digit code cheaper to brute-force offline. This is not the
+		// JWT signing secret — rotating session tokens must not rewrite
+		// hashes of codes already sitting in someone's inbox.
 		panic("user: reset-code pepper must be at least 32 bytes")
 	}
 
@@ -75,15 +99,49 @@ func newService(repo Repository, cost int, pepper []byte) *Service {
 	}
 }
 
-func (s *Service) hashPassword(password []byte) ([]byte, error) {
-	s.hashes <- struct{}{}
+// acquire takes one of the bcrypt slots, or gives up when the caller's context
+// ends.
+//
+// The select on ctx.Done() is the point. bcrypt is slow on purpose and the
+// semaphore is only two wide, so a burst queues; a plain channel send would
+// keep every queued request parked even after its client hung up and its
+// connection was closed, and those goroutines would still claim a slot when
+// their turn finally came. The queue then grows faster than it drains.
+func (s *Service) acquire(ctx context.Context) error {
+	// Checked before the select, not only inside it. A select whose cases are
+	// both ready picks at random, so an already-cancelled caller would still
+	// start a hash about half the time — and the behaviour would be
+	// unreproducible, which is worse than either outcome.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	select {
+	case s.hashes <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Service) hashPassword(ctx context.Context, password []byte) ([]byte, error) {
+	if err := s.acquire(ctx); err != nil {
+		return nil, err
+	}
 	defer func() { <-s.hashes }()
 
 	return bcrypt.GenerateFromPassword(password, s.cost)
 }
 
-func (s *Service) compareHash(hash, password []byte) error {
-	s.hashes <- struct{}{}
+// compareHash returns a non-nil error both for a wrong password and for a
+// cancelled context. Callers that turn a mismatch into ErrInvalidCredentials
+// must check ctx.Err() first — reporting "wrong password" to a client that
+// merely disconnected would be a lie, and on the sign-in path it would also
+// record a bad-password login event that never happened.
+func (s *Service) compareHash(ctx context.Context, hash, password []byte) error {
+	if err := s.acquire(ctx); err != nil {
+		return err
+	}
 	defer func() { <-s.hashes }()
 
 	return bcrypt.CompareHashAndPassword(hash, password)
@@ -101,8 +159,8 @@ func requireMatchingPassword(password, confirm string) error {
 	return nil
 }
 
-func (s *Service) hashedPassword(password string) (string, error) {
-	hash, err := s.hashPassword([]byte(password))
+func (s *Service) hashedPassword(ctx context.Context, password string) (string, error) {
+	hash, err := s.hashPassword(ctx, []byte(password))
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
 			return "", ErrPasswordTooLong
@@ -129,7 +187,7 @@ func (s *Service) Create(ctx context.Context, name, email, password, confirm str
 		return nil, err
 	}
 
-	hash, err := s.hashedPassword(password)
+	hash, err := s.hashedPassword(ctx, password)
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +216,10 @@ func (s *Service) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) 
 // Authenticate checks email and password. Missing users and wrong passwords
 // both become ErrInvalidCredentials, and both paths run bcrypt, so neither
 // the error nor the timing discloses whether the address is registered.
+//
+// It is the password half of sign-in only. SignIn wraps it with the device and
+// second-factor rules; this stays exported because a non-HTTP caller — a CLI,
+// a seeder — still needs a way to check a password without minting devices.
 func (s *Service) Authenticate(ctx context.Context, email, password string) (*models.User, error) {
 	u, err := s.repo.ByEmail(ctx, NormalizeEmail(email))
 	if err != nil {
@@ -165,12 +227,16 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (*mo
 			return nil, err
 		}
 
-		_ = s.compareHash(s.dummyHash, []byte(password))
+		_ = s.compareHash(ctx, s.dummyHash, []byte(password))
 
 		return nil, ErrInvalidCredentials
 	}
 
-	if err := s.compareHash([]byte(u.PasswordHash), []byte(password)); err != nil {
+	if err := s.compareHash(ctx, []byte(u.PasswordHash), []byte(password)); err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		return nil, ErrInvalidCredentials
 	}
 
@@ -242,20 +308,19 @@ func (s *Service) CompletePasswordReset(ctx context.Context, email, code, passwo
 	}
 
 	if !hmac.Equal([]byte(reset.CodeHash), []byte(s.hashResetCode(u.ID, code))) {
-		reset.Attempts++
-		if reset.Attempts >= resetMaxAttempts {
-			consumed := now
-			reset.ConsumedAt = &consumed
-		}
-
-		if saveErr := s.repo.SavePasswordReset(ctx, reset); saveErr != nil {
-			return saveErr
+		// The counter moves in the store, in one statement. Incrementing the
+		// loaded row here and writing it back would let concurrent guesses all
+		// read the same value and store the same value — the cap that makes a
+		// six-digit code safe would quietly stop counting, and a late writer
+		// could even restore a consumed_at that another request had just set.
+		if failErr := s.repo.FailPasswordReset(ctx, reset.ID, resetMaxAttempts, now); failErr != nil {
+			return failErr
 		}
 
 		return ErrInvalidResetCode
 	}
 
-	hash, err := s.hashedPassword(password)
+	hash, err := s.hashedPassword(ctx, password)
 	if err != nil {
 		return err
 	}
@@ -266,9 +331,23 @@ func (s *Service) CompletePasswordReset(ctx context.Context, email, code, passwo
 	return s.repo.ConsumePasswordReset(ctx, reset, hash)
 }
 
+// Code purposes keep the two six-digit codes in this package from being
+// interchangeable. Without the prefix, HMAC(pepper, userID||code) is the same
+// value whether the code was emailed to reset a password or to finish a
+// sign-in, and one could be spent as the other.
+const (
+	purposeReset     = "password-reset"
+	purposeTwoFactor = "two-factor"
+)
+
 func (s *Service) hashResetCode(userID uuid.UUID, code string) string {
+	return s.hashCode(purposeReset, userID, code)
+}
+
+func (s *Service) hashCode(purpose string, id uuid.UUID, code string) string {
 	mac := hmac.New(sha256.New, s.pepper)
-	_, _ = mac.Write(userID[:])
+	_, _ = mac.Write([]byte(purpose))
+	_, _ = mac.Write(id[:])
 	_, _ = mac.Write([]byte(code))
 
 	return hex.EncodeToString(mac.Sum(nil))

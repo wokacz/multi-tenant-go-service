@@ -92,8 +92,9 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	router.Use(s.securityHeaders)
 	router.Use(s.maxBytes)
 	router.Use(s.requestLogger)
+	router.Use(s.clientInfo)
 	router.Use(s.rateLimit)
-	router.Use(middleware.Recoverer)
+	router.Use(s.recoverer)
 
 	humaCfg := s.openAPIConfig()
 
@@ -311,7 +312,7 @@ type HealthOutput struct {
 func (s *Server) registerRoutes() {
 	// Versioned operations live in their own package; a future v2 registers
 	// beside this line rather than replacing it.
-	v1.Register(s.api, v1.Deps{Users: s.deps.Users, Tokens: s.deps.Tokens, Mail: s.deps.Mail})
+	v1.Register(s.api, v1.Deps{Users: s.deps.Users, Tokens: s.deps.Tokens, Mail: s.deps.Mail, Log: s.log})
 
 	// Health stays outside /v1 on purpose — see v1.Prefix.
 	huma.Register(s.api, huma.Operation{

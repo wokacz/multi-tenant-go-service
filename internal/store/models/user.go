@@ -18,6 +18,16 @@ type User struct {
 	Email        string `gorm:"size:255;not null;uniqueIndex"`
 	PasswordHash string `gorm:"size:255;not null" json:"-"`
 
+	// SessionEpoch is copied into the JWT at issue time and incremented when
+	// the password changes. Tokens from before the change then fail even
+	// though their signature and expiry are still valid.
+	SessionEpoch int `gorm:"not null;default:0"`
+
+	// TwoFactorEnabled turns on the emailed second factor. It gates sign-in
+	// from devices the account has not trusted yet; a trusted device skips
+	// the challenge, which is what keeps the flow usable day to day.
+	TwoFactorEnabled bool `gorm:"not null;default:false"`
+
 	// OnDelete:CASCADE only fires on a hard delete (Unscoped). The ordinary
 	// soft delete is handled by BeforeDelete below.
 	Devices     []Device     `gorm:"constraint:OnDelete:CASCADE"`

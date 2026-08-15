@@ -77,12 +77,12 @@ type userHandlers struct {
 }
 
 func (h *userHandlers) me(ctx context.Context, _ *GetMeInput) (*GetUserOutput, error) {
-	caller, ok := auth.UserIDFrom(ctx)
+	sess, ok := auth.SessionFrom(ctx)
 	if !ok {
 		return nil, problem.Error(ctx, user.ErrUnauthorized)
 	}
 
-	u, err := h.users.ByID(ctx, caller)
+	u, err := h.users.ByID(ctx, sess.UserID)
 	if err != nil {
 		return nil, problem.Error(ctx, err)
 	}
@@ -91,14 +91,14 @@ func (h *userHandlers) me(ctx context.Context, _ *GetMeInput) (*GetUserOutput, e
 }
 
 func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutput, error) {
-	caller, ok := auth.UserIDFrom(ctx)
+	sess, ok := auth.SessionFrom(ctx)
 	if !ok {
 		return nil, problem.Error(ctx, user.ErrUnauthorized)
 	}
 
 	// Do not look up another user's id: a 403-vs-404 split would disclose
 	// whether that account exists.
-	if caller != in.ID {
+	if sess.UserID != in.ID {
 		return nil, problem.Error(ctx, user.ErrNotFound)
 	}
 

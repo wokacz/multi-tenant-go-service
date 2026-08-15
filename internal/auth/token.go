@@ -29,6 +29,24 @@ type claims struct {
 	Sub string `json:"sub"`
 	Exp int64  `json:"exp"`
 	Iat int64  `json:"iat"`
+	// Ver is the user's session epoch at issue time. Password changes bump
+	// the epoch so a still-unexpired token issued before the change is
+	// rejected without a denylist.
+	Ver int `json:"ver"`
+	// Did is the device the token was issued to. Revoking that device has to
+	// take effect on tokens already handed out, and it cannot without the
+	// token naming which device it belongs to.
+	Did string `json:"did"`
+}
+
+// Session is what a token stands for: a subject, the device it was issued to
+// and the epoch it was issued under. It is a struct rather than three return
+// values because every caller needs all three, and a bare (uuid, uuid, int)
+// signature is trivially transposable at the call site.
+type Session struct {
+	UserID   uuid.UUID
+	DeviceID uuid.UUID
+	Epoch    int
 }
 
 // Signer creates and verifies HMAC-SHA256 JWTs. The secret never leaves this
@@ -55,17 +73,23 @@ func NewSigner(secret string, ttl time.Duration) (*Signer, error) {
 	}, nil
 }
 
-// Issue returns a compact JWT for userID and the instant it stops being valid.
-func (s *Signer) Issue(userID uuid.UUID, now time.Time) (token string, expires time.Time, err error) {
-	if userID == uuid.Nil {
+// Issue returns a compact JWT for sess, and the instant it stops being valid.
+func (s *Signer) Issue(sess Session, now time.Time) (token string, expires time.Time, err error) {
+	if sess.UserID == uuid.Nil {
 		return "", time.Time{}, fmt.Errorf("auth: refuse to sign a token for a nil user id")
+	}
+
+	if sess.DeviceID == uuid.Nil {
+		return "", time.Time{}, fmt.Errorf("auth: refuse to sign a token for a nil device id")
 	}
 
 	exp := now.Add(s.ttl)
 	payload, err := json.Marshal(claims{
-		Sub: userID.String(),
+		Sub: sess.UserID.String(),
 		Exp: exp.Unix(),
 		Iat: now.Unix(),
+		Ver: sess.Epoch,
+		Did: sess.DeviceID.String(),
 	})
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("auth: encode claims: %w", err)
@@ -80,12 +104,12 @@ func (s *Signer) Issue(userID uuid.UUID, now time.Time) (token string, expires t
 }
 
 // Parse verifies the signature against the exact header.payload bytes in token
-// (not a re-serialised form) and returns the subject. Every failure path is
-// ErrInvalidToken.
-func (s *Signer) Parse(token string, now time.Time) (uuid.UUID, error) {
+// (not a re-serialised form) and returns the session it stands for. Every
+// failure path is ErrInvalidToken.
+func (s *Signer) Parse(token string, now time.Time) (Session, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
 	mac := hmac.New(sha256.New, s.secret)
@@ -94,39 +118,44 @@ func (s *Signer) Parse(token string, now time.Time) (uuid.UUID, error) {
 
 	got, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil || !hmac.Equal(want, got) {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
 	header, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
 	var h struct {
 		Alg string `json:"alg"`
 	}
 	if json.Unmarshal(header, &h) != nil || h.Alg != "HS256" {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
 	var c claims
 	if json.Unmarshal(payload, &c) != nil {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
 	if c.Exp <= now.Unix() {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
 	id, err := uuid.Parse(c.Sub)
 	if err != nil || id == uuid.Nil {
-		return uuid.Nil, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 
-	return id, nil
+	deviceID, err := uuid.Parse(c.Did)
+	if err != nil || deviceID == uuid.Nil {
+		return Session{}, ErrInvalidToken
+	}
+
+	return Session{UserID: id, DeviceID: deviceID, Epoch: c.Ver}, nil
 }

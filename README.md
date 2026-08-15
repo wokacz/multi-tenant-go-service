@@ -115,17 +115,61 @@ straight into the docs and into generated clients:
 | ------ | ----------------------------- | ----------- |
 | `GET`  | `/health`                     | 200 when the service can serve traffic, 503 when not. |
 | `POST` | `/v1/users`                   | Register. `password` and `password_confirm` must match. 204 whether the email is new or already taken. Rate limited. |
-| `POST` | `/v1/sessions`                | Sign in. 201 with a Bearer token, 401 on bad credentials. Rate limited. |
-| `POST` | `/v1/password-resets`         | Request a reset code. Always 204. Delivered by SMTP, or logged in development when SMTP is unset. |
-| `POST` | `/v1/password-resets/confirm` | Spend the code and set a new password (`password` + `password_confirm`). |
+| `POST` | `/v1/sessions`                | Sign in. 201 with a Bearer token, 202 when a two-factor code was emailed, 401 on bad credentials, 403 from a revoked device. Rate limited. |
+| `POST` | `/v1/sessions/verify`         | Spend the two-factor code and get the token. Trusts the device. Rate limited on the same bucket as sign-in. |
+| `POST` | `/v1/password-resets`         | Request a reset code. Always 204, including when delivery fails, so the status cannot disclose accounts. Delivered by SMTP, or logged in development when SMTP is unset. |
+| `POST` | `/v1/password-resets/confirm` | Spend the code and set a new password (`password` + `password_confirm`). Existing sessions for that account stop working. |
 | `GET`  | `/v1/me`                      | Fetch the authenticated user. 401 without a token. |
 | `GET`  | `/v1/users/{id}`              | Same record as `/v1/me` when `{id}` is the caller; another id is 404. |
+| `PUT`  | `/v1/me/two-factor`           | Turn the emailed second factor on or off. Requires the current password as well as the token. |
+| `GET`  | `/v1/me/devices`              | List known devices, most recently seen first. |
+| `DELETE` | `/v1/me/devices/{id}`       | Revoke a device. Its tokens stop working on the next request. Idempotent; another account's id is 404. |
+| `GET`  | `/v1/me/login-events`         | Recent sign-in history, newest first. |
 
 `/health` reaches the database rather than only reporting that the process is
 up — an instance that cannot query Postgres cannot serve anything, and should
 leave the load balancer's rotation. The check runs under its own short deadline
 (`HealthTimeout`), since whatever polls it is usually on a tighter clock than an
 ordinary caller.
+
+> Authentication, devices and the emailed codes are documented in more depth
+> under [`docs/`](docs/README.md) (in Polish).
+
+### Authentication is default-deny
+
+`internal/api/middleware.go` holds `publicOperations`, an allow-list of the
+operation ids reachable without a token. Everything else is authenticated,
+so a route registered without thinking about auth is unreachable rather than
+open. A test asserts the list and the `Security` blocks in the spec agree in
+both directions, which keeps generated clients honest.
+
+### Devices and the second factor
+
+Every sign-in is attributed to a device. The client keeps an opaque
+`X-Device-Token`; the server stores only its SHA-256, so the table cannot be
+replayed into someone's trusted device. A first sign-in mints one and returns
+it in `device_token` — once, and never again.
+
+The device id travels in the JWT. That is what lets `DELETE /v1/me/devices/{id}`
+take effect immediately: the bearer middleware checks on every request that the
+named device still exists and is not revoked, rather than waiting out the token
+TTL.
+
+With two-factor on, a sign-in from a device that is not trusted answers 202 with
+`two_factor_required` instead of a token, and emails six digits. `POST
+/v1/sessions/verify` spends them and trusts that device. The code is bound to
+the device that asked for it — otherwise it would prove only that someone can
+read the mailbox. Enabling two-factor trusts the calling device, so an account
+whose address no longer receives mail is not locked out by its own setting.
+
+Both emailed codes are stored as HMACs under `AUTH_RESET_SECRET`, with a purpose
+prefix so a reset code cannot be spent as a sign-in code. Both cap attempts with
+a single conditional `UPDATE` rather than a read-modify-write, so overlapping
+guesses cannot leave the counter behind.
+
+Failed sign-ins are recorded against the account. Attempts on an address that is
+not registered are not — `login_events.user_id` is `NOT NULL`, and there is no
+account to attribute them to.
 
 ## Requirements
 

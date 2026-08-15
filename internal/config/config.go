@@ -27,6 +27,10 @@ func (e Env) IsProduction() bool { return e == EnvProduction }
 // forgotten AUTH_TOKEN_SECRET cannot ship with a value that is in the repo.
 const devAuthTokenSecret = "dev-only-not-for-production-use-32bytes"
 
+// devAuthResetSecret is a separate development fallback. Sharing the JWT
+// secret would make rotating session tokens invalidate codes already emailed.
+const devAuthResetSecret = "dev-only-reset-pepper-not-for-prod-32b"
+
 const minAuthTokenSecretBytes = 32
 
 // Config holds the configuration values for the application.
@@ -46,7 +50,18 @@ type Config struct {
 	// AuthTokenSecret signs session tokens. Development fills in a well-known
 	// value when unset; production refuses to start without a unique secret.
 	AuthTokenSecret string
-	AuthTokenTTL    time.Duration
+
+	// AuthTokenTTL is how long a session token stays valid. It is the only
+	// window in which a token whose device was revoked could still be used if
+	// the per-request device check were ever removed, and the window a stolen
+	// token is useful for after the password is changed.
+	AuthTokenTTL time.Duration
+
+	// AuthResetSecret peppers HMAC hashes of password-reset codes. It is a
+	// separate secret from AuthTokenSecret so rotating session tokens does
+	// not invalidate codes already delivered. Development fills in a
+	// well-known value when unset; production requires a unique one.
+	AuthResetSecret string
 
 	// RegisterPerMinute / LoginPerMinute cap bcrypt-heavy endpoints per peer
 	// address. Zero disables the limiter, which is only for tests.
@@ -115,6 +130,15 @@ func Load() (*Config, error) {
 		return v
 	}
 
+	getDuration := func(key string, defaultValue time.Duration) time.Duration {
+		v, err := getEnvDuration(key, defaultValue)
+		if err != nil {
+			errs = append(errs, err)
+		}
+
+		return v
+	}
+
 	cfg := &Config{
 		Env:     Env(getEnv("ENV", string(EnvDevelopment))),
 		APIName: getEnv("API_NAME", "Example"),
@@ -125,7 +149,8 @@ func Load() (*Config, error) {
 		TLSKeyFile:  getEnv("TLS_KEY_FILE", ""),
 
 		AuthTokenSecret: os.Getenv("AUTH_TOKEN_SECRET"),
-		AuthTokenTTL:    time.Hour,
+		AuthTokenTTL:    getDuration("AUTH_TOKEN_TTL", time.Hour),
+		AuthResetSecret: os.Getenv("AUTH_RESET_SECRET"),
 
 		RegisterPerMinute: getInt("REGISTER_PER_MINUTE", 5),
 		LoginPerMinute:    getInt("LOGIN_PER_MINUTE", 5),
@@ -165,6 +190,10 @@ func Load() (*Config, error) {
 	// value and refuses.
 	if cfg.AuthTokenSecret == "" && !cfg.Env.IsProduction() {
 		cfg.AuthTokenSecret = devAuthTokenSecret
+	}
+
+	if cfg.AuthResetSecret == "" && !cfg.Env.IsProduction() {
+		cfg.AuthResetSecret = devAuthResetSecret
 	}
 
 	errs = append(errs, cfg.validate()...)
@@ -208,6 +237,21 @@ func (c *Config) validate() []error {
 
 	if c.Env.IsProduction() && c.AuthTokenSecret == devAuthTokenSecret {
 		errs = append(errs, errors.New("config: AUTH_TOKEN_SECRET must not use the development default"))
+	}
+
+	if len(c.AuthResetSecret) < minAuthTokenSecretBytes {
+		errs = append(errs, fmt.Errorf("config: AUTH_RESET_SECRET must be at least %d bytes", minAuthTokenSecretBytes))
+	}
+
+	if c.Env.IsProduction() && c.AuthResetSecret == devAuthResetSecret {
+		errs = append(errs, errors.New("config: AUTH_RESET_SECRET must not use the development default"))
+	}
+
+	// auth.NewSigner refuses a non-positive TTL as well, but failing here puts
+	// it in the same batch as every other configuration error instead of
+	// aborting the assembly in main one problem later.
+	if c.AuthTokenTTL <= 0 {
+		errs = append(errs, fmt.Errorf("config: AUTH_TOKEN_TTL must be positive, got %s", c.AuthTokenTTL))
 	}
 
 	if c.RegisterPerMinute < 0 {
@@ -361,4 +405,22 @@ func getEnvInt(key string, defaultValue int) (int, error) {
 	}
 
 	return i, nil
+}
+
+// getEnvDuration reads a Go duration string such as "45m" or "12h". A bare
+// number is rejected rather than guessed at: "AUTH_TOKEN_TTL=30" is as likely
+// to mean thirty seconds as thirty minutes, and picking one silently is how a
+// token ends up living sixty times longer than intended.
+func getEnvDuration(key string, defaultValue time.Duration) (time.Duration, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue, nil
+	}
+
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return defaultValue, fmt.Errorf("config: %s must be a duration such as %q, got %q", key, "45m", value)
+	}
+
+	return d, nil
 }

@@ -77,6 +77,15 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, user.ErrInvalidResetCode):
 		return huma.Error401Unauthorized("invalid reset code")
 
+	case errors.Is(err, user.ErrInvalidTwoFactorCode):
+		return huma.Error401Unauthorized("invalid code")
+
+	// 403 rather than 401: the caller's credentials were accepted, so retrying
+	// with a better token is not the fix. Naming the reason is the point — the
+	// device was blocked on purpose, and only the account holder ever sees it.
+	case errors.Is(err, user.ErrDeviceRevoked):
+		return huma.Error403Forbidden("device is revoked")
+
 	case errors.Is(err, context.Canceled):
 		return huma.NewError(statusClientClosedRequest, http.StatusText(statusClientClosedRequest))
 

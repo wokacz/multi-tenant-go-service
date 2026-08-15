@@ -5,6 +5,8 @@
 package v1
 
 import (
+	"log/slog"
+
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/wokacz/go-example/internal/auth"
@@ -24,11 +26,29 @@ type Deps struct {
 	Users  *user.Service
 	Tokens *auth.Signer
 	Mail   mail.Sender
+	Log    *slog.Logger
 }
 
 // Register attaches every v1 operation to the API.
+//
+// Authentication is not decided here. internal/api/middleware.go holds an
+// allow-list of the operations that may be reached anonymously, and everything
+// registered below is behind a token unless it appears there.
 func Register(api huma.API, deps Deps) {
 	registerUsers(api, deps.Users)
-	registerSessions(api, deps.Users, deps.Tokens)
-	registerPasswordResets(api, deps.Users, deps.Mail)
+	registerSessions(api, deps)
+	registerPasswordResets(api, deps.Users, deps.Mail, deps.Log)
+	registerTwoFactor(api, deps.Users)
+	registerDevices(api, deps.Users)
+}
+
+// logger falls back to the default when no logger was wired in. It matters for
+// tests and for Spec(), which builds a server with zero dependencies; losing a
+// log line there is better than a nil dereference while rendering the contract.
+func logger(l *slog.Logger) *slog.Logger {
+	if l != nil {
+		return l
+	}
+
+	return slog.Default()
 }

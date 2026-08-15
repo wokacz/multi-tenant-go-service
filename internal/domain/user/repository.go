@@ -28,6 +28,16 @@ var (
 	ErrUnauthorized       = errors.New("user: unauthorized")
 	ErrPasswordMismatch   = errors.New("user: passwords do not match")
 	ErrInvalidResetCode   = errors.New("user: invalid reset code")
+	// ErrDeviceRevoked is deliberately distinguishable from bad credentials:
+	// it is only ever returned after the password has already been proved, so
+	// it discloses nothing to an anonymous caller and telling the account
+	// holder "this device was revoked" is the whole point of revoking it.
+	ErrDeviceRevoked = errors.New("user: device is revoked")
+	// ErrInvalidTwoFactorCode covers a wrong code, an expired one, a spent
+	// one, an unknown address and a challenge raised for a different device.
+	// VerifyTwoFactor is reachable without credentials, so every one of those
+	// has to look the same from outside.
+	ErrInvalidTwoFactorCode = errors.New("user: invalid two-factor code")
 )
 
 // MaxNameLength is enforced here rather than only at the API boundary.
@@ -64,11 +74,76 @@ type Repository interface {
 	// ErrNotFound.
 	ActivePasswordReset(ctx context.Context, userID uuid.UUID, now time.Time) (*models.PasswordReset, error)
 
-	// SavePasswordReset persists attempt counters and similar bookkeeping.
-	SavePasswordReset(ctx context.Context, reset *models.PasswordReset) error
+	// FailPasswordReset records one wrong guess against resetID and spends the
+	// code once maxAttempts is reached.
+	//
+	// It takes an id and a limit rather than a loaded row because the counter
+	// has to move in a single conditional UPDATE. Reading the row, adding one
+	// and writing it back lets concurrent guesses all read the same value and
+	// store the same value, which is how a five-attempt cap stops capping.
+	FailPasswordReset(ctx context.Context, resetID uuid.UUID, maxAttempts int, now time.Time) error
 
-	// ConsumePasswordReset writes the new password hash and marks the code used
-	// in one transaction, so a crash cannot leave a consumed code with the old
-	// password still in force.
+	// ConsumePasswordReset writes the new password hash, increments the session
+	// epoch so tokens issued under the old password stop working, and marks
+	// the code used — all in one transaction, so a crash cannot leave a
+	// consumed code with the old password still in force.
 	ConsumePasswordReset(ctx context.Context, reset *models.PasswordReset, passwordHash string) error
+
+	// DeviceByFingerprint returns the caller's device with that fingerprint, or
+	// ErrNotFound. It is scoped by user, so one account's device token can
+	// never resolve to another account's device.
+	DeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*models.Device, error)
+
+	// CreateDevice persists a newly seen device.
+	CreateDevice(ctx context.Context, device *models.Device) error
+
+	// TouchDevice records that the device was just used. It is a targeted
+	// UPDATE rather than a Save of a loaded row so that a concurrent revoke is
+	// not silently written back to NULL.
+	TouchDevice(ctx context.Context, deviceID uuid.UUID, seenAt time.Time, ip, userAgent string) error
+
+	// TrustDevice marks the device as having passed a second factor. The
+	// timestamp comes from models.Device rather than from a parameter,
+	// because that type owns what trusting a device means.
+	TrustDevice(ctx context.Context, deviceID uuid.UUID) error
+
+	// Devices lists the caller's devices, most recently seen first.
+	Devices(ctx context.Context, userID uuid.UUID) ([]models.Device, error)
+
+	// RevokeDevice withdraws trust and blocks the device. It returns
+	// ErrNotFound when the device is not the caller's, and ErrDeviceRevoked
+	// when it was already revoked.
+	RevokeDevice(ctx context.Context, userID, deviceID uuid.UUID) error
+
+	// ActiveDevice returns the device only when it belongs to userID and has
+	// not been revoked. The bearer middleware calls it on every authenticated
+	// request, which is what makes revocation take effect on tokens that were
+	// already handed out.
+	ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*models.Device, error)
+
+	// RecordLoginEvent appends to the login history.
+	RecordLoginEvent(ctx context.Context, event *models.LoginEvent) error
+
+	// LoginEvents returns the caller's most recent login history, newest first.
+	LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]models.LoginEvent, error)
+
+	// SetTwoFactorEnabled flips the account's second-factor flag.
+	SetTwoFactorEnabled(ctx context.Context, userID uuid.UUID, enabled bool) error
+
+	// ReplaceTwoFactorChallenge drops the user's unspent challenges and stores
+	// the new one, so a sign-in attempt always invalidates the previous code.
+	ReplaceTwoFactorChallenge(ctx context.Context, challenge *models.TwoFactorChallenge) error
+
+	// ActiveTwoFactorChallenge is the unspent, unexpired challenge for userID,
+	// or ErrNotFound.
+	ActiveTwoFactorChallenge(ctx context.Context, userID uuid.UUID, now time.Time) (*models.TwoFactorChallenge, error)
+
+	// FailTwoFactorChallenge is FailPasswordReset for the sign-in code, and
+	// atomic for the same reason.
+	FailTwoFactorChallenge(ctx context.Context, challengeID uuid.UUID, maxAttempts int, now time.Time) error
+
+	// ConsumeTwoFactorChallenge spends the challenge and trusts the device in
+	// one transaction, so a crash cannot leave a code spent without the device
+	// it was meant to authorise ever becoming trusted.
+	ConsumeTwoFactorChallenge(ctx context.Context, challengeID, deviceID uuid.UUID, at time.Time) error
 }

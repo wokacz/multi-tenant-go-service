@@ -15,9 +15,10 @@ import (
 	"github.com/wokacz/go-example/internal/config"
 )
 
-// Sender delivers a password-reset code to an address.
+// Sender delivers the one-time codes this service emails.
 type Sender interface {
 	SendPasswordReset(ctx context.Context, to, code string) error
+	SendTwoFactorCode(ctx context.Context, to, code string) error
 }
 
 // New picks SMTP when a host is configured, and the development logger
@@ -41,22 +42,44 @@ func (s *logSender) SendPasswordReset(_ context.Context, to, code string) error 
 	return nil
 }
 
+func (s *logSender) SendTwoFactorCode(_ context.Context, to, code string) error {
+	s.log.Info("two-factor code (SMTP is not configured)", "email", to, "code", code)
+
+	return nil
+}
+
 type smtpSender struct {
 	cfg *config.Config
 }
 
 func (s *smtpSender) SendPasswordReset(_ context.Context, to, code string) error {
+	return s.send(to, "Your password reset code",
+		"Your password reset code is "+code+".",
+		"It expires in 15 minutes. If you did not request this, ignore this message.")
+}
+
+func (s *smtpSender) SendTwoFactorCode(_ context.Context, to, code string) error {
+	return s.send(to, "Your sign-in code",
+		"Your sign-in code is "+code+".",
+		"It expires in 10 minutes. If you are not signing in right now, change your password.")
+}
+
+// send builds and posts one plain-text message.
+//
+// The header lines are assembled from configuration and from a subject this
+// package chooses — never from request input. Interpolating a caller-supplied
+// string into a header is how a newline in an address turns into an injected
+// Bcc, and the only variable part here is the code, which is six digits.
+func (s *smtpSender) send(to, subject string, lines ...string) error {
 	from := s.cfg.SMTPFrom
-	body := strings.Join([]string{
+	body := strings.Join(append([]string{
 		"From: " + from,
 		"To: " + to,
-		"Subject: Your password reset code",
+		"Subject: " + subject,
 		"MIME-Version: 1.0",
 		"Content-Type: text/plain; charset=utf-8",
 		"",
-		"Your password reset code is " + code + ".",
-		"It expires in 15 minutes. If you did not request this, ignore this message.",
-	}, "\r\n")
+	}, lines...), "\r\n")
 
 	addr := net.JoinHostPort(s.cfg.SMTPHost, strconv.Itoa(s.cfg.SMTPPort))
 
@@ -66,7 +89,7 @@ func (s *smtpSender) SendPasswordReset(_ context.Context, to, code string) error
 	}
 
 	if err := smtp.SendMail(addr, auth, from, []string{to}, []byte(body)); err != nil {
-		return fmt.Errorf("mail: send reset code: %w", err)
+		return fmt.Errorf("mail: send %q: %w", subject, err)
 	}
 
 	return nil

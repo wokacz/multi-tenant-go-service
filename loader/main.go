@@ -32,6 +32,7 @@ func run() error {
 		&models.Device{},
 		&models.LoginEvent{},
 		&models.PasswordReset{},
+		&models.TwoFactorChallenge{},
 	)
 	if err != nil {
 		return fmt.Errorf("load gorm schema: %w", err)

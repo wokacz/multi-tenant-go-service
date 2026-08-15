@@ -112,11 +112,30 @@ func (r *User) ActivePasswordReset(ctx context.Context, userID uuid.UUID, now ti
 	return nil, fmt.Errorf("store: active password reset: %w", err)
 }
 
-func (r *User) SavePasswordReset(ctx context.Context, reset *models.PasswordReset) error {
-	if err := r.db.WithContext(ctx).Save(reset).Error; err != nil {
-		return fmt.Errorf("store: save password reset: %w", err)
+// FailPasswordReset moves the attempt counter in a single statement.
+//
+// Reading the row, adding one and saving it back is the obvious shape and the
+// wrong one: two guesses that overlap both read the same count and both write
+// the same count, so five concurrent attempts leave the counter at one. Worse,
+// a slow writer could put back a consumed_at that another request had just set
+// and reopen a code that was already spent. Here the increment and the decision
+// to spend the code are one UPDATE, and the WHERE keeps a spent code spent.
+func (r *User) FailPasswordReset(ctx context.Context, resetID uuid.UUID, maxAttempts int, now time.Time) error {
+	err := r.db.WithContext(ctx).
+		Model(&models.PasswordReset{}).
+		Where("id = ? AND consumed_at IS NULL", resetID).
+		Updates(map[string]any{
+			"attempts": gorm.Expr("attempts + 1"),
+			// Every SET expression reads the pre-UPDATE row, so this sees the
+			// old count and has to add the same one again.
+			"consumed_at": gorm.Expr("CASE WHEN attempts + 1 >= ? THEN ?::timestamptz ELSE consumed_at END", maxAttempts, now),
+		}).Error
+	if err != nil {
+		return fmt.Errorf("store: fail password reset: %w", err)
 	}
 
+	// No rows means the code was already spent, which is not an error: the
+	// caller is about to return ErrInvalidResetCode either way.
 	return nil
 }
 
@@ -124,7 +143,10 @@ func (r *User) ConsumePasswordReset(ctx context.Context, reset *models.PasswordR
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.User{}).
 			Where("id = ?", reset.UserID).
-			Update("password_hash", passwordHash).Error; err != nil {
+			Updates(map[string]any{
+				"password_hash": passwordHash,
+				"session_epoch": gorm.Expr("session_epoch + 1"),
+			}).Error; err != nil {
 			return err
 		}
 

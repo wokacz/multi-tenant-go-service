@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -22,10 +23,11 @@ type ConfirmPasswordResetInput struct {
 type passwordResetHandlers struct {
 	users *user.Service
 	mail  mail.Sender
+	log   *slog.Logger
 }
 
-func registerPasswordResets(api huma.API, users *user.Service, mailer mail.Sender) {
-	h := &passwordResetHandlers{users: users, mail: mailer}
+func registerPasswordResets(api huma.API, users *user.Service, mailer mail.Sender, log *slog.Logger) {
+	h := &passwordResetHandlers{users: users, mail: mailer, log: log}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "request-password-reset",
@@ -33,9 +35,9 @@ func registerPasswordResets(api huma.API, users *user.Service, mailer mail.Sende
 		Path:        Prefix + "/password-resets",
 		Summary:     "Request a password reset",
 		Description: "Sends a one-time code to the address if it is registered. " +
-			"The response is always 204 so the call cannot be used to discover " +
-			"accounts. In development without SMTP the code is written to the " +
-			"process log.",
+			"The response is always 204 — including when delivery or storage " +
+			"fails — so the call cannot be used to discover accounts. In " +
+			"development without SMTP the code is written to the process log.",
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusNoContent,
 		Errors:        []int{http.StatusUnprocessableEntity, http.StatusTooManyRequests},
@@ -60,14 +62,19 @@ func registerPasswordResets(api huma.API, users *user.Service, mailer mail.Sende
 }
 
 func (h *passwordResetHandlers) request(ctx context.Context, in *RequestPasswordResetInput) (*struct{}, error) {
+	// Persistence and delivery failures must not change the status: a 5xx
+	// here would only fire for registered addresses, which is how callers
+	// would otherwise enumerate accounts. Validation errors never reach this
+	// handler — huma rejects a malformed body first.
 	code, err := h.users.BeginPasswordReset(ctx, in.Body.Email)
 	if err != nil {
-		return nil, problem.Error(ctx, err)
+		logger(h.log).ErrorContext(ctx, "password reset request failed", "error", err)
+		return nil, nil
 	}
 
 	if code != "" && h.mail != nil {
 		if err := h.mail.SendPasswordReset(ctx, user.NormalizeEmail(in.Body.Email), code); err != nil {
-			return nil, problem.Error(ctx, err)
+			logger(h.log).ErrorContext(ctx, "password reset mail failed", "error", err)
 		}
 	}
 

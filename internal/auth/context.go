@@ -8,15 +8,20 @@ import (
 
 type ctxKey int
 
-const userIDKey ctxKey = iota
+const sessionKey ctxKey = iota
 
-// WithUserID stores the authenticated subject on the request context.
-func WithUserID(ctx context.Context, id uuid.UUID) context.Context {
-	return context.WithValue(ctx, userIDKey, id)
+// WithSession stores the verified session on the request context. Handlers read
+// it back rather than re-parsing the Authorization header, so the token is
+// verified in exactly one place.
+func WithSession(ctx context.Context, sess Session) context.Context {
+	return context.WithValue(ctx, sessionKey, sess)
 }
 
-// UserIDFrom returns the subject installed by WithUserID.
-func UserIDFrom(ctx context.Context) (uuid.UUID, bool) {
-	id, ok := ctx.Value(userIDKey).(uuid.UUID)
-	return id, ok && id != uuid.Nil
+// SessionFrom returns the session installed by WithSession. The second result
+// is false on any operation that did not go through bearer authentication, so
+// a handler cannot mistake an anonymous request for a nil-uuid user.
+func SessionFrom(ctx context.Context) (Session, bool) {
+	sess, ok := ctx.Value(sessionKey).(Session)
+
+	return sess, ok && sess.UserID != uuid.Nil && sess.DeviceID != uuid.Nil
 }

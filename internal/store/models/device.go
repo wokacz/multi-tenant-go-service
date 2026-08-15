@@ -17,6 +17,9 @@ type Device struct {
 	UserID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_device_user_fp,priority:1"`
 	User   *User     `json:"-"`
 
+	// Fingerprint is the SHA-256 of the opaque device token the client holds,
+	// hex-encoded — hence size 64. The token itself is never stored, so this
+	// table cannot be replayed into someone else's trusted device.
 	Fingerprint string `gorm:"size:64;not null;uniqueIndex:idx_device_user_fp,priority:2"`
 	Label       string `gorm:"size:100"` // optional user-defined label for the device
 

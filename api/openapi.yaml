@@ -96,6 +96,46 @@ components:
         - password
         - password_confirm
       type: object
+    DeviceResponse:
+      additionalProperties: false
+      properties:
+        created_at:
+          description: When it was first seen
+          format: date-time
+          type: string
+        current:
+          description: Whether this is the device making the request
+          type: boolean
+        id:
+          description: Unique identifier
+          format: uuid
+          type: string
+        label:
+          description: Name the owner gave this device
+          type: string
+        last_ip:
+          description: Address last seen using it
+          type: string
+        last_seen_at:
+          description: When it was last used, absent if never
+          format: date-time
+          type: string
+        revoked:
+          description: Whether it is blocked from signing in
+          type: boolean
+        trusted:
+          description: Whether it may skip the second factor
+          type: boolean
+        user_agent:
+          description: User agent last seen using it
+          type: string
+      required:
+        - id
+        - trusted
+        - revoked
+        - current
+        - created_at
+      type: object
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -173,6 +213,79 @@ components:
       required:
         - status
       type: object
+    ListDevicesOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListDevicesOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        devices:
+          items:
+            $ref: "#/components/schemas/DeviceResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - devices
+      type: object
+    ListLoginEventsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListLoginEventsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        events:
+          items:
+            $ref: "#/components/schemas/LoginEventResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - events
+      type: object
+    LoginEventResponse:
+      additionalProperties: false
+      properties:
+        created_at:
+          description: When it happened
+          format: date-time
+          type: string
+        device_id:
+          description: Device involved, absent when the attempt failed before one was identified
+          format: uuid
+          type: string
+        id:
+          description: Unique identifier
+          format: uuid
+          type: string
+        ip:
+          description: Address the attempt came from
+          type: string
+        outcome:
+          description: How the attempt ended
+          enum:
+            - success
+            - bad_password
+            - mfa_failed
+            - locked
+          type: string
+        user_agent:
+          description: User agent that made the attempt
+          type: string
+      required:
+        - id
+        - outcome
+        - ip
+        - created_at
+      type: object
     RequestPasswordResetRequest:
       additionalProperties: false
       properties:
@@ -201,6 +314,9 @@ components:
           format: uri
           readOnly: true
           type: string
+        device_token:
+          description: Opaque secret identifying this device on later sign-ins
+          type: string
         expires_at:
           description: When the token stops being accepted
           format: date-time
@@ -208,12 +324,35 @@ components:
         token:
           description: Bearer token for subsequent requests
           type: string
+        two_factor_required:
+          description: True when a code was emailed and no token was issued
+          type: boolean
         user:
           $ref: "#/components/schemas/UserResponse"
       required:
-        - token
-        - expires_at
-        - user
+        - two_factor_required
+      type: object
+    SetTwoFactorRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/SetTwoFactorRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        enabled:
+          description: Whether sign-in from an untrusted device should need a code
+          type: boolean
+        password:
+          description: Current password
+          maxLength: 72
+          minLength: 1
+          type: string
+      required:
+        - password
+        - enabled
       type: object
     UserResponse:
       additionalProperties: false
@@ -240,11 +379,39 @@ components:
         name:
           description: Display name
           type: string
+        two_factor_enabled:
+          description: Whether sign-in from an untrusted device needs an emailed code
+          type: boolean
       required:
         - id
         - name
         - email
+        - two_factor_enabled
         - created_at
+      type: object
+    VerifySessionRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/VerifySessionRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        code:
+          description: The code delivered after signing in
+          maxLength: 6
+          minLength: 6
+          type: string
+        email:
+          description: Email address
+          format: email
+          maxLength: 255
+          type: string
+      required:
+        - email
+        - code
       type: object
   securitySchemes:
     bearer:
@@ -320,9 +487,177 @@ paths:
       summary: Fetch the authenticated user
       tags:
         - users
+  /v1/me/devices:
+    get:
+      description: Returns every device that has signed in to the account, most recently seen first, including revoked ones so the owner can see what was blocked.
+      operationId: list-devices
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListDevicesOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List known devices
+      tags:
+        - devices
+  /v1/me/devices/{id}:
+    delete:
+      description: Blocks the device and drops its trust. Tokens already issued to it stop working on the next request rather than at expiry. Revoking the device making the call is allowed, and is how a client signs itself out. Revoking twice succeeds. An id that is not the caller's is 404.
+      operationId: revoke-device
+      parameters:
+        - description: Device id
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Device id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Revoke a device
+      tags:
+        - devices
+  /v1/me/login-events:
+    get:
+      description: Returns the account's recent sign-in attempts, newest first. Attempts against an address that is not registered are not recorded, so an empty history means nobody has tried this account.
+      operationId: list-login-events
+      parameters:
+        - description: How many entries to return, newest first
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: How many entries to return, newest first
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListLoginEventsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List sign-in history
+      tags:
+        - devices
+  /v1/me/two-factor:
+    put:
+      description: Requires the current password as well as the token. Enabling also trusts the calling device, so an account whose address no longer receives mail is not locked out by its own setting; every other device will be asked for a code on its next sign-in.
+      operationId: set-two-factor
+      parameters:
+        - description: Device token of the calling client, trusted when enabling
+          in: header
+          name: X-Device-Token
+          schema:
+            description: Device token of the calling client, trusted when enabling
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetTwoFactorRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Turn two-factor on or off
+      tags:
+        - auth
   /v1/password-resets:
     post:
-      description: Sends a one-time code to the address if it is registered. The response is always 204 so the call cannot be used to discover accounts. In development without SMTP the code is written to the process log.
+      description: Sends a one-time code to the address if it is registered. The response is always 204 — including when delivery or storage fails — so the call cannot be used to discover accounts. In development without SMTP the code is written to the process log.
       operationId: request-password-reset
       requestBody:
         content:
@@ -396,8 +731,15 @@ paths:
         - auth
   /v1/sessions:
     post:
-      description: Exchanges an email and password for a Bearer token. Wrong passwords and unknown addresses share one error.
+      description: Exchanges an email and password for a Bearer token. Wrong passwords and unknown addresses share one error. When the account has two-factor on and the X-Device-Token is missing or names an untrusted device, the answer is 202 with two_factor_required and a code goes out by email; finish at POST /v1/sessions/verify.
       operationId: create-session
+      parameters:
+        - description: Device token from a previous sign-in, if any
+          in: header
+          name: X-Device-Token
+          schema:
+            description: Device token from a previous sign-in, if any
+            type: string
       requestBody:
         content:
           application/json:
@@ -417,6 +759,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
         "422":
           content:
             application/problem+json:
@@ -436,6 +784,64 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Internal Server Error
       summary: Sign in
+      tags:
+        - auth
+  /v1/sessions/verify:
+    post:
+      description: Spends the emailed code and issues the token. The X-Device-Token must be the one returned by the sign-in that raised the challenge — a code authorises one device, not one mailbox. Succeeding also trusts that device, so later sign-ins from it skip the code. Every way of getting it wrong shares one error.
+      operationId: verify-session
+      parameters:
+        - description: Device token the code was issued for
+          in: header
+          name: X-Device-Token
+          required: true
+          schema:
+            description: Device token the code was issued for
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifySessionRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      summary: Finish a two-factor sign-in
       tags:
         - auth
   /v1/users:

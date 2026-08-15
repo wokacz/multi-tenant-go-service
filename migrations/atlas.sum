@@ -1,3 +1,5 @@
-h1:ypHCScvXrReyfgsdp2UdeZ0p7K0NV4BGXn4Yzejs7ow=
+h1:D0MprDkmRW6Vae44tOhCqGFp3p9ZjsY5KRr68dTSY0s=
 20260814210810_init.sql h1:PVzh/66tuEBVNrGfDu8AWkjz+Z2CUir4cqzgyrD0Kwg=
 20260814222844_password_resets.sql h1:+rTdlH03i00H2t4ONLKMPcZ2lK5MK0M6G+Ciz/Oaawk=
+20260815073847_session_epoch.sql h1:0Kkunv7E2WRD4JtBRgimOgUzoTm4L7TYceRgnYxjjuo=
+20260815102216_devices_and_two_factor.sql h1:kYZj9b75U1drN8OggDqXKj1lIfrd12YvMytInxlHbLc=

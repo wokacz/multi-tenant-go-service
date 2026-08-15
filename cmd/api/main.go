@@ -69,9 +69,11 @@ func run() error {
 		return err
 	}
 
+	// AuthResetSecret peppers reset-code HMACs. It is not AuthTokenSecret:
+	// rotating session tokens must not rewrite hashes of codes already emailed.
 	deps := api.Deps{
 		DB:     db,
-		Users:  user.NewService(repositories.NewUser(db), []byte(cfg.AuthTokenSecret)),
+		Users:  user.NewService(repositories.NewUser(db), []byte(cfg.AuthResetSecret)),
 		Tokens: tokens,
 		Mail:   mail.New(cfg, log),
 	}

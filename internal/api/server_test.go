@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,21 +15,34 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
 	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/go-example/internal/mail"
 	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/go-example/internal/store/repositories/memory"
 )
 
 var testPepper = []byte("0123456789abcdef0123456789abcdef")
+
+var (
+	errSMTPDown   = errors.New("smtp down")
+	errResetStore = errors.New("store: replace password reset")
+)
 
 type okPinger struct{}
 
 func (okPinger) Ping(context.Context) error { return nil }
 
+// capturingMailer keeps the two code kinds apart. Collapsing them into one
+// field would let a test assert on "the last code" and pass while the wrong
+// flow delivered it.
 type capturingMailer struct {
-	to, code string
+	to, code      string
+	twoFactorTo   string
+	twoFactorCode string
 }
 
 func (c *capturingMailer) SendPasswordReset(_ context.Context, to, code string) error {
@@ -36,88 +51,51 @@ func (c *capturingMailer) SendPasswordReset(_ context.Context, to, code string) 
 	return nil
 }
 
-type stubRepo struct {
-	byID    map[uuid.UUID]*models.User
-	byEmail map[string]*models.User
-	resets  map[uuid.UUID]*models.PasswordReset
-}
-
-func newStubRepo() *stubRepo {
-	return &stubRepo{
-		byID:    map[uuid.UUID]*models.User{},
-		byEmail: map[string]*models.User{},
-		resets:  map[uuid.UUID]*models.PasswordReset{},
-	}
-}
-
-func (s *stubRepo) Create(_ context.Context, u *models.User) error {
-	if _, ok := s.byEmail[u.Email]; ok {
-		return user.ErrEmailTaken
-	}
-
-	u.ID = uuid.Must(uuid.NewV7())
-	s.byID[u.ID] = u
-	s.byEmail[u.Email] = u
+func (c *capturingMailer) SendTwoFactorCode(_ context.Context, to, code string) error {
+	c.twoFactorTo, c.twoFactorCode = to, code
 
 	return nil
 }
 
-func (s *stubRepo) ByID(_ context.Context, id uuid.UUID) (*models.User, error) {
-	u, ok := s.byID[id]
-	if !ok {
-		return nil, user.ErrNotFound
-	}
+type failingMailer struct{}
 
-	return u, nil
+func (failingMailer) SendPasswordReset(context.Context, string, string) error {
+	return errSMTPDown
 }
 
-func (s *stubRepo) ByEmail(_ context.Context, email string) (*models.User, error) {
-	u, ok := s.byEmail[email]
-	if !ok {
-		return nil, user.ErrNotFound
-	}
-
-	return u, nil
+func (failingMailer) SendTwoFactorCode(context.Context, string, string) error {
+	return errSMTPDown
 }
 
-func (s *stubRepo) ReplacePasswordReset(_ context.Context, reset *models.PasswordReset) error {
-	if reset.ID == uuid.Nil {
-		reset.ID = uuid.Must(uuid.NewV7())
-	}
-
-	s.resets[reset.UserID] = reset
-
-	return nil
+// replaceResetErrorRepo is the in-memory repository with one method broken, so
+// a test can prove that a storage failure on the reset path still answers 204.
+type replaceResetErrorRepo struct {
+	*memory.Users
+	err error
 }
 
-func (s *stubRepo) ActivePasswordReset(_ context.Context, userID uuid.UUID, now time.Time) (*models.PasswordReset, error) {
-	reset, ok := s.resets[userID]
-	if !ok || reset.ConsumedAt != nil || !reset.ExpiresAt.After(now) {
-		return nil, user.ErrNotFound
-	}
-
-	return reset, nil
-}
-
-func (s *stubRepo) SavePasswordReset(_ context.Context, reset *models.PasswordReset) error {
-	s.resets[reset.UserID] = reset
-
-	return nil
-}
-
-func (s *stubRepo) ConsumePasswordReset(_ context.Context, reset *models.PasswordReset, passwordHash string) error {
-	u, ok := s.byID[reset.UserID]
-	if !ok {
-		return user.ErrNotFound
-	}
-
-	u.PasswordHash = passwordHash
-	s.resets[reset.UserID] = reset
-
-	return nil
+func (r *replaceResetErrorRepo) ReplacePasswordReset(context.Context, *models.PasswordReset) error {
+	return r.err
 }
 
 func newTestServer(t *testing.T) (*Server, *capturingMailer) {
+	t.Helper()
+
+	mailer := &capturingMailer{}
+
+	return newTestAPI(t, mailer, memory.NewUsers()), mailer
+}
+
+func newTestAPI(t *testing.T, mailer mail.Sender, repo user.Repository) *Server {
+	t.Helper()
+
+	return newTestAPIConfig(t, mailer, repo, nil)
+}
+
+// newTestAPIConfig builds the server and lets a test adjust the configuration
+// before it is wired. Rate limits in particular default to zero — which
+// disables the limiter — so a test that wants to exercise it has to say so.
+func newTestAPIConfig(t *testing.T, mailer mail.Sender, repo user.Repository, adjust func(*config.Config)) *Server {
 	t.Helper()
 
 	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour)
@@ -125,7 +103,6 @@ func newTestServer(t *testing.T) (*Server, *capturingMailer) {
 		t.Fatalf("NewSigner() = %v", err)
 	}
 
-	mailer := &capturingMailer{}
 	cfg := &config.Config{
 		Env:               config.EnvDevelopment,
 		APIName:           "test",
@@ -139,25 +116,119 @@ func newTestServer(t *testing.T) (*Server, *capturingMailer) {
 		IdleTimeout:       time.Second,
 	}
 
-	s := NewServer(cfg, slog.New(slog.DiscardHandler), Deps{
+	if adjust != nil {
+		adjust(cfg)
+	}
+
+	return NewServer(cfg, slog.New(slog.DiscardHandler), Deps{
 		DB:     okPinger{},
-		Users:  user.NewService(newStubRepo(), testPepper),
+		Users:  user.NewService(repo, testPepper, user.WithBcryptCost(bcrypt.MinCost)),
 		Tokens: tokens,
 		Mail:   mailer,
 	})
-
-	return s, mailer
 }
 
 func postJSON(t *testing.T, handler http.Handler, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	return do(t, handler, request(t, http.MethodPost, path, body))
+}
+
+// request builds a JSON request. Headers are set by the caller afterwards,
+// which is how the device token and the bearer token get attached.
+func request(t *testing.T, method, path, body string) *http.Request {
+	t.Helper()
+
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+
+	req := httptest.NewRequest(method, path, reader)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	return req
+}
+
+func do(t *testing.T, handler http.Handler, req *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	return rec
+}
+
+// sessionBody is the shared shape of both sign-in responses.
+type sessionBody struct {
+	TwoFactorRequired bool   `json:"two_factor_required"`
+	DeviceToken       string `json:"device_token"`
+	Token             string `json:"token"`
+	User              struct {
+		ID               uuid.UUID `json:"id"`
+		TwoFactorEnabled bool      `json:"two_factor_enabled"`
+	} `json:"user"`
+}
+
+func decodeSession(t *testing.T, rec *httptest.ResponseRecorder) sessionBody {
+	t.Helper()
+
+	var out sessionBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode session: %v (body %s)", err, rec.Body.Bytes())
+	}
+
+	return out
+}
+
+const (
+	testEmail       = "ada@example.com"
+	testPassword    = "twelve-chars"
+	testRegisterAda = `{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`
+	testSignInAda   = `{"email":"ada@example.com","password":"twelve-chars"}`
+)
+
+func registerAda(t *testing.T, s *Server) {
+	t.Helper()
+
+	if rec := postJSON(t, s.http.Handler, "/v1/users", testRegisterAda); rec.Code != http.StatusNoContent {
+		t.Fatalf("create status = %d body %s", rec.Code, rec.Body.Bytes())
+	}
+}
+
+// signInAda signs in and fails the test unless the status matches, returning
+// the decoded body so callers can pick out the token or the device token.
+func signInAda(t *testing.T, s *Server, deviceToken string, want int) sessionBody {
+	t.Helper()
+
+	req := request(t, http.MethodPost, "/v1/sessions", testSignInAda)
+	if deviceToken != "" {
+		req.Header.Set("X-Device-Token", deviceToken)
+	}
+
+	rec := do(t, s.http.Handler, req)
+	if rec.Code != want {
+		t.Fatalf("sign-in status = %d, want %d; body %s", rec.Code, want, rec.Body.Bytes())
+	}
+
+	return decodeSession(t, rec)
+}
+
+// authed issues a request carrying a bearer token, and the device token when
+// one is given.
+func authed(t *testing.T, method, path, body, token, deviceToken string) *http.Request {
+	t.Helper()
+
+	req := request(t, method, path, body)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	if deviceToken != "" {
+		req.Header.Set("X-Device-Token", deviceToken)
+	}
+
+	return req
 }
 
 func TestGetUserRequiresBearer(t *testing.T) {
@@ -291,6 +362,77 @@ func TestPasswordResetDeliversCodeAndChangesPassword(t *testing.T) {
 	}
 }
 
+func TestPasswordResetInvalidatesExistingToken(t *testing.T) {
+	s, mailer := newTestServer(t)
+	if rec := postJSON(t, s.http.Handler, "/v1/users",
+		`{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`); rec.Code != http.StatusNoContent {
+		t.Fatalf("create status = %d", rec.Code)
+	}
+
+	logged := postJSON(t, s.http.Handler, "/v1/sessions",
+		`{"email":"ada@example.com","password":"twelve-chars"}`)
+	if logged.Code != http.StatusCreated {
+		t.Fatalf("login status = %d", logged.Code)
+	}
+
+	var session struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(logged.Body.Bytes(), &session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+
+	if rec := postJSON(t, s.http.Handler, "/v1/password-resets", `{"email":"ada@example.com"}`); rec.Code != http.StatusNoContent {
+		t.Fatalf("reset request status = %d", rec.Code)
+	}
+
+	if rec := postJSON(t, s.http.Handler, "/v1/password-resets/confirm",
+		`{"email":"ada@example.com","code":"`+mailer.code+`","password":"another-passw","password_confirm":"another-passw"}`); rec.Code != http.StatusNoContent {
+		t.Fatalf("confirm status = %d body %s", rec.Code, rec.Body.Bytes())
+	}
+
+	self := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	self.Header.Set("Authorization", "Bearer "+session.Token)
+	got := httptest.NewRecorder()
+	s.http.Handler.ServeHTTP(got, self)
+
+	if got.Code != http.StatusUnauthorized {
+		t.Fatalf("old token status = %d, want 401", got.Code)
+	}
+}
+
+func TestPasswordResetRequestHidesMailFailure(t *testing.T) {
+	s := newTestAPI(t, failingMailer{}, memory.NewUsers())
+	if rec := postJSON(t, s.http.Handler, "/v1/users",
+		`{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`); rec.Code != http.StatusNoContent {
+		t.Fatalf("create status = %d", rec.Code)
+	}
+
+	rec := postJSON(t, s.http.Handler, "/v1/password-resets", `{"email":"ada@example.com"}`)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 even when mail fails; body %s", rec.Code, rec.Body.Bytes())
+	}
+}
+
+func TestPasswordResetRequestHidesPersistenceFailure(t *testing.T) {
+	repo := &replaceResetErrorRepo{Users: memory.NewUsers(), err: errResetStore}
+	s := newTestAPI(t, &capturingMailer{}, repo)
+	if rec := postJSON(t, s.http.Handler, "/v1/users",
+		`{"name":"Ada","email":"ada@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`); rec.Code != http.StatusNoContent {
+		t.Fatalf("create status = %d", rec.Code)
+	}
+
+	unknown := postJSON(t, s.http.Handler, "/v1/password-resets", `{"email":"missing@example.com"}`)
+	if unknown.Code != http.StatusNoContent {
+		t.Fatalf("unknown email status = %d, want 204", unknown.Code)
+	}
+
+	registered := postJSON(t, s.http.Handler, "/v1/password-resets", `{"email":"ada@example.com"}`)
+	if registered.Code != http.StatusNoContent {
+		t.Fatalf("registered email status = %d, want 204 when persist fails; body %s", registered.Code, registered.Body.Bytes())
+	}
+}
+
 func TestHealthOmitsDependencyName(t *testing.T) {
 	s, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -326,7 +468,7 @@ func TestProductionHidesOpenAPI(t *testing.T) {
 		ReadHeaderTimeout: time.Second,
 	}, slog.New(slog.DiscardHandler), Deps{
 		DB:     okPinger{},
-		Users:  user.NewService(newStubRepo(), testPepper),
+		Users:  user.NewService(memory.NewUsers(), testPepper, user.WithBcryptCost(bcrypt.MinCost)),
 		Tokens: tokens,
 	})
 

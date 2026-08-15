@@ -108,6 +108,60 @@ When adding an operation, `Errors: []int{...}` on the `huma.Operation` must list
 every status the handler can return. A status missing there is missing from the
 spec and from generated clients even though the handler returns it.
 
+### Authentication is default-deny
+
+`requireBearer` in `internal/api/middleware.go` authenticates every operation
+whose id is *not* in `publicOperations`. Do not switch it back to reading the
+operation's `Security` block: that fails open, and a route registered without
+`Security` would be silently anonymous.
+
+A new operation therefore needs two things that must agree:
+
+- `Security: []map[string][]string{{"bearer": {}}}` if it is protected, so the
+  spec and generated clients know.
+- an entry in `publicOperations` if it is not.
+
+`TestEveryOperationIsClassified` fails when they disagree in either direction.
+
+### Devices, and why the token carries one
+
+The JWT holds a device id (`did`) as well as the subject and the session epoch.
+The bearer middleware checks on every request that the device still exists and
+is not revoked, which is what makes `DELETE /v1/me/devices/{id}` take effect
+now rather than at token expiry. Removing that check turns device revocation
+back into a promise the API does not keep.
+
+Clients are recognised by an opaque `X-Device-Token`; only its SHA-256 is
+stored, in `Device.Fingerprint` (hence `size:64`).
+
+### Attempt counters move in SQL, never in Go
+
+`FailPasswordReset` and `FailTwoFactorChallenge` increment and, at the cap,
+spend the code in one conditional `UPDATE`. Do not "simplify" either into a
+load, `Attempts++`, save: overlapping guesses then read the same value and
+write the same value, and a late writer can restore a `consumed_at` another
+request had just set. `TestFailPasswordResetUnderConcurrency` covers this and
+needs Postgres.
+
+### Test doubles
+
+`internal/store/repositories/memory` is a real `user.Repository` in maps, shared
+by the API and domain suites. Add new interface methods there too — two stubs
+of a twenty-method interface drift, and the suite with the laxer one stops
+testing anything.
+
+Tests build the service with `user.WithBcryptCost(bcrypt.MinCost)`. Without it
+the API suite spends ~40s under `-race` deriving keys nothing checks.
+
+`internal/store/repositories/user_postgres_test.go` covers the SQL the in-memory
+fake reimplements in Go — the conditional `UPDATE`s, the explicit `::inet` cast,
+`SELECT ... FOR UPDATE`, `NULLS LAST`. It skips unless `POSTGRES_TEST=1`:
+
+```bash
+docker compose up -d && task migrate
+POSTGRES_TEST=1 go test ./internal/store/repositories -v
+```
+
 ### Schema
 
 The **GORM models are the source of truth**. `loader/` prints the DDL they
