@@ -38,6 +38,18 @@ var (
 	// VerifyTwoFactor is reachable without credentials, so every one of those
 	// has to look the same from outside.
 	ErrInvalidTwoFactorCode = errors.New("user: invalid two-factor code")
+
+	// ErrSuspended is returned for an account an administrator has blocked. It
+	// is distinguishable from bad credentials on purpose: it is only ever
+	// reported to somebody who has already proved who they are, and "your
+	// account was suspended" is the whole point of suspending it.
+	ErrSuspended = errors.New("user: account is suspended")
+
+	// ErrCannotSuspendSelf and ErrCannotDeleteSelf refuse the two moves that
+	// would take away the permission needed to undo them. An administrator who
+	// blocks their own account is the one person who could have unblocked it.
+	ErrCannotSuspendSelf = errors.New("user: cannot suspend your own account")
+	ErrCannotDeleteSelf  = errors.New("user: cannot delete your own account")
 )
 
 // MaxNameLength is enforced here rather than only at the API boundary.
@@ -65,6 +77,21 @@ type Repository interface {
 
 	// ByEmail returns ErrNotFound when no live user has that address.
 	ByEmail(ctx context.Context, email string) (*models.User, error)
+
+	// All lists live accounts, newest first, for the installation-wide
+	// administration screens. It is not scoped to an organization because
+	// nothing about it is: it is the only listing that crosses tenants, and it
+	// sits behind a system-scope permission for exactly that reason.
+	All(ctx context.Context, limit, offset int) ([]models.User, error)
+
+	// Delete soft deletes an account. The model's hook revokes its devices,
+	// which the foreign key cascade does not do for a soft delete.
+	Delete(ctx context.Context, userID uuid.UUID) error
+
+	// SetSuspended blocks or unblocks an account. Suspending also bumps the
+	// session epoch, so tokens already issued stop working on the next request
+	// rather than at expiry.
+	SetSuspended(ctx context.Context, userID uuid.UUID, at *time.Time) error
 
 	// ReplacePasswordReset drops unused codes for the user and stores the new
 	// one. A user may only have one live reset at a time.

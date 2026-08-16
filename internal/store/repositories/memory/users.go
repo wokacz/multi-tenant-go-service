@@ -86,6 +86,77 @@ func (m *Users) ByID(_ context.Context, id uuid.UUID) (*models.User, error) {
 	return copyOf(u), nil
 }
 
+func (m *Users) All(_ context.Context, limit, offset int) ([]models.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]models.User, 0, len(m.users))
+	for _, u := range m.users {
+		if !u.IsDeleted() {
+			out = append(out, *u)
+		}
+	}
+
+	// The SQL orders by id descending; map iteration does not, and a test
+	// asserting on the first element would otherwise pass at random.
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID.String() > out[j].ID.String()
+	})
+
+	if offset >= len(out) {
+		return nil, nil
+	}
+
+	out = out[offset:]
+	if limit > 0 && limit < len(out) {
+		out = out[:limit]
+	}
+
+	return out, nil
+}
+
+func (m *Users) Delete(_ context.Context, userID uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok {
+		return user.ErrNotFound
+	}
+
+	if err := u.Delete(); err != nil {
+		return err
+	}
+
+	// The model hook revokes the devices; the fake does the same so a test
+	// cannot pass here and fail against Postgres.
+	for _, device := range m.devices {
+		if device.UserID == userID && !device.IsRevoked() {
+			_ = device.Revoke()
+		}
+	}
+
+	return nil
+}
+
+func (m *Users) SetSuspended(_ context.Context, userID uuid.UUID, at *time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok {
+		return user.ErrNotFound
+	}
+
+	u.SuspendedAt = at
+	if at != nil {
+		// Same statement as the SQL: suspending invalidates tokens already out.
+		u.SessionEpoch++
+	}
+
+	return nil
+}
+
 func (m *Users) ByEmail(_ context.Context, email string) (*models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -15,7 +15,11 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/wokacz/go-example/internal/domain/authz"
+	"github.com/wokacz/go-example/internal/domain/orgs"
 	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/go-example/internal/i18n"
+	"github.com/wokacz/go-example/internal/store/models"
 )
 
 // statusClientClosedRequest is nginx's convention for "the client hung up
@@ -37,6 +41,10 @@ const statusClientClosedRequest = 499
 // the request id attached, and the client gets that opaque 500. Unmapped errors
 // carry table names, query fragments and occasionally credentials, none of
 // which belong in a response body.
+//
+// It takes a context for two reasons that look unrelated and are not: the
+// logger, and the language. Both are properties of the request rather than of
+// the error, and both are wrong if guessed.
 func Error(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
@@ -49,74 +57,149 @@ func Error(ctx context.Context, err error) error {
 		return statusErr
 	}
 
+	locale := i18n.LocaleFrom(ctx)
+
 	switch {
-	case errors.Is(err, user.ErrNotFound):
-		return huma.Error404NotFound("user not found")
+	// Deliberately the same body as an organization the caller may not see. In
+	// a multi-tenant system, "this exists but is not yours" is a fact worth
+	// hiding, so both refusals are one indistinguishable answer.
+	case errors.Is(err, user.ErrNotFound),
+		errors.Is(err, orgs.ErrNotFound),
+		errors.Is(err, authz.ErrNotMember):
+		return newDocument(locale, http.StatusNotFound, CodeNotFound)
 
 	case errors.Is(err, user.ErrUnauthorized):
-		return huma.Error401Unauthorized("unauthorized")
+		return newDocument(locale, http.StatusUnauthorized, CodeUnauthorized)
 
 	case errors.Is(err, user.ErrInvalidCredentials):
-		return huma.Error401Unauthorized("invalid credentials")
+		return newDocument(locale, http.StatusUnauthorized, CodeInvalidCredentials)
 
 	case errors.Is(err, user.ErrPasswordTooShort):
-		return huma.Error422UnprocessableEntity("password is too short")
+		return newDocument(locale, http.StatusUnprocessableEntity, CodePasswordTooShort)
 
 	case errors.Is(err, user.ErrPasswordTooLong):
-		return huma.Error422UnprocessableEntity("password is too long")
+		return newDocument(locale, http.StatusUnprocessableEntity, CodePasswordTooLong)
 
 	case errors.Is(err, user.ErrNameEmpty):
-		return huma.Error422UnprocessableEntity("name is empty")
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeNameEmpty)
 
 	case errors.Is(err, user.ErrNameTooLong):
-		return huma.Error422UnprocessableEntity("name is too long")
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeNameTooLong)
 
 	case errors.Is(err, user.ErrPasswordMismatch):
-		return huma.Error422UnprocessableEntity("passwords do not match")
+		return newDocument(locale, http.StatusUnprocessableEntity, CodePasswordMismatch)
 
 	case errors.Is(err, user.ErrInvalidResetCode):
-		return huma.Error401Unauthorized("invalid reset code")
+		return newDocument(locale, http.StatusUnauthorized, CodeInvalidResetCode)
 
 	case errors.Is(err, user.ErrInvalidTwoFactorCode):
-		return huma.Error401Unauthorized("invalid code")
+		return newDocument(locale, http.StatusUnauthorized, CodeInvalidTwoFactorCode)
 
 	// 403 rather than 401: the caller's credentials were accepted, so retrying
 	// with a better token is not the fix. Naming the reason is the point — the
 	// device was blocked on purpose, and only the account holder ever sees it.
 	case errors.Is(err, user.ErrDeviceRevoked):
-		return huma.Error403Forbidden("device is revoked")
+		return newDocument(locale, http.StatusForbidden, CodeDeviceRevoked)
+
+	// 403 rather than 401 for the same reason as a revoked device: the password
+	// was accepted, so retrying with better credentials is not the fix.
+	case errors.Is(err, user.ErrSuspended):
+		return newDocument(locale, http.StatusForbidden, CodeAccountSuspended)
+
+	case errors.Is(err, user.ErrCannotSuspendSelf):
+		return newDocument(locale, http.StatusConflict, CodeCannotSuspendSelf)
+
+	case errors.Is(err, user.ErrCannotDeleteSelf):
+		return newDocument(locale, http.StatusConflict, CodeCannotDeleteSelf)
+
+	case errors.Is(err, authz.ErrForbidden):
+		return newDocument(locale, http.StatusForbidden, CodeForbidden)
+
+	// The caller's credentials were fine and so was their membership; what they
+	// asked for was to hand out authority they do not hold. Naming it is the
+	// point — a client showing a plain "forbidden" here would send the user
+	// looking for a permission they already have.
+	case errors.Is(err, authz.ErrPrivilegeEscalation):
+		return newDocument(locale, http.StatusForbidden, CodePrivilegeEscalation)
+
+	case errors.Is(err, authz.ErrUnknownPermission):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeUnknownPermission)
+
+	// 403 rather than 422: the request is well formed and the role exists, the
+	// caller simply may not edit this one, and no rewording of the body would
+	// make it succeed.
+	case errors.Is(err, orgs.ErrRoleProtected):
+		return newDocument(locale, http.StatusForbidden, CodeRoleProtected)
+
+	// 409s: the request is valid but the current state refuses it, and the
+	// caller can act on that — reassign the role, promote another owner.
+	case errors.Is(err, orgs.ErrLastOwner):
+		return newDocument(locale, http.StatusConflict, CodeLastOwner)
+
+	case errors.Is(err, orgs.ErrRoleInUse):
+		return newDocument(locale, http.StatusConflict, CodeRoleInUse)
+
+	case errors.Is(err, orgs.ErrRoleKeyTaken):
+		return newDocument(locale, http.StatusConflict, CodeRoleKeyTaken)
+
+	case errors.Is(err, orgs.ErrSlugTaken):
+		return newDocument(locale, http.StatusConflict, CodeSlugTaken)
+
+	case errors.Is(err, orgs.ErrAlreadyMember):
+		return newDocument(locale, http.StatusConflict, CodeAlreadyMember)
+
+	case errors.Is(err, models.ErrProtected):
+		return newDocument(locale, http.StatusConflict, CodeRecordProtected)
+
+	case errors.Is(err, orgs.ErrInvalidName):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidName)
+
+	case errors.Is(err, orgs.ErrInvalidStatus):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidStatus)
 
 	case errors.Is(err, context.Canceled):
-		return huma.NewError(statusClientClosedRequest, http.StatusText(statusClientClosedRequest))
+		return newDocument(locale, statusClientClosedRequest, CodeClientClosed)
 
 	case errors.Is(err, context.DeadlineExceeded):
 		LoggerFrom(ctx).Warn("request timed out", "error", err)
 
-		return huma.Error504GatewayTimeout("request timed out")
+		return newDocument(locale, http.StatusGatewayTimeout, CodeTimeout)
 	}
 
 	LoggerFrom(ctx).Error("unhandled error", "error", err)
 
-	return huma.Error500InternalServerError("internal server error")
+	return newDocument(locale, http.StatusInternalServerError, CodeInternal)
 }
 
-// Write renders a huma.ErrorModel by hand for the responses chi produces
-// before huma ever sees the request — an unmatched path and an unmatched
-// method. Left to chi they come back as plain text, and would be the only
-// non-JSON bodies the API ever emits.
-func Write(w http.ResponseWriter, status int, detail string) {
+// Write renders a problem document by hand for the responses chi produces
+// before huma ever sees the request — an unmatched path, an unmatched method, a
+// rate limit, a panic. Left to chi they come back as plain text, and would be
+// the only non-JSON bodies the API ever emits.
+//
+// It takes the request rather than only the writer so these responses are
+// translated too. A 404 in English on an otherwise Polish API is the kind of
+// gap that is invisible in development and obvious to a user.
+func Write(w http.ResponseWriter, r *http.Request, status int, code string, args ...any) {
+	locale := i18n.Fallback
+	if r != nil {
+		locale = i18n.LocaleFrom(r.Context())
+	}
+
+	doc := newDocument(locale, status, code, nil)
+	if len(args) > 0 {
+		doc.Detail = i18n.Default().T(locale, "error."+code, args...)
+	}
+
 	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set("Content-Language", string(locale))
+
 	if status == http.StatusTooManyRequests {
 		w.Header().Set("Retry-After", "60")
 	}
 
 	w.WriteHeader(status)
 
-	_ = json.NewEncoder(w).Encode(huma.ErrorModel{
-		Status: status,
-		Title:  http.StatusText(status),
-		Detail: detail,
-	})
+	_ = json.NewEncoder(w).Encode(doc)
 }
 
 // ctxKey keeps the context key unexported so no other package can collide with

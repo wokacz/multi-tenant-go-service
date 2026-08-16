@@ -43,6 +43,7 @@ type UserResponse struct {
 	Name             string    `json:"name" doc:"Display name"`
 	Email            string    `json:"email" format:"email" doc:"Email address, normalised to lower case"`
 	TwoFactorEnabled bool      `json:"two_factor_enabled" doc:"Whether sign-in from an untrusted device needs an emailed code"`
+	Locale           string    `json:"locale,omitempty" doc:"Preferred language, remembered from registration. Outranks Accept-Language."`
 	CreatedAt        time.Time `json:"created_at" doc:"When the account was registered"`
 }
 
@@ -55,6 +56,7 @@ func newUserResponse(u *models.User) UserResponse {
 		Name:             u.Name,
 		Email:            u.Email,
 		TwoFactorEnabled: u.TwoFactorEnabled,
+		Locale:           u.Locale,
 		CreatedAt:        u.CreatedAt,
 	}
 }

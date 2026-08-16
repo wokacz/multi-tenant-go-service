@@ -105,6 +105,18 @@ func (s *Service) SignIn(ctx context.Context, email, password string, sc SignInC
 		return nil, ErrInvalidCredentials
 	}
 
+	// Checked after the password and before a device is minted or a token is
+	// issued. After, because telling an anonymous caller that an address is
+	// suspended would answer a question they have not earned; before, because
+	// this is the only place a *new* token comes from — the bearer middleware
+	// blocks the ones already out, and without this a suspended account could
+	// simply sign in again and get a fresh one.
+	if u.IsSuspended() {
+		s.tryRecordLogin(ctx, u.ID, nil, sc, models.OutcomeLocked)
+
+		return nil, ErrSuspended
+	}
+
 	device, token, err := s.resolveDevice(ctx, u.ID, sc)
 	if err != nil {
 		return nil, err

@@ -1,0 +1,153 @@
+# Uwierzytelnianie
+
+Odpowiada na pytanie **„kim jesteś"**. Co wolno, rozstrzyga się osobno — patrz [Autoryzacja](007_authorization.md).
+
+```
+hasło  ──▶  urządzenie  ──▶  [ kod z maila ]  ──▶  token
+```
+
+## Logowanie krok po kroku
+
+```mermaid
+sequenceDiagram
+    participant K as Klient
+    participant A as API
+    participant D as Domena
+    participant M as Mail
+
+    K->>A: POST /v1/sessions<br/>e-mail, hasło, X-Device-Token?
+    A->>D: SignIn
+    D->>D: sprawdź hasło (bcrypt)
+    D->>D: rozpoznaj lub zarejestruj urządzenie
+    D->>D: zapisz zdarzenie logowania
+
+    alt konto zawieszone
+        D-->>A: ErrSuspended
+        A-->>K: 403
+    else urządzenie odwołane
+        D-->>A: ErrDeviceRevoked
+        A-->>K: 403
+    else 2FA włączone, urządzenie niezaufane
+        D->>D: wygeneruj kod, zapisz HMAC
+        D-->>A: wyzwanie + kod
+        A->>M: wyślij kod
+        A-->>K: 202 two_factor_required
+        K->>A: POST /v1/sessions/verify<br/>kod + X-Device-Token
+        A->>D: VerifyTwoFactor
+        D->>D: spal kod, zaufaj urządzeniu
+        A-->>K: 201 token
+    else wpuść
+        A-->>K: 201 token
+    end
+```
+
+## Token
+
+Kompaktowy JWT podpisany HMAC-SHA256, bez biblioteki — parser ma ~50 linii w
+`internal/auth/token.go`.
+
+| Claim         | Znaczenie                                              |
+|---------------|--------------------------------------------------------|
+| `sub`         | identyfikator użytkownika                              |
+| `did`         | identyfikator **urządzenia**, dla którego token wydano |
+| `ver`         | **epoka sesji** w chwili wydania                       |
+| `exp` / `iat` | wygaśnięcie i moment wydania                           |
+
+Konfiguracja: `AUTH_TOKEN_SECRET` (min. 32 bajty) i `AUTH_TOKEN_TTL` (domyślnie
+`1h`, format czasu Go — gołe `30` jest odrzucane, nie zgadywane). Produkcja nie wystartuje z sekretem deweloperskim ani
+bez własnego.
+
+**Token nie niesie uprawnień.** To świadoma decyzja i jej uzasadnienie jest w
+[Autoryzacji](007_authorization.md).
+
+### Kolejność weryfikacji ma znaczenie
+
+`Parse` **najpierw sprawdza podpis**, dopiero potem czyta nagłówek JOSE. To jest to, co zamyka atak `alg=none`: token z
+podmienionym algorytmem nie przechodzi podpisu, więc jego treść nigdy nie jest interpretowana.
+
+Podpis liczony jest z dokładnie tych bajtów, które przyszły — nie z ponownie zserializowanej postaci. Inaczej różnica w
+kolejności pól albo w białych znakach dawałaby dwa różne teksty pod jednym podpisem.
+
+Każda ścieżka błędu zwraca ten sam `ErrInvalidToken`. Rozróżnianie „uszkodzony"
+od „wygasły" od „zły podpis" pozwoliłoby badać weryfikator własność po własności.
+
+## Epoka sesji
+
+`users.session_epoch` to licznik kopiowany do tokenu przy wydaniu. Reset hasła i zawieszenie konta zwiększają go w tej
+samej transakcji, w której zapisują zmianę.
+
+Token wydany wcześniej ma starą epokę, więc przy kolejnym żądaniu odpada — mimo poprawnego podpisu i ważnego `exp`. Daje
+to unieważnianie **bez listy odwołań**, której trzeba by pilnować i czyścić.
+
+## Co unieważnia co
+
+| Zdarzenie            | Skutek                                                  |
+|----------------------|---------------------------------------------------------|
+| Reset hasła          | padają **wszystkie** sesje konta (epoka +1)             |
+| Zawieszenie konta    | padają wszystkie sesje, a nowe logowanie jest odrzucane |
+| Odwołanie urządzenia | padają sesje **tego urządzenia**                        |
+| Wygaśnięcie          | pada pojedynczy token po `AUTH_TOKEN_TTL`               |
+
+Nie ma osobnego „wylogowania". `DELETE /v1/me/devices/{id}` na własnym urządzeniu robi dokładnie to i działa
+natychmiast.
+
+## Co sprawdza `requireBearer`
+
+Przy **każdym** żądaniu, po kolei — pierwsze niepowodzenie kończy się `401`:
+
+1. operacja nie jest na liście publicznych,
+2. nagłówek `Authorization: Bearer …` istnieje,
+3. podpis HMAC się zgadza, nagłówek JOSE to `HS256`,
+4. token nie wygasł,
+5. użytkownik istnieje,
+6. **epoka sesji** w tokenie zgadza się z tą w bazie,
+7. konto **nie jest zawieszone**,
+8. **urządzenie** z tokenu istnieje i nie jest odwołane.
+
+Punkty 6–8 to zapytania do bazy na żądanie. To świadomy koszt: bez nich „zmień hasło", „zablokuj konto" i „odwołaj
+urządzenie" byłyby obietnicami spełnianymi dopiero po wygaśnięciu tokenu.
+
+Middleware wkłada tu na kontekst sesję oraz `audit.Actor` — jedyne miejsce, które ma jednocześnie tożsamość i adres
+klienta.
+
+## Domyślnie odmawiaj
+
+`requireBearer` uwierzytelnia **każdą** operację, której identyfikatora nie ma na jawnej liście `publicOperations` w
+`internal/api/middleware.go`:
+
+```
+health                    create-session          request-password-reset
+create-user               verify-session          confirm-password-reset
+```
+
+Kuszący wariant — czytać blok `Security` operacji i przepuszczać te bez niego — zawodzi w złą stronę: trasa dodana bez
+`Security` byłaby po cichu publiczna i żaden test, który o tym nie wie, by tego nie wyłapał. Tutaj pomyłka idzie w drugą
+stronę: zapomniana operacja staje się nieosiągalna, co widać od razu.
+
+`TestEveryOperationIsClassified` sprawdza, że lista i bloki `Security` w specyfikacji zgadzają się **w obie strony**,
+żeby generowane klienty nie kłamały.
+
+Odpowiedź `401` niesie `WWW-Authenticate: Bearer realm="…"`, jak wymaga RFC 7235.
+
+## Reset hasła
+
+```
+POST /v1/password-resets            { "email" }
+POST /v1/password-resets/confirm    { "email", "code", "password", "password_confirm" }
+```
+
+Mechanika kodu jest wspólna z drugim składnikiem — opisana w
+[Urządzenia i drugi składnik](006_devices_and_2fa.md#wspólna-mechanika-kodów).
+
+### Prośba zawsze kończy się `204`
+
+Nieznany adres, awaria bazy, awaria SMTP — zawsze `204`. Gdyby błąd zapisu zwracał `500`, robiłby to **tylko dla
+zarejestrowanych adresów**, czyli byłby dokładnie tym oraklem, który wspólna odpowiedź ma zamykać. Awarie trafiają do
+logu.
+
+W developmencie bez skonfigurowanego SMTP kod ląduje w logu procesu.
+
+### Potwierdzenie unieważnia sesje
+
+`ConsumePasswordReset` w **jednej transakcji** zapisuje nowy hash, zwiększa
+`session_epoch` i oznacza kod jako spalony. Awaria w połowie nie może zostawić spalonego kodu przy starym haśle.

@@ -77,6 +77,11 @@ tasks:
       # up as a diff in the pull request instead of being invisible.
       - git diff --exit-code -- {{.SPEC}}
 
+  bootstrap:
+    desc: Grant the first owner (needs an account to already exist)
+    cmds:
+      - go run ./cmd/bootstrap {{.CLI_ARGS}}
+
   migrate:
     desc: Apply pending migrations
     cmds:

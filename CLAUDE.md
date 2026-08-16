@@ -25,9 +25,10 @@ go test ./internal/store/models -run TestDeviceTrustLifecycle -v
 go test ./internal -run TestHumaStaysInsideTheAPIPackage -v
 ```
 
-Tests need no database — the model tests use `schema.Parse` in memory, and the
-architecture tests parse source. Anything requiring Postgres is run by hand
-against the compose stack.
+`task test` needs no database — the model tests use `schema.Parse` in memory, the
+architecture tests parse source, and the repository tests skip unless
+`POSTGRES_TEST=1`. CI sets it, against a Postgres service container, so the SQL
+those tests cover is checked on every push; locally they are opt-in.
 
 ### Toolchain gotchas
 
@@ -104,6 +105,10 @@ and is not served in production.
   from a *fixed* config, not the running one, so the file does not change with
   the developer's port. `task openapi:check` (and CI) fail when it is stale.
 
+Adding an operation therefore means: register it, classify it in one of the
+three authorization sets, and — if it is organization-scoped — put `{orgID}` in
+its path and declare 403 and 404 in `Errors`.
+
 When adding an operation, `Errors: []int{...}` on the `huma.Operation` must list
 every status the handler can return. A status missing there is missing from the
 spec and from generated clients even though the handler returns it.
@@ -122,6 +127,32 @@ A new operation therefore needs two things that must agree:
 - an entry in `publicOperations` if it is not.
 
 `TestEveryOperationIsClassified` fails when they disagree in either direction.
+
+### Authorization is a second, separate classification
+
+Once a request is authenticated, `requirePermission` decides what it may do.
+Every operation must appear in **exactly one** of three sets:
+
+- `publicOperations` — no token at all;
+- `selfServiceOperations` — a token is enough, because the caller's identity
+  *is* the authorization (`/v1/me/*`). Nothing here may ever be gated on a
+  permission: a role configuration that could take away "read my own profile"
+  locks out the only person who could fix it;
+- `operationAccess` — needs a permission, in a scope.
+
+An operation in none of them is refused. `TestEveryOperationHasExactlyOneAuthorizationRule`
+turns that into a build failure, and fails on overlap too.
+
+Organization-scoped operations carry `{orgID}` in the path. The middleware
+resolves it, authorizes, and puts an `authz.Grant` on the context. **Handlers
+read the organization from the grant, never from `in.OrgID`** — the DTO field
+exists only so huma documents the parameter, and
+`TestHandlersDoNotReadTheOrgIDParameter` parses the AST to keep it unused.
+
+Permissions are never in the token: revoking a role has to take effect now, the
+same promise `requireBearer` already makes for devices.
+
+Full rationale: [`docs/design/007_authorization.md`](docs/design/007_authorization.md).
 
 ### Devices, and why the token carries one
 
@@ -153,14 +184,20 @@ testing anything.
 Tests build the service with `user.WithBcryptCost(bcrypt.MinCost)`. Without it
 the API suite spends ~40s under `-race` deriving keys nothing checks.
 
-`internal/store/repositories/user_postgres_test.go` covers the SQL the in-memory
-fake reimplements in Go — the conditional `UPDATE`s, the explicit `::inet` cast,
-`SELECT ... FOR UPDATE`, `NULLS LAST`. It skips unless `POSTGRES_TEST=1`:
+The `*_postgres_test.go` files cover the SQL the in-memory fake reimplements in
+Go — the conditional `UPDATE`s, the explicit `::inet` cast,
+`SELECT ... FOR UPDATE`, `NULLS LAST`, the filtered count that refuses another
+tenant's role id, the cascades. They skip unless `POSTGRES_TEST=1`:
 
 ```bash
 docker compose up -d && task migrate
 POSTGRES_TEST=1 go test ./internal/store/repositories -v
 ```
+
+CI runs them too, against a `postgres:18-alpine` service container it migrates
+first. Keep that image version in step with `docker-compose.yml` and the `dev`
+database in `atlas.hcl`: a diff computed against one Postgres version and
+applied to another is exactly the failure these tests exist to catch.
 
 ### Schema
 

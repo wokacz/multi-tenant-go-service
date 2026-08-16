@@ -63,6 +63,77 @@ func (r *User) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	return nil, fmt.Errorf("store: user by id: %w", err)
 }
 
+// All lists live accounts, newest first. UUIDv7 is time-ordered, so ordering by
+// the primary key is the same order as by creation and costs no extra index.
+func (r *User) All(ctx context.Context, limit, offset int) ([]models.User, error) {
+	var users []models.User
+
+	err := r.db.WithContext(ctx).
+		Order("id DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&users).Error
+	if err != nil {
+		return nil, fmt.Errorf("store: all users: %w", err)
+	}
+
+	return users, nil
+}
+
+// Delete soft deletes an account.
+//
+// The row is loaded first so BeforeDelete sees a populated receiver: it revokes
+// the account's devices, and a batch delete would hand the hook a zero value and
+// leave them trusted and usable after the account was gone.
+func (r *User) Delete(ctx context.Context, userID uuid.UUID) error {
+	u, err := r.ByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if err := r.db.WithContext(ctx).Delete(u).Error; err != nil {
+		if errors.Is(err, models.ErrProtected) {
+			return err
+		}
+
+		return fmt.Errorf("store: delete user: %w", err)
+	}
+
+	return nil
+}
+
+// SetSuspended blocks or unblocks an account.
+//
+// Suspending bumps the session epoch in the same statement, so tokens already
+// issued stop working on the next request. Doing it in two statements would
+// leave a window in which a suspended account still had a usable token, which
+// is precisely the window an administrator is trying to close.
+//
+// Hooks are skipped for the reason the organization updates skip them: GORM
+// runs BeforeSave against the zero value handed to Model, which no validation
+// on a real user can survive.
+func (r *User) SetSuspended(ctx context.Context, userID uuid.UUID, at *time.Time) error {
+	updates := map[string]any{"suspended_at": at}
+	if at != nil {
+		updates["session_epoch"] = gorm.Expr("session_epoch + 1")
+	}
+
+	res := r.db.WithContext(ctx).
+		Session(&gorm.Session{SkipHooks: true}).
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		Updates(updates)
+	if res.Error != nil {
+		return fmt.Errorf("store: set suspended: %w", res.Error)
+	}
+
+	if res.RowsAffected == 0 {
+		return user.ErrNotFound
+	}
+
+	return nil
+}
+
 func (r *User) ByEmail(ctx context.Context, email string) (*models.User, error) {
 	var u models.User
 

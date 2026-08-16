@@ -28,10 +28,31 @@ type User struct {
 	// the challenge, which is what keeps the flow usable day to day.
 	TwoFactorEnabled bool `gorm:"not null;default:false"`
 
+	// SuspendedAt blocks the account everywhere without deleting it.
+	//
+	// It is separate from the soft delete because the two mean different things
+	// to an administrator and to the person: a suspension is reversible and the
+	// account keeps its memberships and history, a deletion is not. The bearer
+	// middleware checks it on every request, which is what makes suspending take
+	// effect on tokens that were already handed out — the same promise device
+	// revocation makes.
+	SuspendedAt *time.Time
+
+	// Locale is the account's preferred language as a BCP 47 tag, empty when
+	// the user has not chosen one. It outranks Accept-Language for responses,
+	// and it is the only language signal mail has: a message sent from a
+	// background job has no request headers to negotiate from.
+	Locale string `gorm:"size:10"`
+
 	// OnDelete:CASCADE only fires on a hard delete (Unscoped). The ordinary
 	// soft delete is handled by BeforeDelete below.
 	Devices     []Device     `gorm:"constraint:OnDelete:CASCADE"`
 	LoginEvents []LoginEvent `gorm:"constraint:OnDelete:CASCADE"`
+}
+
+// IsSuspended reports whether the account is blocked.
+func (u *User) IsSuspended() bool {
+	return u.SuspendedAt != nil
 }
 
 // BeforeDelete revokes the user's devices. Deleting a User is a soft delete, so

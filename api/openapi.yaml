@@ -1,5 +1,85 @@
 components:
   schemas:
+    AddMemberRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/AddMemberRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Address of an existing account
+          format: email
+          maxLength: 255
+          type: string
+        role_ids:
+          description: Roles to grant. Every one must be a role the caller could grant themselves.
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - email
+        - role_ids
+      type: object
+    AuditEventResponse:
+      additionalProperties: false
+      properties:
+        action:
+          description: What changed, e.g. member.roles_changed
+          type: string
+        actor:
+          $ref: "#/components/schemas/AuditParty"
+          description: Who made the change
+        at:
+          description: When the change was made
+          format: date-time
+          type: string
+        detail:
+          type: string
+        id:
+          format: uuid
+          type: string
+        ip:
+          type: string
+        organization_id:
+          format: uuid
+          type: string
+        role_id:
+          format: uuid
+          type: string
+        role_key:
+          description: Captured when the change was made, so it survives the role being deleted
+          type: string
+        subject:
+          $ref: "#/components/schemas/AuditParty"
+          description: Who it was about, absent for changes that are not about a person
+        user_agent:
+          type: string
+      required:
+        - id
+        - at
+        - action
+        - actor
+      type: object
+    AuditParty:
+      additionalProperties: false
+      properties:
+        email:
+          format: email
+          type: string
+        id:
+          format: uuid
+          type: string
+        name:
+          type: string
+      required:
+        - id
+      type: object
     ConfirmPasswordResetRequest:
       additionalProperties: false
       properties:
@@ -35,6 +115,65 @@ components:
         - code
         - password
         - password_confirm
+      type: object
+    CreatePlatformOrganizationRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/CreatePlatformOrganizationRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Display name
+          maxLength: 100
+          minLength: 1
+          type: string
+        slug:
+          description: Lowercase handle, unique in the installation
+          maxLength: 63
+          minLength: 1
+          type: string
+      required:
+        - slug
+        - name
+      type: object
+    CreateRoleRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/CreateRoleRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        description:
+          maxLength: 255
+          type: string
+        key:
+          description: Lowercase identifier, unique in the organization
+          maxLength: 64
+          minLength: 1
+          type: string
+        name:
+          description: Display name
+          maxLength: 100
+          minLength: 1
+          type: string
+        permissions:
+          description: Permission keys. Every one must be a permission the caller holds.
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - key
+        - name
+        - permissions
       type: object
     CreateSessionRequest:
       additionalProperties: false
@@ -136,6 +275,48 @@ components:
         - current
         - created_at
       type: object
+    Document:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/Document.json
+          format: uri
+          readOnly: true
+          type: string
+        code:
+          description: Stable machine-readable identifier for this refusal
+          type: string
+        detail:
+          description: Human-readable explanation, in the negotiated language. Never parse this — use code.
+          type: string
+        errors:
+          description: Field-level problems, when the request failed validation
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+          type:
+            - array
+            - "null"
+        instance:
+          description: A URI identifying this occurrence
+          format: uri
+          type: string
+        required_permission:
+          description: Permission key the caller was missing
+          type: string
+        status:
+          description: HTTP status code
+          format: int64
+          type: integer
+        title:
+          description: Short, human-readable summary of the problem type
+          type: string
+        type:
+          description: A URI identifying the problem type
+          format: uri
+          type: string
+      type: object
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -147,53 +328,6 @@ components:
           type: string
         value:
           description: The value at the given location
-      type: object
-    ErrorModel:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/ErrorModel.json
-          format: uri
-          readOnly: true
-          type: string
-        detail:
-          description: A human-readable explanation specific to this occurrence of the problem.
-          examples:
-            - Property foo is required but is missing.
-          type: string
-        errors:
-          description: Optional list of individual error details
-          items:
-            $ref: "#/components/schemas/ErrorDetail"
-          type:
-            - array
-            - "null"
-        instance:
-          description: A URI reference that identifies the specific occurrence of the problem.
-          examples:
-            - https://example.com/error-log/abc123
-          format: uri
-          type: string
-        status:
-          description: HTTP status code
-          examples:
-            - 400
-          format: int64
-          type: integer
-        title:
-          description: A short, human-readable summary of the problem type. This value should not change between occurrences of the error.
-          examples:
-            - Bad Request
-          type: string
-        type:
-          default: about:blank
-          description: A URI reference to human-readable documentation for the error.
-          examples:
-            - https://example.com/errors/example
-          format: uri
-          type: string
       type: object
     HealthOutputBody:
       additionalProperties: false
@@ -212,6 +346,25 @@ components:
           type: string
       required:
         - status
+      type: object
+    ListAuditOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListAuditOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        events:
+          items:
+            $ref: "#/components/schemas/AuditEventResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - events
       type: object
     ListDevicesOutputBody:
       additionalProperties: false
@@ -251,6 +404,120 @@ components:
       required:
         - events
       type: object
+    ListMembersOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListMembersOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        members:
+          items:
+            $ref: "#/components/schemas/MemberResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - members
+      type: object
+    ListMyOrganizationsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListMyOrganizationsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        organizations:
+          items:
+            $ref: "#/components/schemas/MembershipResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - organizations
+      type: object
+    ListPermissionsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListPermissionsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        permissions:
+          items:
+            $ref: "#/components/schemas/PermissionResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - permissions
+      type: object
+    ListPlatformOrganizationsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListPlatformOrganizationsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        organizations:
+          items:
+            $ref: "#/components/schemas/PlatformOrganizationResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - organizations
+      type: object
+    ListPlatformUsersOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListPlatformUsersOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        users:
+          items:
+            $ref: "#/components/schemas/PlatformUserResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - users
+      type: object
+    ListRolesOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListRolesOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        roles:
+          items:
+            $ref: "#/components/schemas/RoleResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - roles
+      type: object
     LoginEventResponse:
       additionalProperties: false
       properties:
@@ -286,6 +553,217 @@ components:
         - ip
         - created_at
       type: object
+    MemberResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/MemberResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Email address
+          format: email
+          type: string
+        id:
+          description: Membership id, used to address this person here
+          format: uuid
+          type: string
+        joined_at:
+          description: When the membership first became active
+          format: date-time
+          type: string
+        name:
+          description: Display name
+          type: string
+        roles:
+          description: Roles held in this organization
+          items:
+            $ref: "#/components/schemas/RoleSummaryResponse"
+          type:
+            - array
+            - "null"
+        status:
+          description: Whether the membership grants anything
+          enum:
+            - invited
+            - active
+            - suspended
+          type: string
+        user_id:
+          description: The account behind the membership
+          format: uuid
+          type: string
+      required:
+        - id
+        - user_id
+        - name
+        - email
+        - status
+        - roles
+      type: object
+    MembershipResponse:
+      additionalProperties: false
+      properties:
+        organization:
+          $ref: "#/components/schemas/OrganizationResponse"
+        roles:
+          description: Keys of the roles the caller holds here
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        status:
+          description: Where the caller stands in this organization
+          enum:
+            - invited
+            - active
+            - suspended
+          type: string
+      required:
+        - organization
+        - status
+        - roles
+      type: object
+    OrganizationResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/OrganizationResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          description: When the organization was created
+          format: date-time
+          type: string
+        id:
+          description: Unique identifier
+          format: uuid
+          type: string
+        name:
+          description: Display name
+          type: string
+        slug:
+          description: Stable human-readable handle
+          type: string
+      required:
+        - id
+        - slug
+        - name
+        - created_at
+      type: object
+    PermissionResponse:
+      additionalProperties: false
+      properties:
+        group:
+          description: Heading to file it under
+          type: string
+        key:
+          description: Stable identifier used everywhere else in the API
+          type: string
+        scope:
+          description: What the permission is measured against
+          enum:
+            - organization
+            - system
+          type: string
+      required:
+        - key
+        - scope
+        - group
+      type: object
+    PermissionSnapshotResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/PermissionSnapshotResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        organizations:
+          items:
+            $ref: "#/components/schemas/SnapshotMembership"
+          type:
+            - array
+            - "null"
+        system:
+          $ref: "#/components/schemas/SnapshotSystem"
+        user:
+          $ref: "#/components/schemas/SnapshotUser"
+      required:
+        - user
+        - system
+        - organizations
+      type: object
+    PlatformOrganizationResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/PlatformOrganizationResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          description: When the organization was created
+          format: date-time
+          type: string
+        id:
+          description: Unique identifier
+          format: uuid
+          type: string
+        is_protected:
+          description: Refuses deletion. The default organization carries it.
+          type: boolean
+        name:
+          description: Display name
+          type: string
+        slug:
+          description: Stable human-readable handle
+          type: string
+      required:
+        - is_protected
+        - id
+        - slug
+        - name
+        - created_at
+      type: object
+    PlatformUserResponse:
+      additionalProperties: false
+      properties:
+        created_at:
+          type: string
+        email:
+          format: email
+          type: string
+        id:
+          format: uuid
+          type: string
+        locale:
+          type: string
+        name:
+          type: string
+        suspended:
+          description: Blocked from signing in anywhere
+          type: boolean
+        suspended_at:
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - suspended
+        - created_at
+      type: object
     RequestPasswordResetRequest:
       additionalProperties: false
       properties:
@@ -303,6 +781,70 @@ components:
           type: string
       required:
         - email
+      type: object
+    RoleResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/RoleResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        description:
+          type: string
+        id:
+          format: uuid
+          type: string
+        is_system:
+          description: "Ships with the product: visible and clonable, never editable"
+          type: boolean
+        key:
+          description: Stable identifier, and the translation key
+          type: string
+        members:
+          description: How many people hold it
+          format: int64
+          type: integer
+        name:
+          description: Display name
+          type: string
+        permissions:
+          description: Permission keys this role grants
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - id
+        - key
+        - name
+        - is_system
+        - permissions
+        - members
+      type: object
+    RoleSummaryResponse:
+      additionalProperties: false
+      properties:
+        id:
+          format: uuid
+          type: string
+        is_system:
+          description: Whether the role ships with the product and cannot be edited
+          type: boolean
+        key:
+          description: Stable identifier, and the translation key
+          type: string
+        name:
+          description: Display name, already localised
+          type: string
+      required:
+        - id
+        - key
+        - name
+        - is_system
       type: object
     SessionResponse:
       additionalProperties: false
@@ -332,6 +874,46 @@ components:
       required:
         - two_factor_required
       type: object
+    SetMemberRolesRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/SetMemberRolesRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        role_ids:
+          description: The complete set of roles this person should hold
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - role_ids
+      type: object
+    SetRolePermissionsRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/SetRolePermissionsRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        permissions:
+          description: The complete set of permission keys this role should grant
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - permissions
+      type: object
     SetTwoFactorRequest:
       additionalProperties: false
       properties:
@@ -354,6 +936,152 @@ components:
         - password
         - enabled
       type: object
+    SnapshotMembership:
+      additionalProperties: false
+      properties:
+        id:
+          format: uuid
+          type: string
+        name:
+          type: string
+        permissions:
+          description: Permission keys held here
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        roles:
+          description: Role keys held here
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        slug:
+          type: string
+        status:
+          enum:
+            - invited
+            - active
+            - suspended
+          type: string
+      required:
+        - id
+        - slug
+        - name
+        - status
+        - roles
+        - permissions
+      type: object
+    SnapshotSystem:
+      additionalProperties: false
+      properties:
+        permissions:
+          description: Installation-wide permission keys
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        roles:
+          description: Installation-wide role keys, empty for almost everyone
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - roles
+        - permissions
+      type: object
+    SnapshotUser:
+      additionalProperties: false
+      properties:
+        id:
+          format: uuid
+          type: string
+        locale:
+          description: Language this response was written in
+          type: string
+      required:
+        - id
+        - locale
+      type: object
+    SuspendPlatformUserRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/SuspendPlatformUserRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        suspended:
+          description: true blocks the account everywhere, false restores it
+          type: boolean
+      required:
+        - suspended
+      type: object
+    UpdateMemberStatusRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/UpdateMemberStatusRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        status:
+          description: Suspending withdraws every permission without losing the role assignments
+          enum:
+            - active
+            - suspended
+          type: string
+      required:
+        - status
+      type: object
+    UpdateOrganizationRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/UpdateOrganizationRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Display name
+          maxLength: 100
+          minLength: 1
+          type: string
+      required:
+        - name
+      type: object
+    UpdateRoleRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/UpdateRoleRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        description:
+          maxLength: 255
+          type: string
+        name:
+          description: Display name
+          maxLength: 100
+          minLength: 1
+          type: string
+      required:
+        - name
+      type: object
     UserResponse:
       additionalProperties: false
       properties:
@@ -375,6 +1103,9 @@ components:
         id:
           description: Unique identifier
           format: uuid
+          type: string
+        locale:
+          description: Preferred language, remembered from registration. Outranks Accept-Language.
           type: string
         name:
           description: Display name
@@ -442,13 +1173,13 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
         "503":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Service Unavailable
       summary: Health check
       tags:
@@ -468,19 +1199,19 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "404":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Not Found
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       security:
         - bearer: []
@@ -502,13 +1233,13 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       security:
         - bearer: []
@@ -535,25 +1266,25 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "404":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Not Found
         "422":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       security:
         - bearer: []
@@ -587,25 +1318,99 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "422":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       security:
         - bearer: []
       summary: List sign-in history
       tags:
         - devices
+  /v1/me/organizations:
+    get:
+      description: "Returns every organization the account belongs to, including the ones it has only been invited to and the ones it is suspended in, so a client can tell those apart. Self-service: no permission is required, and none can take it away."
+      operationId: list-my-organizations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMyOrganizationsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List the caller's organizations
+      tags:
+        - organizations
+  /v1/me/permissions:
+    get:
+      description: "The snapshot a client uses to decide what to render. Self-service: no permission is required and none can take it away. It is a hint, not a decision — every request is authorized again on the server, so a client holding a stale snapshot receives a 403 and should refresh. Carries an ETag; send it back as If-None-Match to get a 304."
+      operationId: get-my-permissions
+      parameters:
+        - description: ETag from a previous response; a match answers 304
+          in: header
+          name: If-None-Match
+          schema:
+            description: ETag from a previous response; a match answers 304
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionSnapshotResponse"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                description: Changes whenever the caller's permissions change
+                type: string
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: What the caller may do, everywhere
+      tags:
+        - organizations
   /v1/me/two-factor:
     put:
       description: Requires the current password as well as the token. Enabling also trusts the calling device, so an account whose address no longer receives mail is not locked out by its own setting; every other device will be asked for a code on its next sign-in.
@@ -630,31 +1435,1004 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "404":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Not Found
         "422":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       security:
         - bearer: []
       summary: Turn two-factor on or off
       tags:
         - auth
+  /v1/orgs/{orgID}:
+    delete:
+      description: Requires organization.delete. The default organization is protected and is refused with 409 — an installation that lost its only organization has no working accounts and no screen to undo it from.
+      operationId: delete-organization
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete an organization
+      tags:
+        - organizations
+    get:
+      description: "Requires organization.read in the organization named in the path. A caller with no active membership gets 404 rather than 403: whether an organization exists is not something a stranger may find out by trying identifiers."
+      operationId: get-organization
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Read an organization
+      tags:
+        - organizations
+    patch:
+      description: "Requires organization.update. The slug is not editable: it appears in links people have already shared."
+      operationId: update-organization
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrganizationRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Rename an organization
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/audit:
+    get:
+      description: Who granted or revoked what, and when. Requires audit.read. Entries are written in the same transaction as the change they describe, so the log cannot disagree with the state.
+      operationId: list-audit-events
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: How many to return, newest first
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 100
+            description: How many to return, newest first
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many to skip
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many to skip
+            format: int64
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAuditOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Read the organization's history of authorization changes
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/members:
+    get:
+      description: Everyone in the organization, including invitations and suspensions, with the roles each holds. Requires members.read.
+      operationId: list-members
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMembersOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List members
+      tags:
+        - organizations
+    post:
+      description: Puts an existing account into the organization with the given roles. Requires members.invite, and every role named must be one the caller could grant themselves — otherwise this endpoint would be a way to acquire permissions the caller does not have.
+      operationId: add-member
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMemberRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberResponse"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Add a member
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/members/{memberID}:
+    delete:
+      description: Deletes the membership and its role assignments. Requires members.remove. Removing the last owner is refused with 409.
+      operationId: remove-member
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Membership id
+          in: path
+          name: memberID
+          required: true
+          schema:
+            description: Membership id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Remove a member
+      tags:
+        - organizations
+    patch:
+      description: Suspending withdraws every permission immediately, on tokens already issued, while keeping the role assignments so reinstating restores exactly what they had. Requires members.suspend. Suspending the last owner is refused with 409.
+      operationId: update-member-status
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Membership id
+          in: path
+          name: memberID
+          required: true
+          schema:
+            description: Membership id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemberStatusRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Suspend or reinstate a member
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/members/{memberID}/roles:
+    put:
+      description: Sets the roles to exactly the list given. A replace rather than an add and a remove, so two administrators editing the same person concurrently cannot merge into a set neither of them chose. Requires members.roles.assign; every role must be one the caller could grant themselves; demoting the last owner is refused with 409.
+      operationId: set-member-roles
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Membership id
+          in: path
+          name: memberID
+          required: true
+          schema:
+            description: Membership id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetMemberRolesRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Replace a member's roles
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/roles:
+    get:
+      description: Every role in the organization with what it grants and how many people hold it. Requires roles.read.
+      operationId: list-roles
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListRolesOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List roles
+      tags:
+        - organizations
+    post:
+      description: Requires roles.create. Every permission listed must be one the caller holds themselves — without that rule, roles.create would be a permission to acquire every other permission.
+      operationId: create-role
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleResponse"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Define a role
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/roles/{roleID}:
+    delete:
+      description: "Requires roles.delete. Refused with 409 while anyone still holds it: deleting it anyway would take permissions away from people the caller never looked at, and leave nothing behind to explain why."
+      operationId: delete-role
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Role id
+          in: path
+          name: roleID
+          required: true
+          schema:
+            description: Role id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete a role
+      tags:
+        - organizations
+    get:
+      description: Requires roles.read. A role id belonging to another organization is 404, not 403.
+      operationId: get-role
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Role id
+          in: path
+          name: roleID
+          required: true
+          schema:
+            description: Role id
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Read a role
+      tags:
+        - organizations
+    patch:
+      description: "Requires roles.update. Roles that ship with the product are refused with 403: every organization's copy of \"admin\" has to keep meaning the same thing. Clone one to get an editable version."
+      operationId: update-role
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Role id
+          in: path
+          name: roleID
+          required: true
+          schema:
+            description: Role id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Rename a role
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/roles/{roleID}/permissions:
+    put:
+      description: Sets the permissions to exactly the list given. Requires roles.update, refuses roles that ship with the product, and refuses any permission the caller does not hold themselves.
+      operationId: set-role-permissions
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Role id
+          in: path
+          name: roleID
+          required: true
+          schema:
+            description: Role id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetRolePermissionsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Replace what a role grants
+      tags:
+        - organizations
   /v1/password-resets:
     post:
       description: Sends a one-time code to the address if it is registered. The response is always 204 — including when delivery or storage fails — so the call cannot be used to discover accounts. In development without SMTP the code is written to the process log.
@@ -672,19 +2450,19 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "429":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Too Many Requests
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       summary: Request a password reset
       tags:
@@ -706,29 +2484,464 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "422":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "429":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Too Many Requests
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       summary: Confirm a password reset
       tags:
         - auth
+  /v1/permissions:
+    get:
+      description: "The catalog the role editor is built from. Self-service: it describes the product rather than any organization's data, and a caller who cannot see it cannot be shown a meaningful role editor."
+      operationId: list-permission-catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPermissionsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List every permission the product defines
+      tags:
+        - organizations
+  /v1/platform/audit:
+    get:
+      description: The same log across every organization, plus the changes that belong to no organization. Requires platform.audit.read.
+      operationId: list-platform-audit-events
+      parameters:
+        - description: How many to return, newest first
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 100
+            description: How many to return, newest first
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many to skip
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many to skip
+            format: int64
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAuditOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Read the installation's history of authorization changes
+      tags:
+        - platform
+  /v1/platform/organizations:
+    get:
+      description: Requires platform.organizations.read. The only listing that crosses tenants, which is why it is measured against the installation rather than any one organization.
+      operationId: list-platform-organizations
+      parameters:
+        - description: How many to return
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 100
+            description: How many to return
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many to skip
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many to skip
+            format: int64
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlatformOrganizationsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List every organization
+      tags:
+        - platform
+    post:
+      description: Requires platform.organizations.create. The organization is created with the roles that ship with the product, and with nobody in it — the creator is not silently made an owner, because that is a separate and visible act.
+      operationId: create-platform-organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlatformOrganizationRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformOrganizationResponse"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Create an organization
+      tags:
+        - platform
+  /v1/platform/organizations/{id}:
+    delete:
+      description: Requires platform.organizations.delete. The default organization is protected and is refused with 409.
+      operationId: delete-platform-organization
+      parameters:
+        - description: Organization id
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete any organization
+      tags:
+        - platform
+  /v1/platform/users:
+    get:
+      description: Requires platform.users.read.
+      operationId: list-platform-users
+      parameters:
+        - description: How many to return
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 100
+            description: How many to return
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many to skip
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many to skip
+            format: int64
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPlatformUsersOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List every account
+      tags:
+        - platform
+  /v1/platform/users/{id}:
+    delete:
+      description: "Requires platform.users.delete. A soft delete: the account stops working everywhere and its devices are revoked, but the row survives so login history and audit records keep making sense."
+      operationId: delete-platform-user
+      parameters:
+        - description: Account id
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Account id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Delete an account
+      tags:
+        - platform
+    patch:
+      description: Requires platform.users.suspend. Suspending takes effect on tokens already issued, on the next request rather than at expiry — the same promise device revocation makes. Memberships and roles are kept, so restoring gives back exactly what was there.
+      operationId: suspend-platform-user
+      parameters:
+        - description: Account id
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Account id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuspendPlatformUserRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Suspend or restore an account
+      tags:
+        - platform
   /v1/sessions:
     post:
       description: Exchanges an email and password for a Bearer token. Wrong passwords and unknown addresses share one error. When the account has two-factor on and the X-Device-Token is missing or names an untrusted device, the answer is 202 with two_factor_required and a code goes out by email; finish at POST /v1/sessions/verify.
@@ -757,31 +2970,31 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "403":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Forbidden
         "422":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "429":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Too Many Requests
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       summary: Sign in
       tags:
@@ -815,31 +3028,31 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "403":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Forbidden
         "422":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "429":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Too Many Requests
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       summary: Finish a two-factor sign-in
       tags:
@@ -848,6 +3061,13 @@ paths:
     post:
       description: Creates an account. password and password_confirm must match. A duplicate email is reported as success so the response cannot be used to discover registered addresses. Sign in with POST /v1/sessions to obtain a token.
       operationId: create-user
+      parameters:
+        - description: Language to remember for this account. Absent means no preference, and later requests keep negotiating per request.
+          in: header
+          name: Accept-Language
+          schema:
+            description: Language to remember for this account. Absent means no preference, and later requests keep negotiating per request.
+            type: string
       requestBody:
         content:
           application/json:
@@ -861,19 +3081,19 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "429":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Too Many Requests
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       summary: Register a user
       tags:
@@ -902,25 +3122,25 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unauthorized
         "404":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Not Found
         "422":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Unprocessable Entity
         "500":
           content:
             application/problem+json:
               schema:
-                $ref: "#/components/schemas/ErrorModel"
+                $ref: "#/components/schemas/Document"
           description: Internal Server Error
       security:
         - bearer: []
@@ -934,3 +3154,9 @@ tags:
     name: auth
   - description: User accounts
     name: users
+  - description: Known devices and sign-in history
+    name: devices
+  - description: Organizations, membership and roles
+    name: organizations
+  - description: Installation-wide administration
+    name: platform

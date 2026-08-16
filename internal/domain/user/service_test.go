@@ -26,11 +26,11 @@ func TestCreateTrimsAndRejectsBlankName(t *testing.T) {
 	s, _ := testService(t)
 	ctx := context.Background()
 
-	if _, err := s.Create(ctx, "   ", "a@example.com", "twelve-chars", "twelve-chars"); !errors.Is(err, user.ErrNameEmpty) {
+	if _, err := s.Create(ctx, "   ", "a@example.com", "twelve-chars", "twelve-chars", ""); !errors.Is(err, user.ErrNameEmpty) {
 		t.Fatalf("Create(blank name) = %v, want ErrNameEmpty", err)
 	}
 
-	u, err := s.Create(ctx, "  Ada  ", "a@example.com", "twelve-chars", "twelve-chars")
+	u, err := s.Create(ctx, "  Ada  ", "a@example.com", "twelve-chars", "twelve-chars", "")
 	if err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
@@ -43,7 +43,7 @@ func TestCreateTrimsAndRejectsBlankName(t *testing.T) {
 func TestCreateRejectsPasswordMismatch(t *testing.T) {
 	s, _ := testService(t)
 
-	if _, err := s.Create(context.Background(), "Ada", "a@example.com", "twelve-chars", "twelve-charZ"); !errors.Is(err, user.ErrPasswordMismatch) {
+	if _, err := s.Create(context.Background(), "Ada", "a@example.com", "twelve-chars", "twelve-charZ", ""); !errors.Is(err, user.ErrPasswordMismatch) {
 		t.Fatalf("Create(mismatch) = %v, want ErrPasswordMismatch", err)
 	}
 }
@@ -52,7 +52,7 @@ func TestCreateRejectsLongName(t *testing.T) {
 	s, _ := testService(t)
 	name := strings.Repeat("n", user.MaxNameLength+1)
 
-	if _, err := s.Create(context.Background(), name, "a@example.com", "twelve-chars", "twelve-chars"); !errors.Is(err, user.ErrNameTooLong) {
+	if _, err := s.Create(context.Background(), name, "a@example.com", "twelve-chars", "twelve-chars", ""); !errors.Is(err, user.ErrNameTooLong) {
 		t.Fatalf("Create(long name) = %v, want ErrNameTooLong", err)
 	}
 }
@@ -61,7 +61,7 @@ func TestAuthenticateWrongPasswordAndUnknownEmail(t *testing.T) {
 	s, _ := testService(t)
 	ctx := context.Background()
 
-	if _, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars"); err != nil {
+	if _, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars", ""); err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
 
@@ -83,7 +83,7 @@ func TestAuthenticateWrongPasswordAndUnknownEmail(t *testing.T) {
 func TestAuthenticateReportsCancellationNotBadPassword(t *testing.T) {
 	s, _ := testService(t)
 
-	if _, err := s.Create(context.Background(), "Ada", "ada@example.com", "twelve-chars", "twelve-chars"); err != nil {
+	if _, err := s.Create(context.Background(), "Ada", "ada@example.com", "twelve-chars", "twelve-chars", ""); err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
 
@@ -100,7 +100,7 @@ func TestAuthenticateSuccessNormalisesEmail(t *testing.T) {
 	s, _ := testService(t)
 	ctx := context.Background()
 
-	created, err := s.Create(ctx, "Ada", "Ada@Example.com", "twelve-chars", "twelve-chars")
+	created, err := s.Create(ctx, "Ada", "Ada@Example.com", "twelve-chars", "twelve-chars", "")
 	if err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
@@ -132,7 +132,7 @@ func TestPasswordResetRoundTrip(t *testing.T) {
 	s, _ := testService(t)
 	ctx := context.Background()
 
-	if _, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars"); err != nil {
+	if _, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars", ""); err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestPasswordResetRejectsWrongCode(t *testing.T) {
 	s, _ := testService(t)
 	ctx := context.Background()
 
-	if _, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars"); err != nil {
+	if _, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars", ""); err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
 
@@ -183,7 +183,7 @@ func TestPasswordResetCapsAttempts(t *testing.T) {
 	s, repo := testService(t)
 	ctx := context.Background()
 
-	created, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars")
+	created, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars", "")
 	if err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
@@ -230,7 +230,7 @@ func TestPasswordResetBumpsSessionEpoch(t *testing.T) {
 	s, _ := testService(t)
 	ctx := context.Background()
 
-	created, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars")
+	created, err := s.Create(ctx, "Ada", "ada@example.com", "twelve-chars", "twelve-chars", "")
 	if err != nil {
 		t.Fatalf("Create() = %v", err)
 	}

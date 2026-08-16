@@ -19,6 +19,9 @@ import (
 
 	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
+	"github.com/wokacz/go-example/internal/domain/audit"
+	"github.com/wokacz/go-example/internal/domain/authz"
+	"github.com/wokacz/go-example/internal/domain/orgs"
 	"github.com/wokacz/go-example/internal/domain/user"
 	"github.com/wokacz/go-example/internal/mail"
 	"github.com/wokacz/go-example/internal/store/models"
@@ -89,13 +92,25 @@ func newTestServer(t *testing.T) (*Server, *capturingMailer) {
 func newTestAPI(t *testing.T, mailer mail.Sender, repo user.Repository) *Server {
 	t.Helper()
 
-	return newTestAPIConfig(t, mailer, repo, nil)
+	server, _ := newTestAPIConfig(t, mailer, repo, nil)
+
+	return server
 }
 
 // newTestAPIConfig builds the server and lets a test adjust the configuration
 // before it is wired. Rate limits in particular default to zero — which
 // disables the limiter — so a test that wants to exercise it has to say so.
-func newTestAPIConfig(t *testing.T, mailer mail.Sender, repo user.Repository, adjust func(*config.Config)) *Server {
+//
+// The authorization fake is returned rather than taken, because every test that
+// needs one needs to build fixtures in it, and handing back the instance the
+// server actually consults is what stops a test setting up an organization the
+// server cannot see.
+func newTestAPIConfig(
+	t *testing.T,
+	mailer mail.Sender,
+	repo user.Repository,
+	adjust func(*config.Config),
+) (*Server, *memory.Authz) {
 	t.Helper()
 
 	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour)
@@ -120,12 +135,27 @@ func newTestAPIConfig(t *testing.T, mailer mail.Sender, repo user.Repository, ad
 		adjust(cfg)
 	}
 
-	return NewServer(cfg, slog.New(slog.DiscardHandler), Deps{
-		DB:     okPinger{},
-		Users:  user.NewService(repo, testPepper, user.WithBcryptCost(bcrypt.MinCost)),
-		Tokens: tokens,
-		Mail:   mailer,
+	// The authorization fake joins to the user fake for names and addresses,
+	// the way the SQL joins to the users table. Passing the repository the
+	// service already uses is what keeps a member's account and their
+	// membership describing the same person.
+	users, _ := repo.(*memory.Users)
+	authzRepo := memory.NewAuthz(users)
+	accounts := user.NewService(repo, testPepper, user.WithBcryptCost(bcrypt.MinCost))
+	authzService := authz.NewService(authzRepo)
+
+	server := NewServer(cfg, slog.New(slog.DiscardHandler), Deps{
+		DB:        okPinger{},
+		Users:     accounts,
+		Tokens:    tokens,
+		Mail:      mailer,
+		Authz:     authzService,
+		Snapshots: authzService,
+		Orgs:      orgs.NewService(authzRepo, authzRepo, accounts, authzRepo),
+		Audit:     audit.NewService(authzRepo, authzRepo),
 	})
+
+	return server, authzRepo
 }
 
 func postJSON(t *testing.T, handler http.Handler, path, body string) *httptest.ResponseRecorder {

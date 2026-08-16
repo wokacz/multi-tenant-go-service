@@ -22,7 +22,7 @@ func laptop(deviceToken string) user.SignInContext {
 func register(t *testing.T, s *user.Service) {
 	t.Helper()
 
-	if _, err := s.Create(context.Background(), "Ada", testEmail, testPassword, testPassword); err != nil {
+	if _, err := s.Create(context.Background(), "Ada", testEmail, testPassword, testPassword, ""); err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
 }
@@ -69,7 +69,7 @@ func TestSignInWithAnotherAccountsDeviceTokenStartsFresh(t *testing.T) {
 	s, _ := testService(t)
 	register(t, s)
 
-	if _, err := s.Create(context.Background(), "Bob", "bob@example.com", testPassword, testPassword); err != nil {
+	if _, err := s.Create(context.Background(), "Bob", "bob@example.com", testPassword, testPassword, ""); err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
 
@@ -182,7 +182,7 @@ func TestRevokeDeviceRejectsAnotherAccountsDevice(t *testing.T) {
 	ctx := context.Background()
 	mine := signIn(t, s, "")
 
-	if _, err := s.Create(ctx, "Bob", "bob@example.com", testPassword, testPassword); err != nil {
+	if _, err := s.Create(ctx, "Bob", "bob@example.com", testPassword, testPassword, ""); err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
 

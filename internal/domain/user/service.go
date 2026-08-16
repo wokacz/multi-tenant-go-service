@@ -19,6 +19,11 @@ import (
 	"github.com/wokacz/go-example/internal/store/models"
 )
 
+// MaxUserPage caps the installation-wide account listing. It is the same shape
+// as MaxLoginEvents: the service clamps rather than trusting the caller, so a
+// client asking for everything gets a page instead of the whole table.
+const MaxUserPage = 100
+
 // MinPasswordLength is enforced here rather than only at the API boundary, so a
 // second caller — a CLI, a seeder — cannot create a weaker account than the
 // HTTP layer allows.
@@ -173,7 +178,13 @@ func (s *Service) hashedPassword(ctx context.Context, password string) (string, 
 }
 
 // Create registers a user and returns them with the generated id filled in.
-func (s *Service) Create(ctx context.Context, name, email, password, confirm string) (*models.User, error) {
+//
+// The locale is the language the account was created in. It is captured here
+// rather than asked for, because the signup request already says it in
+// Accept-Language, and a preference nobody was prompted for is one that is
+// right far more often than a default. It is what mail is written in, which is
+// the case no request header can answer.
+func (s *Service) Create(ctx context.Context, name, email, password, confirm, locale string) (*models.User, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, ErrNameEmpty
@@ -196,6 +207,7 @@ func (s *Service) Create(ctx context.Context, name, email, password, confirm str
 		Name:         name,
 		Email:        NormalizeEmail(email),
 		PasswordHash: hash,
+		Locale:       locale,
 	}
 
 	// No "does this email exist yet" query first. Two concurrent signups would
@@ -211,6 +223,47 @@ func (s *Service) Create(ctx context.Context, name, email, password, confirm str
 
 func (s *Service) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	return s.repo.ByID(ctx, id)
+}
+
+// ByEmail resolves an address to an account, or ErrNotFound.
+//
+// Unlike Authenticate it does not run bcrypt on a miss, because it is not an
+// authentication path: nothing here compares a secret, so there is no timing to
+// equalise. It is also not reachable anonymously — the only caller is adding
+// somebody to an organization, which needs members.invite — so it is not an
+// oracle for whether an address is registered.
+func (s *Service) ByEmail(ctx context.Context, email string) (*models.User, error) {
+	return s.repo.ByEmail(ctx, NormalizeEmail(email))
+}
+
+// All lists accounts for the installation-wide administration screens.
+func (s *Service) All(ctx context.Context, limit, offset int) ([]models.User, error) {
+	if limit <= 0 || limit > MaxUserPage {
+		limit = MaxUserPage
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+
+	return s.repo.All(ctx, limit, offset)
+}
+
+// Suspend blocks or unblocks an account.
+func (s *Service) Suspend(ctx context.Context, userID uuid.UUID, suspended bool) error {
+	var at *time.Time
+
+	if suspended {
+		now := time.Now().UTC()
+		at = &now
+	}
+
+	return s.repo.SetSuspended(ctx, userID, at)
+}
+
+// Delete soft deletes an account.
+func (s *Service) Delete(ctx context.Context, userID uuid.UUID) error {
+	return s.repo.Delete(ctx, userID)
 }
 
 // Authenticate checks email and password. Missing users and wrong passwords
@@ -238,6 +291,13 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (*mo
 		}
 
 		return nil, ErrInvalidCredentials
+	}
+
+	// Checked after the password, not before: reporting "suspended" to somebody
+	// who did not prove they own the account would turn this into an oracle for
+	// which addresses are registered and blocked.
+	if u.IsSuspended() {
+		return nil, ErrSuspended
 	}
 
 	return u, nil

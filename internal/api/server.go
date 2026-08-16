@@ -18,6 +18,9 @@ import (
 	v1 "github.com/wokacz/go-example/internal/api/v1"
 	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
+	"github.com/wokacz/go-example/internal/domain/audit"
+	"github.com/wokacz/go-example/internal/domain/authz"
+	"github.com/wokacz/go-example/internal/domain/orgs"
 	"github.com/wokacz/go-example/internal/domain/user"
 	"github.com/wokacz/go-example/internal/mail"
 )
@@ -48,6 +51,18 @@ type Deps struct {
 	Users  *user.Service
 	Tokens *auth.Signer
 	Mail   mail.Sender
+
+	// Authz answers "may this caller do this here" for every operation that is
+	// neither public nor self-service. It is an interface rather than the
+	// concrete service so a test can decide without a database.
+	Authz authz.Authorizer
+
+	// Snapshots describes what a caller may do, for the client to render from.
+	// A separate field from Authz because the two are used at different points
+	// and only one of them decides anything.
+	Snapshots authz.Snapshotter
+	Orgs      *orgs.Service
+	Audit     *audit.Service
 }
 
 // Server owns the HTTP listener and the huma API registered on it. huma appears
@@ -68,6 +83,11 @@ type Server struct {
 // NewServer wires the router, the middleware chain and the huma adapter. It
 // does not bind a port — that happens in Run.
 func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
+	// Before any route is registered: huma reflects the error schema off
+	// huma.NewError while building each operation's responses, so a later call
+	// would leave the contract describing the wrong body.
+	problem.Install()
+
 	s := &Server{
 		cfg:           cfg,
 		log:           log,
@@ -92,6 +112,7 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	router.Use(s.securityHeaders)
 	router.Use(s.maxBytes)
 	router.Use(s.requestLogger)
+	router.Use(s.locale)
 	router.Use(s.clientInfo)
 	router.Use(s.rateLimit)
 	router.Use(s.recoverer)
@@ -101,14 +122,18 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	// chi answers these itself, before huma is involved, so they need the same
 	// error shape wired up explicitly.
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		problem.Write(w, http.StatusNotFound, "no operation matches "+r.URL.Path)
+		problem.Write(w, r, http.StatusNotFound, problem.CodeNoOperation, r.URL.Path)
 	})
 	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		problem.Write(w, http.StatusMethodNotAllowed, r.Method+" is not allowed on "+r.URL.Path)
+		problem.Write(w, r, http.StatusMethodNotAllowed, problem.CodeMethodNotAllowed, r.Method, r.URL.Path)
 	})
 
 	s.api = humachi.New(router, humaCfg)
-	s.api.UseMiddleware(s.requireBearer)
+
+	// Order matters and is the same order the questions are asked in: who are
+	// you, then what may you do. requirePermission reads the session
+	// requireBearer put on the context, so it cannot run first.
+	s.api.UseMiddleware(s.requireBearer, s.requirePermission)
 	s.registerRoutes()
 
 	s.http = &http.Server{
@@ -162,6 +187,9 @@ func (s *Server) openAPIConfig() huma.Config {
 		{Name: "meta", Description: "Service health and introspection"},
 		{Name: "auth", Description: "Registration, sign-in and password reset"},
 		{Name: "users", Description: "User accounts"},
+		{Name: "devices", Description: "Known devices and sign-in history"},
+		{Name: "organizations", Description: "Organizations, membership and roles"},
+		{Name: "platform", Description: "Installation-wide administration"},
 	}
 
 	if s.cfg.Env.IsProduction() {
@@ -312,7 +340,15 @@ type HealthOutput struct {
 func (s *Server) registerRoutes() {
 	// Versioned operations live in their own package; a future v2 registers
 	// beside this line rather than replacing it.
-	v1.Register(s.api, v1.Deps{Users: s.deps.Users, Tokens: s.deps.Tokens, Mail: s.deps.Mail, Log: s.log})
+	v1.Register(s.api, v1.Deps{
+		Users:  s.deps.Users,
+		Tokens: s.deps.Tokens,
+		Mail:   s.deps.Mail,
+		Orgs:   s.deps.Orgs,
+		Authz:  s.deps.Snapshots,
+		Audit:  s.deps.Audit,
+		Log:    s.log,
+	})
 
 	// Health stays outside /v1 on purpose — see v1.Prefix.
 	huma.Register(s.api, huma.Operation{

@@ -124,13 +124,14 @@ func TestRateLimitAppliesToEveryCostlyRoute(t *testing.T) {
 		"/v1/sessions/verify",
 		"/v1/password-resets",
 		"/v1/password-resets/confirm",
+		"/v1/orgs/018f0000-0000-7000-8000-000000000000/members",
 	}
 
 	for _, path := range limited {
 		t.Run(path, func(t *testing.T) {
 			// A server per subtest, so one route's bucket cannot drain
 			// another's and make this pass for the wrong reason.
-			s := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+			s, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
 				cfg.RegisterPerMinute = perMinute
 				cfg.LoginPerMinute = perMinute
 				cfg.ResetPerMinute = perMinute

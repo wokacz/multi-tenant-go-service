@@ -11,6 +11,9 @@ import (
 	"github.com/wokacz/go-example/internal/api"
 	"github.com/wokacz/go-example/internal/auth"
 	"github.com/wokacz/go-example/internal/config"
+	"github.com/wokacz/go-example/internal/domain/audit"
+	"github.com/wokacz/go-example/internal/domain/authz"
+	"github.com/wokacz/go-example/internal/domain/orgs"
 	"github.com/wokacz/go-example/internal/domain/user"
 	"github.com/wokacz/go-example/internal/mail"
 	"github.com/wokacz/go-example/internal/store"
@@ -71,11 +74,19 @@ func run() error {
 
 	// AuthResetSecret peppers reset-code HMACs. It is not AuthTokenSecret:
 	// rotating session tokens must not rewrite hashes of codes already emailed.
+	orgRepo := repositories.NewOrgs(db)
+	users := user.NewService(repositories.NewUser(db), []byte(cfg.AuthResetSecret))
+	authzService := authz.NewService(repositories.NewAuthz(db))
+
 	deps := api.Deps{
-		DB:     db,
-		Users:  user.NewService(repositories.NewUser(db), []byte(cfg.AuthResetSecret)),
-		Tokens: tokens,
-		Mail:   mail.New(cfg, log),
+		DB:        db,
+		Users:     users,
+		Tokens:    tokens,
+		Mail:      mail.New(cfg, log),
+		Authz:     authzService,
+		Snapshots: authzService,
+		Orgs:      orgs.NewService(orgRepo, orgRepo, users, orgRepo),
+		Audit:     audit.NewService(orgRepo, orgRepo),
 	}
 
 	return api.NewServer(cfg, log, deps).Run(ctx)

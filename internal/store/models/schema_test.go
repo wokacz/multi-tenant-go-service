@@ -68,3 +68,68 @@ func TestLoginEventTimeIndexes(t *testing.T) {
 		})
 	}
 }
+
+// TestAuthzEventTimeIndexes covers the same shadowed-CreatedAt trap on the audit
+// table. Without the shadow these degrade to indexes on the id column alone, and
+// "show me this organization's recent changes" becomes a sequential scan over
+// every change any organization ever made.
+func TestAuthzEventTimeIndexes(t *testing.T) {
+	tests := map[string][]string{
+		"idx_authz_org_time":   {"organization_id", "created_at"},
+		"idx_authz_actor_time": {"actor_id", "created_at"},
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := indexColumns(indexOf(t, &models.AuthzEvent{}, name)); !slices.Equal(got, want) {
+				t.Errorf("%s columns = %v, want %v", name, got, want)
+			}
+		})
+	}
+}
+
+// TestAuthorizationUniqueIndexes pins the constraints the authorization rules
+// lean on. Each of these is what makes a duplicate impossible rather than merely
+// unlikely: two memberships in one organization would give a user two permission
+// sets, and a repeated role assignment would make revoking a role leave one
+// copy behind.
+func TestAuthorizationUniqueIndexes(t *testing.T) {
+	tests := map[string]struct {
+		model any
+		index string
+		want  []string
+	}{
+		"one membership per user and organization": {
+			&models.Membership{}, "idx_membership_user_org", []string{"user_id", "organization_id"},
+		},
+		"role keys are unique inside an organization": {
+			&models.Role{}, "idx_role_org_key", []string{"organization_id", "key"},
+		},
+		"a permission appears once per role": {
+			&models.RolePermission{}, "idx_role_permission", []string{"role_id", "permission_key"},
+		},
+		"a role is assigned once per membership": {
+			&models.MembershipRole{}, "idx_membership_role", []string{"membership_id", "role_id"},
+		},
+		"a system role is granted once per user": {
+			&models.UserSystemRole{}, "idx_user_system_role", []string{"user_id", "role_key"},
+		},
+		"a role has one translation per locale": {
+			&models.RoleTranslation{}, "idx_role_translation", []string{"role_id", "locale"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			idx := indexOf(t, tc.model, tc.index)
+
+			if got := indexColumns(idx); !slices.Equal(got, tc.want) {
+				t.Errorf("%s columns = %v, want %v", tc.index, got, tc.want)
+			}
+
+			if idx.Class != "UNIQUE" {
+				t.Errorf("%s class = %q, want %q", tc.index, idx.Class, "UNIQUE")
+			}
+		})
+	}
+}

@@ -77,6 +77,12 @@ func (s *Service) VerifyTwoFactor(
 		return nil, nil, ErrInvalidTwoFactorCode
 	}
 
+	// The same rule as SignIn: verifying a code is the other way a token is
+	// issued, so a suspension has to close it too.
+	if u.IsSuspended() {
+		return nil, nil, ErrSuspended
+	}
+
 	device, err := s.repo.DeviceByFingerprint(ctx, u.ID, deviceFingerprint(sc.DeviceToken))
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {

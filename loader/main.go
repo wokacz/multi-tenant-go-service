@@ -33,6 +33,14 @@ func run() error {
 		&models.LoginEvent{},
 		&models.PasswordReset{},
 		&models.TwoFactorChallenge{},
+		&models.Organization{},
+		&models.Membership{},
+		&models.Role{},
+		&models.RolePermission{},
+		&models.MembershipRole{},
+		&models.UserSystemRole{},
+		&models.RoleTranslation{},
+		&models.AuthzEvent{},
 	)
 	if err != nil {
 		return fmt.Errorf("load gorm schema: %w", err)
