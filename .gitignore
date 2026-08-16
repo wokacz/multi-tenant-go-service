@@ -1,10 +1,117 @@
-# Secrets — commit .env.example instead
-.env
+# ==============================
+# Secrets / environment
+# ==============================
 
+.env
+.env.*
+!.env.example
+
+
+# ==============================
+# Dependencies
+# ==============================
+
+node_modules/
+vendor/
+
+
+# ==============================
 # Build artefacts
-/bin/
+# ==============================
+
+dist/
+build/
+out/
+out-tsc/
+tmp/
+bazel-out/
+
+bin/
 loader/loader
 
-# Coverage
+
+# ==============================
+# Angular / Nx
+# ==============================
+
+.angular/
+.nx/cache/
+
+
+# ==============================
+# Coverage / tests
+# ==============================
+
+coverage/
 coverage.out
 coverage.html
+__screenshots__/
+
+
+# ==============================
+# Logs
+# ==============================
+
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+testem.log
+
+
+# ==============================
+# IDEs
+# ==============================
+
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+.vscode/
+
+.history/
+
+
+# ==============================
+# Frontend / tooling
+# ==============================
+
+.sass-cache/
+.connect.lock
+connect.lock
+typings/
+libpeerconnection.log
+
+
+# ==============================
+# macOS
+# ==============================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Icon?
+
+
+# ==============================
+# Windows
+# ==============================
+
+Thumbs.db
+Desktop.ini
+
+
+# ==============================
+# Temporary files
+# ==============================
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
