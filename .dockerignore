@@ -1,0 +1,11 @@
+# The build context is the repository root (see compose.yml: context: .), so
+# this file lives here — Docker looks for .dockerignore at the context root,
+# not next to the Dockerfile. The context only needs go.mod and go.sum; the
+# source is bind-mounted at runtime, not copied into the image. Everything
+# else is excluded so the context stays small and an unrelated edit does not
+# invalidate a layer.
+
+*
+
+!go.mod
+!go.sum

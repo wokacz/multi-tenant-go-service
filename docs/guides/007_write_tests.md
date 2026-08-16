@@ -5,7 +5,7 @@ zwykłe `if`:
 
 ```go
 if got != want {
-	t.Errorf("Nazwa() = %v, want %v", got, want)
+t.Errorf("Nazwa() = %v, want %v", got, want)
 }
 ```
 
@@ -51,7 +51,7 @@ Uważaj na testy puste: jeśli iterujesz po zbiorze, sprawdź, że nie jest pust
 
 ```go
 if iface.NumMethod() == 0 {
-	t.Fatal("interfejs nie ma metod; ten test przeszedłby pusto")
+t.Fatal("interfejs nie ma metod; ten test przeszedłby pusto")
 }
 ```
 
@@ -61,18 +61,18 @@ Idą przez **pełny router** (`s.http.Handler`), przez `httptest` — bez portu,
 
 ```go
 func TestListingWidgetsNeedsThePermission(t *testing.T) {
-	f := newAuthzFixture(t)                       // konto, organizacja, token
+f := newAuthzFixture(t) // konto, organizacja, token
 
-	role := f.repo.SeedRole(f.orgID, "readers", string(authz.PermMembersRead))
-	f.repo.SeedMemberRoles(f.membership, role)
+role := f.repo.SeedRole(f.orgID, "readers", string(authz.PermMembersRead))
+f.repo.SeedMemberRoles(f.membership, role)
 
-	res := f.call(t, http.MethodGet, f.orgPath("/widgets"), "").
-		expect(t, http.StatusForbidden)
+res := f.call(t, http.MethodGet, f.orgPath("/widgets"), "").
+expect(t, http.StatusForbidden)
 
-	body := decodeProblem(t, res.body)
-	if body.RequiredPermission != string(authz.PermWidgetsRead) {
-		t.Errorf("required_permission = %q, want %q", body.RequiredPermission, authz.PermWidgetsRead)
-	}
+body := decodeProblem(t, res.body)
+if body.RequiredPermission != string(authz.PermWidgetsRead) {
+t.Errorf("required_permission = %q, want %q", body.RequiredPermission, authz.PermWidgetsRead)
+}
 }
 ```
 
@@ -109,11 +109,11 @@ Na wspólnym fake'u z `internal/store/repositories/memory`:
 
 ```go
 func testAuthz(t *testing.T) (*authz.Service, *memory.Authz) {
-	t.Helper()
+t.Helper()
 
-	repo := memory.NewAuthz(nil)
+repo := memory.NewAuthz(nil)
 
-	return authz.NewService(repo), repo
+return authz.NewService(repo), repo
 }
 ```
 
@@ -125,12 +125,12 @@ metody:
 
 ```go
 type replaceResetErrorRepo struct {
-	*memory.Users
-	err error
+*memory.Users
+err error
 }
 
 func (r *replaceResetErrorRepo) ReplacePasswordReset(context.Context, *models.PasswordReset) error {
-	return r.err
+return r.err
 }
 ```
 
@@ -140,14 +140,14 @@ Plik `*_postgres_test.go`, pomijany bez zmiennej:
 
 ```go
 func TestCosWSQL(t *testing.T) {
-	db := testDB(t)          // t.Skip, gdy POSTGRES_TEST nie jest ustawione
-	repo := repositories.NewOrgs(db)
-	...
+db := testDB(t) // t.Skip, gdy POSTGRES_TEST nie jest ustawione
+repo := repositories.NewOrgs(db)
+...
 }
 ```
 
 ```bash
-docker compose up -d && task migrate
+docker compose up -d postgres && task migrate
 POSTGRES_TEST=1 go test ./internal/store/repositories -v
 ```
 

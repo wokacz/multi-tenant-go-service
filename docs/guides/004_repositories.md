@@ -32,12 +32,12 @@ testów z luźniejszym przestaje cokolwiek sprawdzać.
 // wskazania organizacji, więc pominięcie kontroli zasięgu jest błędem
 // kompilacji, a nie dziurą do wypatrzenia na review.
 type Repository interface {
-	// Widget zwraca ErrNotFound, gdy widget należy do innej organizacji.
-	Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*models.Widget, error)
+// Widget zwraca ErrNotFound, gdy widget należy do innej organizacji.
+Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*models.Widget, error)
 
-	Widgets(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]models.Widget, error)
+Widgets(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]models.Widget, error)
 
-	CreateWidget(ctx context.Context, orgID uuid.UUID, widget *models.Widget) error
+CreateWidget(ctx context.Context, orgID uuid.UUID, widget *models.Widget) error
 }
 ```
 
@@ -57,7 +57,7 @@ Rzeczy niezwiązane z pojedynczą organizacją (tworzenie organizacji, listowani
 
 ```go
 type Widgets struct {
-	db *store.DB
+db *store.DB
 }
 
 func NewWidgets(db *store.DB) *Widgets { return &Widgets{db: db} }
@@ -67,15 +67,15 @@ func NewWidgets(db *store.DB) *Widgets { return &Widgets{db: db} }
 var _ widgets.Repository = (*Widgets)(nil)
 
 func (r *Widgets) Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*models.Widget, error) {
-	var widget models.Widget
+var widget models.Widget
 
-	err := r.db.WithContext(ctx).
-		First(&widget, "id = ? AND organization_id = ?", widgetID, orgID).Error
-	if err != nil {
-		return nil, translateWidgetError("widget", err)
-	}
+err := r.db.WithContext(ctx).
+First(&widget, "id = ? AND organization_id = ?", widgetID, orgID).Error
+if err != nil {
+return nil, translateWidgetError("widget", err)
+}
 
-	return &widget, nil
+return &widget, nil
 }
 ```
 
@@ -88,18 +88,18 @@ Tu kończy się GORM. Wzorzec:
 
 ```go
 func translateWidgetError(op string, err error) error {
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		return widgets.ErrNotFound
-	case errors.Is(err, gorm.ErrDuplicatedKey):
-		return widgets.ErrKeyTaken
-	case errors.Is(err, models.ErrWidgetLocked):
-		return err                       // błąd modelu przechodzi dalej
-	default:
-		return fmt.Errorf("store: %s: %w", op, err)
-	}
+switch {
+case err == nil:
+return nil
+case errors.Is(err, gorm.ErrRecordNotFound):
+return widgets.ErrNotFound
+case errors.Is(err, gorm.ErrDuplicatedKey):
+return widgets.ErrKeyTaken
+case errors.Is(err, models.ErrWidgetLocked):
+return err // błąd modelu przechodzi dalej
+default:
+return fmt.Errorf("store: %s: %w", op, err)
+}
 }
 ```
 
@@ -137,12 +137,12 @@ Nie ma `WithTx` ani abstrakcji jednostki pracy. Atomowość jest własnością *
 składa domena:
 
 ```go
-err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-	if err := tx.Create(widget).Error; err != nil {
-		return err
-	}
+err := r.db.WithContext(ctx).Transaction(func (tx *gorm.DB) error {
+if err := tx.Create(widget).Error; err != nil {
+return err
+}
 
-	return record(ctx, tx, &models.AuthzEvent{ ... })
+return record(ctx, tx, &models.AuthzEvent{ ... })
 })
 ```
 

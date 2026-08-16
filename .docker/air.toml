@@ -1,0 +1,50 @@
+# Hot reload for the API container.
+#
+# Everything air writes goes to /tmp/air, never into the bind-mounted source
+# tree: the repository stays clean and the container never needs write access
+# to it.
+
+root = "."
+tmp_dir = "/tmp/air"
+
+[build]
+  cmd = "go build -o /tmp/air/api ./cmd/api"
+  entrypoint = ["/tmp/air/api"]
+
+  # json is here for the i18n catalogues. They are embedded with go:embed, so a
+  # translation change is a rebuild — without this extension the container would
+  # keep serving the previous wording and look like a caching bug.
+  include_ext = ["go", "json"]
+
+  # `api` is the committed OpenAPI document at the repo root, not internal/api.
+  # exclude_dir matches that relative path exactly, so handlers still rebuild.
+  # Hidden directories (.git, .docker, .idea, .serena) are skipped already.
+  exclude_dir = ["bin", "docs", "migrations", "api", "loader"]
+
+  # Tests never start the server; rebuilding on them only adds restarts.
+  exclude_regex = ["_test\\.go"]
+
+  # Bind mounts, especially on Docker Desktop, often do not deliver fsnotify
+  # events. Polling is the mode that actually sees a save from the host.
+  poll = true
+  poll_interval = 500
+
+  # Long enough to coalesce a multi-file save, short enough not to notice.
+  delay = 200
+
+  # Keep the last good binary running when a build fails. Otherwise a typo
+  # takes the service down and the next request answers with a connection
+  # error rather than the compiler message that explains it.
+  stop_on_error = false
+
+  # SIGINT rather than SIGKILL, so the server drains the way it does in
+  # production. kill_delay bounds how long that may take.
+  send_interrupt = true
+  kill_delay = "5s"
+
+[log]
+  main_only = false
+
+[misc]
+  # The named volume outlives the container; emptying it on stop is wasted work.
+  clean_on_exit = false

@@ -1,0 +1,190 @@
+# Development environment: `docker compose up` from the repository root.
+#
+# This file lives with the Dockerfile. Compose only auto-discovers compose.yml
+# in the working directory, so the repository root holds a short include that
+# points here and sets project_directory to the repo root. Without that
+# pointer every command would need `-f .docker/compose.yml`, and relative
+# paths (context, .env, bind mounts) would mean ".docker/" instead of the
+# source tree.
+#
+# The API can equally well run on the host with `task run`; the two are
+# interchangeable and share the same .env. The container overrides only the
+# four values that cannot mean the same thing in both places — see
+# x-api-environment.
+
+name: notes
+
+# Values that cannot be shared with a host run. Both API services merge this
+# so a third override cannot appear on one and not the other.
+x-api-environment: &api-environment
+  # .env binds 127.0.0.1, which inside a container is reachable only from that
+  # container — the published port would answer nothing.
+  API_HOST: 0.0.0.0
+  # API_PORT is the *host* port in the mapping below; inside the container
+  # the server always listens on 4000. Without this override, setting
+  # API_PORT=4010 in .env to dodge a port conflict would move the listener
+  # and leave the mapping pointing at a closed port.
+  API_PORT: 4000
+  # On the compose network the database is "postgres" on 5432 regardless of
+  # which host port .env publishes it on.
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # The image reads POSTGRES_DB, not the POSTGRES_DATABASE_NAME the app
+      # uses, so it is mapped rather than duplicated in .env.
+      POSTGRES_DB: ${POSTGRES_DATABASE_NAME}
+    ports:
+      # Bound to loopback: the default publishes on every interface, which on a
+      # laptop means a trust-authenticated database offered to the local network.
+      # Published so `task migrate`, POSTGRES_TEST=1 and a GUI client still work
+      # from the host.
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    volumes:
+      # Postgres 18+ wants the mount one level up from the old
+      # /var/lib/postgresql/data, so the data lands in a version-named
+      # subdirectory and pg_upgrade can work across the mount boundary. The
+      # image refuses to start on the old path.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # -U matters: pg_isready otherwise probes as the current OS user and
+      # reports a healthy server as unreachable.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Applies pending migrations, then exits. The API waits for it to succeed, so
+  # a container start can never race the schema.
+  #
+  # It uses --dir rather than --env local on purpose: the local environment in
+  # atlas.hcl resolves its schema by running `go run -C loader .`, which is what
+  # generating a migration needs and applying one does not. Skipping it keeps
+  # this container to the Atlas binary alone.
+  migrate:
+    image: arigaio/atlas:latest
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command: >-
+      migrate apply
+      --dir file:///migrations
+      --url postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE_NAME}?sslmode=disable
+
+  api:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile
+      args:
+        # Lines the container user up with the host user, which matters on
+        # Linux where a bind mount keeps host ownership. Harmless on macOS.
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    restart: unless-stopped
+    # tini as PID 1 so SIGTERM reaches air and rebuilds do not leave zombies.
+    init: true
+    env_file: .env
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${API_PORT}:4000"
+    volumes:
+      # Source is mounted, not copied: an edit on the host is a rebuild in the
+      # container. Read-only, because nothing in here writes to the repository —
+      # air keeps its binary in /tmp/air.
+      - .:/app:ro
+      # Named volumes, so a `docker compose down` does not throw away the
+      # module and build caches and make the next start a cold compile.
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/home/app/.cache/go-build
+      # Writable scratch for the built binary.
+      - api-tmp:/tmp/air
+    healthcheck:
+      # 127.0.0.1, not localhost: the process binds IPv4 0.0.0.0, and Alpine
+      # may resolve localhost to ::1 first.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      # Generous: the first start compiles the whole module.
+      start_period: 90s
+
+  # Same image, running under delve. Opt in with:
+  #
+  #   docker compose --profile debug up api-debug
+  #
+  # It publishes its own ports so it can run alongside the ordinary api service
+  # instead of fighting it for 4000.
+  api-debug:
+    profiles: [debug]
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    restart: "no"
+    init: true
+    env_file: .env
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${API_DEBUG_PORT:-4001}:4000"
+      - "127.0.0.1:${DELVE_PORT:-2345}:2345"
+    volumes:
+      - .:/app:ro
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/home/app/.cache/go-build
+      - api-debug-tmp:/tmp/air
+    # A YAML list, not a folded string: Compose would split a folded command on
+    # whitespace and delve reads a stray "-l" as its own --listen shorthand.
+    #
+    # --output matters: dlv debug compiles to ./__debug_bin in the working
+    # directory, and /app is mounted read-only. It goes to the writable volume.
+    #
+    # No --build-flags: dlv debug already compiles with -gcflags="all=-N -l",
+    # so breakpoints land on the right line without the quoting that flag needs.
+    #
+    # --continue runs without waiting for a client, --accept-multiclient lets a
+    # debugger come and go without killing the process, and --only-same-user is
+    # off because the client connects over TCP from the host.
+    command:
+      - dlv
+      - debug
+      - ./cmd/api
+      - --output=/tmp/air/debug_bin
+      - --headless
+      - --listen=:2345
+      - --api-version=2
+      - --accept-multiclient
+      - --continue
+      - --only-same-user=false
+    security_opt:
+      # ptrace, which delve needs and the default seccomp profile blocks.
+      - seccomp:unconfined
+    cap_add:
+      - SYS_PTRACE
+
+volumes:
+  postgres-data:
+  go-mod-cache:
+  go-build-cache:
+  api-tmp:
+  api-debug-tmp:

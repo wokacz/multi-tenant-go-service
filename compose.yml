@@ -1,33 +1,8 @@
-# Postgres for local development. The API itself runs on the host via
-# `task run`, so only the database lives here.
-
-services:
-  postgres:
-    image: postgres:18-alpine
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      # The image reads POSTGRES_DB, not the POSTGRES_DATABASE_NAME the app
-      # uses, so it is mapped rather than duplicated in .env.
-      POSTGRES_DB: ${POSTGRES_DATABASE_NAME}
-    ports:
-      # Bound to loopback: the default publishes on every interface, which on a
-      # laptop means a trust-authenticated database offered to the local network.
-      - "127.0.0.1:${POSTGRES_PORT}:5432"
-    volumes:
-      # Postgres 18+ wants the mount one level up from the old
-      # /var/lib/postgresql/data, so the data lands in a version-named
-      # subdirectory and pg_upgrade can work across the mount boundary. The
-      # image refuses to start on the old path.
-      - postgres-data:/var/lib/postgresql
-    healthcheck:
-      # -U matters: pg_isready otherwise probes as the current OS user and
-      # reports a healthy server as unreachable.
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
-volumes:
-  postgres-data:
+# Auto-discovery pointer. Compose only looks for this filename in the working
+# directory; the services live in .docker/compose.yml.
+#
+# project_directory is the repository root so relative paths in the included
+# file (build context, .env, bind mounts) keep meaning "here", not ".docker/".
+include:
+  - path: .docker/compose.yml
+    project_directory: .

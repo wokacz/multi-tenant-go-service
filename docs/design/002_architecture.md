@@ -106,14 +106,13 @@ serializowałby się inaczej na laptopie i na serwerze.
 
 ## Polecenia
 
-Wszystko idzie przez Task. `task check` to dokładnie to, co uruchamia CI.
+Wszystko, co sprawdza CI, idzie przez Task. Uruchomienie serwisu ma dwie drogi:
+`docker compose up` albo `task run` na hoście — [instrukcja środowiska](../guides/001_development_environment.md).
 
 ```bash
-task check      # tidy + lint + test + openapi:check
-task run        # serwis (wymaga Postgresa i migracji)
-task test       # go test ./... -race
-task migrate    # zastosuj migracje
+docker compose up   # Postgres, migracje, API z hot-reloadem
+task check          # tidy + lint + test + openapi:check
+task run            # serwis na hoście (wymaga Postgresa i migracji)
+task test           # go test ./... -race
+task migrate        # zastosuj migracje
 ```
-
-Pełna lista i pierwsze uruchomienie:
-[instrukcja środowiska](../guides/001_development_environment.md).

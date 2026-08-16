@@ -13,7 +13,8 @@ Serwis HTTP w Go, z Postgresem, bez frontendu. Kontrakt API jest generowany z ko
 | `golang.org/x/crypto`                        | v0.55.0          | bcrypt                                           |
 | `golang.org/x/text`                          | v0.41.0          | negocjacja języka (`Accept-Language`)            |
 
-Go **1.26.6**, wersja czytana z `go.mod` — nie jest powielana w CI ani w Dockerfile.
+Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obraz developerski pinuje minor tagiem
+`golang:1.26-alpine` — `FROM` nie czyta `go.mod`.
 
 ## Narzędzia
 
@@ -22,7 +23,7 @@ Go **1.26.6**, wersja czytana z `go.mod` — nie jest powielana w CI ani w Docke
 | [Task](https://taskfile.dev/)                      | wszystkie polecenia projektu; `task check` to dokładnie to, co robi CI |
 | [Atlas](https://atlasgo.io/)                       | migracje wersjonowane, generowane z modeli GORM                        |
 | [golangci-lint](https://golangci-lint.run/) **v2** | lint                                                                   |
-| Docker Compose                                     | Postgres 18 lokalnie                                                   |
+| Docker Compose                                     | środowisko developerskie: Postgres 18, migracje, API                   |
 
 > **Uwaga:** `.golangci.yml` używa schematu konfiguracji v2. Instalacja ze
 > ścieżki bez `/v2/` po cichu wciąga v1, który tej konfiguracji nie przeczyta
@@ -56,3 +57,26 @@ ma prawa być w grafie zależności serwisu, który rozmawia wyłącznie z Postg
 
 Praktyczny skutek: `go mod tidy` bez `-C loader` pomija drugi moduł. `task tidy`
 robi oba i CI to sprawdza.
+
+Drugi skutek: obraz developerski **nie zawiera** `loader/`. Generowanie migracji (`task migrate:diff`) wymaga Atlasa i
+tego modułu na hoście; stosowanie gotowych plików (`migrate apply`) wystarcza sam binarny Atlas, i to robi usługa
+`migrate`
+w Compose.
+
+## Docker Compose
+
+Compose jest środowiskiem developerskim, nie obrazem produkcyjnym. Nie ma stage'a produkcyjnego w Dockerfile: target,
+którego nikt nie wdraża, rozjeżdża się pierwszy.
+
+`docker compose up` podnosi Postgresa 18, stosuje migracje i startuje API z hot-reloadem (`air`). Debugger (`delve`)
+jest za profilem `debug`, żeby nie bił się o port 4000.
+
+Usługi żyją w `.docker/compose.yml`. W korzeniu zostaje czteroliniowy `include`, bo Compose odkrywa `compose.yml` tylko
+w katalogu roboczym — bez tego każde polecenie wymagałoby `-f`. `.dockerignore` zostaje w korzeniu, bo Docker szuka go w
+korzeniu **kontekstu** buildu, a kontekst to całe repozytorium (`go.mod`).
+
+Dwie drogi uruchomienia — kontenery i `task run` na hoście — dzielą `.env`. Compose nadpisuje wyłącznie `API_HOST`,
+`API_PORT`, `POSTGRES_HOST` i
+`POSTGRES_PORT`; reszta znaczy to samo w obu miejscach.
+
+Jak uruchomić: [instrukcja środowiska](../guides/001_development_environment.md).

@@ -73,9 +73,11 @@ Zasady, które utrzymują to w kupie:
 
 ## Poza `docs/`
 
-| Gdzie                                     | Co                                         |
-|-------------------------------------------|--------------------------------------------|
-| [`README.md`](../README.md)               | czym jest projekt, wymagania, uruchomienie |
-| [`api/openapi.yaml`](../api/openapi.yaml) | kontrakt HTTP — generowany i commitowany   |
-| [`CLAUDE.md`](../CLAUDE.md)               | zasady pracy nad kodem dla asystenta AI    |
-| `/docs` na uruchomionym serwisie          | Swagger UI (tylko development)             |
+| Gdzie                                     | Co                                                               |
+|-------------------------------------------|------------------------------------------------------------------|
+| [`README.md`](../README.md)               | czym jest projekt, wymagania, uruchomienie                       |
+| [`compose.yml`](../compose.yml)           | wskaźnik `include`, żeby `docker compose up` działało z korzenia |
+| [`.docker/`](../.docker/)                 | Compose, obraz i hot-reload; bez konfiguracji produkcyjnej       |
+| [`api/openapi.yaml`](../api/openapi.yaml) | kontrakt HTTP — generowany i commitowany                         |
+| [`CLAUDE.md`](../CLAUDE.md)               | zasady pracy nad kodem dla asystenta AI                          |
+| `/docs` na uruchomionym serwisie          | Swagger UI (tylko development)                                   |

@@ -26,13 +26,16 @@ change to it shows up as a reviewable diff rather than as an invisible side effe
 
 ## Requirements
 
-| Tool                                               | Purpose             |
-|----------------------------------------------------|---------------------|
-| [Go](https://go.dev/) 1.26+                        | toolchain           |
-| [Task](https://taskfile.dev/)                      | task runner         |
-| [Atlas](https://atlasgo.io/)                       | database migrations |
-| [golangci-lint](https://golangci-lint.run/) **v2** | linting             |
-| Docker                                             | Postgres            |
+Two equivalent ways to run the service; both read the same `.env`. The container
+path needs Docker only. The host path needs the toolchain below as well.
+
+| Tool                                               | Purpose                          |
+|----------------------------------------------------|----------------------------------|
+| Docker                                             | Compose stack, or Postgres alone |
+| [Go](https://go.dev/) 1.26+                        | toolchain (host path, `task check`) |
+| [Task](https://taskfile.dev/)                      | task runner (host path)          |
+| [Atlas](https://atlasgo.io/)                       | database migrations (host path)  |
+| [golangci-lint](https://golangci-lint.run/) **v2** | linting (`task check`)           |
 
 ```bash
 brew install go
@@ -50,10 +53,25 @@ go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 
 ## Getting started
 
+Details, in Polish: [the development environment guide](docs/guides/001_development_environment.md).
+
+### Containers
+
 ```bash
 cp .env.example .env
-docker compose up -d      # Postgres
-task migrate              # schema
+docker compose up
+```
+
+Postgres, migrations, and the API with hot-reload. Do not also `task run` on
+port 4000 — the container will look healthy while your requests hit whichever
+process bound the port first.
+
+### Host
+
+```bash
+cp .env.example .env
+docker compose up -d postgres
+task migrate
 task run                  # http://127.0.0.1:4000
 ```
 
@@ -61,6 +79,8 @@ A fresh installation has nobody with permissions. Register an account, then gran
 
 ```bash
 task bootstrap -- -email you@example.com
+# or, without Go on the host:
+docker compose exec api go run ./cmd/bootstrap -email you@example.com
 ```
 
 Details, including why this is a deployment step rather than "first to register wins", are in
@@ -69,10 +89,12 @@ Details, including why this is a deployment step rather than "first to register 
 ## Commands
 
 `task check` is exactly what CI runs. `task --list` shows everything else.
+`docker compose up` is the container path; `task run` is the host path.
 
 ```bash
-task check      # tidy + lint + test + openapi:check
-task test       # go test ./... -race
+docker compose up   # full development stack
+task check          # tidy + lint + test + openapi:check
+task test           # go test ./... -race
 task run
 task migrate
 ```

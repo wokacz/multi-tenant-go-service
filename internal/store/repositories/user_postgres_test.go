@@ -17,8 +17,8 @@ import (
 	"github.com/wokacz/go-example/internal/store/repositories"
 )
 
-// These tests need the compose stack, so they are skipped by default and the
-// rest of the suite stays database-free — see the note in CLAUDE.md.
+// These tests need Postgres from compose, so they are skipped by default and
+// the rest of the suite stays database-free — see AGENTS.md.
 //
 // They earn their keep by covering what the in-memory repository cannot: the
 // SQL itself. The conditional UPDATE that caps attempts, the explicit ::inet
@@ -33,7 +33,7 @@ func testDB(t *testing.T) *store.DB {
 	t.Helper()
 
 	if os.Getenv("POSTGRES_TEST") == "" {
-		t.Skip("set POSTGRES_TEST=1 and run `docker compose up -d && task migrate` to exercise the real store")
+		t.Skip("set POSTGRES_TEST=1 and run `docker compose up -d postgres && task migrate` to exercise the real store")
 	}
 
 	cfg := &config.Config{
