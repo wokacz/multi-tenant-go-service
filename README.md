@@ -27,7 +27,7 @@ change to it shows up as a reviewable diff rather than as an invisible side effe
 ## Requirements
 
 Two equivalent ways to run the service; both read the same `.env`. The container
-path needs Docker only. The host path needs the toolchain below as well.
+path needs Docker and Task. The host path needs the toolchain below as well.
 
 | Tool                                               | Purpose                          |
 |----------------------------------------------------|----------------------------------|
@@ -59,20 +59,20 @@ Details, in Polish: [the development environment guide](docs/guides/001_developm
 
 ```bash
 cp .env.example .env
-docker compose up
+task up
 ```
 
 Postgres, migrations, and the API with hot-reload. Do not also `task run` on
-port 4000 — the container will look healthy while your requests hit whichever
+port 8000 — the container will look healthy while your requests hit whichever
 process bound the port first.
 
 ### Host
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
+task up -- postgres
 task migrate
-task run                  # http://127.0.0.1:4000
+task run                  # http://127.0.0.1:8000
 ```
 
 A fresh installation has nobody with permissions. Register an account, then grant it ownership:
@@ -80,7 +80,7 @@ A fresh installation has nobody with permissions. Register an account, then gran
 ```bash
 task bootstrap -- -email you@example.com
 # or, without Go on the host:
-docker compose exec api go run ./cmd/bootstrap -email you@example.com
+task compose:bootstrap -- -email you@example.com
 ```
 
 Details, including why this is a deployment step rather than "first to register wins", are in
@@ -89,12 +89,12 @@ Details, including why this is a deployment step rather than "first to register 
 ## Commands
 
 `task check` is exactly what CI runs. `task --list` shows everything else.
-`docker compose up` is the container path; `task run` is the host path.
+`task up` is the container path; `task run` is the host path.
 
 ```bash
-docker compose up   # full development stack
-task check          # tidy + lint + test + openapi:check
-task test           # go test ./... -race
+task up         # full development stack
+task check      # tidy + lint + test + openapi:check
+task test       # go test ./... -race
 task run
 task migrate
 ```

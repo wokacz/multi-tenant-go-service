@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/domain/audit"
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/domain/orgs"
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // Authz is an in-memory implementation of the whole authorization surface.

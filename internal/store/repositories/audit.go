@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/wokacz/go-example/internal/domain/audit"
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 var (

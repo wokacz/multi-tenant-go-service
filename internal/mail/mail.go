@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wokacz/go-example/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/config"
 )
 
 // Sender delivers the one-time codes this service emails.

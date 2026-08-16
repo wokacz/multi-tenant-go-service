@@ -143,7 +143,7 @@ func Load() (*Config, error) {
 		Env:     Env(getEnv("ENV", string(EnvDevelopment))),
 		APIName: getEnv("API_NAME", "Example"),
 		APIHost: getEnv("API_HOST", "127.0.0.1"),
-		APIPort: getInt("API_PORT", 4000),
+		APIPort: getInt("API_PORT", 8000),
 
 		TLSCertFile: getEnv("TLS_CERT_FILE", ""),
 		TLSKeyFile:  getEnv("TLS_KEY_FILE", ""),
@@ -392,7 +392,7 @@ func getEnv(key, defaultValue string) string {
 // getEnvInt retrieves the value of the environment variable named by the key
 // and converts it to an integer. An unset variable falls back to the default; a
 // set but unparseable one is an error, because silently falling back would let
-// API_PORT=4OOO start the server on 4000 with nothing to show for it.
+// API_PORT=4OOO start the server on 8000 with nothing to show for it.
 func getEnvInt(key string, defaultValue int) (int, error) {
 	value := os.Getenv(key)
 	if value == "" {

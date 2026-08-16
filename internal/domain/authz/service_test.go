@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/store/models"
-	"github.com/wokacz/go-example/internal/store/repositories/memory"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
 // These run against the shared in-memory repository rather than the stub above,

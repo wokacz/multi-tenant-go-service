@@ -7,7 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/wokacz/go-example/internal/i18n"
+	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
 )
 
 // Codes are the stable, machine-readable names for every refusal this API can

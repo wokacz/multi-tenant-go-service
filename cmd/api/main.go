@@ -8,16 +8,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wokacz/go-example/internal/api"
-	"github.com/wokacz/go-example/internal/auth"
-	"github.com/wokacz/go-example/internal/config"
-	"github.com/wokacz/go-example/internal/domain/audit"
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/domain/orgs"
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/mail"
-	"github.com/wokacz/go-example/internal/store"
-	"github.com/wokacz/go-example/internal/store/repositories"
+	"github.com/wokacz/multi-tenant-go-service/internal/api"
+	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/mail"
+	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
 func main() {

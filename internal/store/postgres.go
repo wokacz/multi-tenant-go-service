@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"github.com/wokacz/go-example/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/config"
 )
 
 // DB owns the Postgres connection pool. The embedded *gorm.DB gives callers the

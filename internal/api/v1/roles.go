@@ -7,9 +7,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/api/problem"
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 )
 
 // RoleResponse is a role with everything it grants.

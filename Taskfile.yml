@@ -99,6 +99,71 @@ tasks:
     cmds:
       - atlas migrate status --env local --url "{{.DB_URL}}"
 
+  # Compose. The root compose.yml is an include pointer, so these run from the
+  # repository root like every other task. Extra arguments after -- go to
+  # Compose: `task up -- postgres` starts only the database. With no arguments
+  # this waits on `api`, not the whole project — otherwise `--wait` treats the
+  # one-shot migrate container as a daemon that never became healthy.
+  compose:up:
+    desc: Start the development stack (Postgres, migrations, API)
+    aliases: [up]
+    cmds:
+      - docker compose up -d --wait {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}api{{end}}
+
+  compose:down:
+    desc: Stop the stack (data and caches stay)
+    aliases: [down]
+    cmds:
+      - docker compose down {{.CLI_ARGS}}
+
+  compose:reset:
+    desc: Stop the stack and delete data and caches
+    prompt: This deletes Postgres data and Go build caches. Continue?
+    cmds:
+      - docker compose down -v
+
+  compose:stop:
+    desc: Stop containers without removing them
+    cmds:
+      - docker compose stop {{.CLI_ARGS}}
+
+  compose:ps:
+    desc: Show compose container status
+    cmds:
+      - docker compose ps {{.CLI_ARGS}}
+
+  compose:logs:
+    desc: Follow compose logs (service name after --)
+    interactive: true
+    cmds:
+      - docker compose logs -f {{.CLI_ARGS}}
+
+  compose:migrate:
+    desc: Apply pending migrations in a one-shot Atlas container
+    cmds:
+      - docker compose run --rm migrate
+
+  compose:build:
+    desc: Build compose images
+    cmds:
+      - docker compose build {{.CLI_ARGS}}
+
+  compose:debug:
+    desc: Start the API under delve (API 4001, debugger 2345)
+    cmds:
+      - docker compose --profile debug up -d --wait api-debug
+
+  compose:shell:
+    desc: Open a shell in the API container
+    interactive: true
+    cmds:
+      - docker compose exec api sh
+
+  compose:bootstrap:
+    desc: Grant the first owner inside the API container
+    cmds:
+      - docker compose exec api go run ./cmd/bootstrap {{.CLI_ARGS}}
+
   check:
     desc: Everything CI should run
     cmds:

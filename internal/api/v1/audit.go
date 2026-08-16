@@ -8,8 +8,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/api/problem"
-	"github.com/wokacz/go-example/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 )
 
 // AuditEventResponse is one recorded change.

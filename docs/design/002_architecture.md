@@ -107,10 +107,10 @@ serializowałby się inaczej na laptopie i na serwerze.
 ## Polecenia
 
 Wszystko, co sprawdza CI, idzie przez Task. Uruchomienie serwisu ma dwie drogi:
-`docker compose up` albo `task run` na hoście — [instrukcja środowiska](../guides/001_development_environment.md).
+`task up` albo `task run` na hoście — [instrukcja środowiska](../guides/001_development_environment.md).
 
 ```bash
-docker compose up   # Postgres, migracje, API z hot-reloadem
+task up             # Postgres, migracje, API z hot-reloadem
 task check          # tidy + lint + test + openapi:check
 task run            # serwis na hoście (wymaga Postgresa i migracji)
 task test           # go test ./... -race

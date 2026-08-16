@@ -56,6 +56,6 @@ RUN go install github.com/air-verse/air@v1.67.4 \
  && go install github.com/go-delve/delve/cmd/dlv@v1.27.1 \
  && go mod download
 
-EXPOSE 4000 2345
+EXPOSE 8000 2345
 
 CMD ["air", "-c", ".docker/air.toml"]

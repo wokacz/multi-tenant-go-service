@@ -12,7 +12,7 @@
 # four values that cannot mean the same thing in both places — see
 # x-api-environment.
 
-name: notes
+name: multi-tenant-go-service
 
 # Values that cannot be shared with a host run. Both API services merge this
 # so a third override cannot appear on one and not the other.
@@ -21,10 +21,10 @@ x-api-environment: &api-environment
   # container — the published port would answer nothing.
   API_HOST: 0.0.0.0
   # API_PORT is the *host* port in the mapping below; inside the container
-  # the server always listens on 4000. Without this override, setting
-  # API_PORT=4010 in .env to dodge a port conflict would move the listener
+  # the server always listens on 8000. Without this override, setting
+  # API_PORT=8010 in .env to dodge a port conflict would move the listener
   # and leave the mapping pointing at a closed port.
-  API_PORT: 4000
+  API_PORT: 8000
   # On the compose network the database is "postgres" on 5432 regardless of
   # which host port .env publishes it on.
   POSTGRES_HOST: postgres
@@ -100,7 +100,7 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:${API_PORT}:4000"
+      - "127.0.0.1:${API_PORT}:8000"
     volumes:
       # Source is mounted, not copied: an edit on the host is a rebuild in the
       # container. Read-only, because nothing in here writes to the repository —
@@ -115,7 +115,7 @@ services:
     healthcheck:
       # 127.0.0.1, not localhost: the process binds IPv4 0.0.0.0, and Alpine
       # may resolve localhost to ::1 first.
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4000/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -124,10 +124,10 @@ services:
 
   # Same image, running under delve. Opt in with:
   #
-  #   docker compose --profile debug up api-debug
+  #   task compose:debug
   #
   # It publishes its own ports so it can run alongside the ordinary api service
-  # instead of fighting it for 4000.
+  # instead of fighting it for 8000.
   api-debug:
     profiles: [debug]
     build:
@@ -146,7 +146,7 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:${API_DEBUG_PORT:-4001}:4000"
+      - "127.0.0.1:${API_DEBUG_PORT:-4001}:8000"
       - "127.0.0.1:${DELVE_PORT:-2345}:2345"
     volumes:
       - .:/app:ro

@@ -7,9 +7,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/wokacz/go-example/internal/api/problem"
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/mail"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 )
 
 type RequestPasswordResetInput struct {

@@ -68,8 +68,8 @@ w Compose.
 Compose jest środowiskiem developerskim, nie obrazem produkcyjnym. Nie ma stage'a produkcyjnego w Dockerfile: target,
 którego nikt nie wdraża, rozjeżdża się pierwszy.
 
-`docker compose up` podnosi Postgresa 18, stosuje migracje i startuje API z hot-reloadem (`air`). Debugger (`delve`)
-jest za profilem `debug`, żeby nie bił się o port 4000.
+`task up` podnosi Postgresa 18, stosuje migracje i startuje API z hot-reloadem (`air`). Debugger (`delve`)
+jest za profilem `debug`, żeby nie bił się o port 8000.
 
 Usługi żyją w `.docker/compose.yml`. W korzeniu zostaje czteroliniowy `include`, bo Compose odkrywa `compose.yml` tylko
 w katalogu roboczym — bez tego każde polecenie wymagałoby `-f`. `.dockerignore` zostaje w korzeniu, bo Docker szuka go w

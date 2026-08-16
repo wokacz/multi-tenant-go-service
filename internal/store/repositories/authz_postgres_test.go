@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/store"
-	"github.com/wokacz/go-example/internal/store/models"
-	"github.com/wokacz/go-example/internal/store/repositories"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
 // These cover the one query the in-memory fake reimplements in Go: the join

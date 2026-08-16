@@ -14,7 +14,7 @@ import (
 
 	"ariga.io/atlas-provider-gorm/gormschema"
 
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 func main() {

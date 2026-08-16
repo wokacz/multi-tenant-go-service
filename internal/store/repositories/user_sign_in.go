@@ -10,8 +10,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // This file holds the sign-in side of user.Repository: devices, login history

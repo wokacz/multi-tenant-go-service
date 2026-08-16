@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/i18n"
-	"github.com/wokacz/go-example/internal/store/repositories/memory"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
 // TestTheCodeIsStableAcrossLanguages is the contract the frontend is built on.

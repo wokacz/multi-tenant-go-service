@@ -38,8 +38,8 @@ func TestValidateRejectsNonPositiveTokenTTL(t *testing.T) {
 }
 
 func TestAddrUsesConfiguredHost(t *testing.T) {
-	c := &Config{APIHost: "127.0.0.1", APIPort: 4000}
-	if got := c.Addr(); got != net.JoinHostPort("127.0.0.1", "4000") {
+	c := &Config{APIHost: "127.0.0.1", APIPort: 8000}
+	if got := c.Addr(); got != net.JoinHostPort("127.0.0.1", "8000") {
 		t.Errorf("Addr() = %q", got)
 	}
 }
@@ -144,7 +144,7 @@ func productionConfig() *Config {
 		Env:                  EnvProduction,
 		APIName:              "Example",
 		APIHost:              "127.0.0.1",
-		APIPort:              4000,
+		APIPort:              8000,
 		AuthTokenSecret:      "production-secret-must-be-at-least-32b",
 		AuthResetSecret:      "production-reset-must-be-at-least-32b",
 		AuthTokenTTL:         time.Hour,

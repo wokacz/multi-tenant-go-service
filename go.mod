@@ -1,4 +1,4 @@
-module github.com/wokacz/go-example
+module github.com/wokacz/multi-tenant-go-service
 
 go 1.26.6
 

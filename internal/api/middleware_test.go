@@ -7,8 +7,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/wokacz/go-example/internal/config"
-	"github.com/wokacz/go-example/internal/store/repositories/memory"
+	"github.com/wokacz/multi-tenant-go-service/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
 // TestEveryOperationIsClassified is the guard on the default-deny middleware.

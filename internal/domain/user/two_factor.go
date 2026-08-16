@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // TwoFactorCodeLength is the number of decimal digits emailed to finish a

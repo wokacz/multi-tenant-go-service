@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 )
 
 // enableTwoFactor turns the second factor on for an account that has already

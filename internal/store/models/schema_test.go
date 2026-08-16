@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm/schema"
 
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // GORM builds a composite index only when several fields carry the same index

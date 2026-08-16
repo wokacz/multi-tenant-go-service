@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 const (
@@ -271,7 +271,7 @@ func TestSignInSanitisesTransportInput(t *testing.T) {
 	ctx := context.Background()
 	sc := user.SignInContext{
 		IP:        "not-an-address",
-		UserAgent: strings.Repeat("u", 4000),
+		UserAgent: strings.Repeat("u", 8000),
 	}
 
 	result, err := s.SignIn(ctx, testEmail, testPassword, sc)

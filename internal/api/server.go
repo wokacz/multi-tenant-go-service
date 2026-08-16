@@ -14,15 +14,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/wokacz/go-example/internal/api/problem"
-	v1 "github.com/wokacz/go-example/internal/api/v1"
-	"github.com/wokacz/go-example/internal/auth"
-	"github.com/wokacz/go-example/internal/config"
-	"github.com/wokacz/go-example/internal/domain/audit"
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/domain/orgs"
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/mail"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	v1 "github.com/wokacz/multi-tenant-go-service/internal/api/v1"
+	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 )
 
 // Version is reported in the OpenAPI document. It describes the API contract,

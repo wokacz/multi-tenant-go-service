@@ -22,11 +22,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/wokacz/go-example/internal/config"
-	"github.com/wokacz/go-example/internal/domain/orgs"
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/store"
-	"github.com/wokacz/go-example/internal/store/repositories"
+	"github.com/wokacz/multi-tenant-go-service/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
 func main() {

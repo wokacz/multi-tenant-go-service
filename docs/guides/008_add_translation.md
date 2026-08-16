@@ -15,7 +15,7 @@ const CodeWidgetLocked = "widget_locked"
 
 // internal/api/problem/errors.go
 case errors.Is(err, widgets.ErrWidgetLocked):
-	return newDocument(locale, http.StatusConflict, CodeWidgetLocked)
+return newDocument(locale, http.StatusConflict, CodeWidgetLocked)
 ```
 
 ```json

@@ -10,9 +10,10 @@ nie mogą znaczyć tego samego w obu miejscach: `API_HOST`, `API_PORT`, `POSTGRE
 | Narzędzie | Po co                                  |
 |-----------|----------------------------------------|
 | Docker    | Postgres, migracje, API z hot-reloadem |
+| [Task](https://taskfile.dev/) | polecenia projektu, w tym stos Compose |
 
-Do samego `docker compose up` nic więcej nie trzeba. `task check`,
-`task migrate:diff` i testy z `-race` wymagają narzędzi hosta — obraz nie zawiera `loader/` ani lintera, a detektor
+Do samego `task up` potrzebujesz Dockera i Taska. `task check`,
+`task migrate:diff` i testy z `-race` wymagają reszty narzędzi hosta — obraz nie zawiera `loader/` ani lintera, a detektor
 wyścigów nie działa na Alpine.
 
 ### Na hoście
@@ -48,7 +49,7 @@ brew install golangci-lint
 
 ```bash
 cp .env.example .env
-docker compose up
+task up
 ```
 
 Podnosi Postgresa, czeka aż będzie zdrowy, stosuje migracje, a potem startuje API z hot-reloadem. Pierwszy start
@@ -62,7 +63,7 @@ Dlaczego nie ma obrazu produkcyjnego i czemu `loader/` nie jest w obrazie:
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
+task up -- postgres
 task migrate
 task run
 ```
@@ -76,27 +77,27 @@ compose ps` pokazuje kontener jako zdrowy, bo healthcheck sprawdza go od środka
 który zajął port pierwszy. Sprawdzenie:
 
 ```bash
-lsof -nP -iTCP:4000 -sTCP:LISTEN
+lsof -nP -iTCP:8000 -sTCP:LISTEN
 ```
 
-Żeby oddać port 4000 kontenerowi albo odwrotnie:
+Żeby oddać port 8000 kontenerowi albo odwrotnie:
 
 ```bash
-docker compose stop api   # Postgres zostaje; host odzyskuje 4000
+task compose:stop -- api   # Postgres zostaje; host odzyskuje 8000
 task run
 ```
 
 Sprawdzenie, że działa (obie drogi, ten sam adres):
 
 ```bash
-curl -s http://127.0.0.1:4000/health
-open http://127.0.0.1:4000/docs      # Swagger UI, tylko w developmencie
+curl -s http://127.0.0.1:8000/health
+open http://127.0.0.1:8000/docs      # Swagger UI, tylko w developmencie
 ```
 
 ### Debugowanie
 
 ```bash
-docker compose --profile debug up api-debug
+task compose:debug
 ```
 
 Uruchamia **drugi** kontener z tym samym kodem pod delve — obok zwykłego, więc nie trzeba niczego zatrzymywać. API
@@ -110,21 +111,22 @@ dłużej niż zwykłego serwisu.
 ### Przydatne polecenia kontenerowe
 
 ```bash
-docker compose logs -f api          # log z hot-reloadem
-docker compose exec api sh          # powłoka w kontenerze
-docker compose down                 # zatrzymaj (dane i cache zostają)
-docker compose down -v              # zatrzymaj i skasuj dane oraz cache
-docker compose build --no-cache api # przebuduj obraz po zmianie Dockerfile
+task compose:logs -- api     # log z hot-reloadem
+task compose:shell           # powłoka w kontenerze
+task down                    # zatrzymaj (dane i cache zostają)
+task compose:reset           # zatrzymaj i skasuj dane oraz cache
+task compose:build -- --no-cache api
+task compose:migrate         # zastosuj migracje obrazem Atlasa
 ```
 
-Cache modułów i buildu Go leżą w nazwanych wolumenach, więc `docker compose
-down` nie kasuje ich i kolejny start nie jest zimną kompilacją. Kasuje je dopiero `-v`.
+`task compose:reset` pyta o potwierdzenie — kasuje wolumeny, więc kolejny start
+to zimna kompilacja i pusta baza.
 
 Na Linuksie, gdy UID hosta nie jest 1000, przebuduj obraz z własnym użytkownikiem — inaczej cache w wolumenie będzie
 należał do UID 1000:
 
 ```bash
-docker compose build --build-arg UID=$(id -u) --build-arg GID=$(id -g)
+UID=$(id -u) GID=$(id -g) task compose:build
 ```
 
 Na Docker Desktop (macOS, Windows) mapowanie właściciela robi warstwa wirtualizacji; domyślne 1000 wystarcza.
@@ -134,7 +136,7 @@ Na Docker Desktop (macOS, Windows) mapowanie właściciela robi warstwa wirtuali
 Świeża instalacja nie ma nikogo z uprawnieniami. Zarejestruj konto przez API, a potem nadaj mu rolę właściciela:
 
 ```bash
-curl -X POST http://127.0.0.1:4000/v1/users \
+curl -X POST http://127.0.0.1:8000/v1/users \
   -H 'Content-Type: application/json' \
   -d '{"name":"Ada","email":"ada@example.com",
        "password":"twelve-chars","password_confirm":"twelve-chars"}'
@@ -149,7 +151,7 @@ task bootstrap -- -email ada@example.com
 W kontenerach, bez Go na hoście:
 
 ```bash
-docker compose exec api go run ./cmd/bootstrap -email ada@example.com
+task compose:bootstrap -- -email ada@example.com
 ```
 
 Polecenie jest idempotentne. Dlaczego nie „pierwszy zarejestrowany wygrywa":
@@ -157,39 +159,42 @@ Polecenie jest idempotentne. Dlaczego nie „pierwszy zarejestrowany wygrywa":
 
 ## Polecenia
 
-| Polecenie                    | Co robi                                                |
-|------------------------------|--------------------------------------------------------|
-| `docker compose up`          | cały stos w kontenerach                                |
-| `task check`                 | **to, co robi CI**: tidy + lint + test + openapi:check |
-| `task test`                  | `go test ./... -race`                                  |
-| `task lint`                  | golangci-lint                                          |
-| `task fmt`                   | formatowanie                                           |
-| `task run`                   | serwis na hoście                                       |
-| `task build`                 | binarka do `bin/`                                      |
-| `task cover`                 | pokrycie + raport HTML                                 |
-| `task openapi`               | przegeneruj `api/openapi.yaml`                         |
-| `task migrate`               | zastosuj migracje                                      |
-| `task migrate:diff NAME=…`   | wygeneruj migrację po zmianie modelu                   |
-| `task migrate:status`        | co jest zastosowane                                    |
-| `task bootstrap -- -email …` | nadaj pierwszą rolę właściciela                        |
-| `task clean`                 | usuń artefakty                                         |
+| Polecenie                         | Co robi                                                |
+|-----------------------------------|--------------------------------------------------------|
+| `task up`                         | cały stos w kontenerach                                |
+| `task down`                       | zatrzymaj stos (dane i cache zostają)                  |
+| `task compose:reset`              | zatrzymaj i skasuj wolumeny                            |
+| `task compose:migrate`            | zastosuj migracje obrazem Atlasa                       |
+| `task check`                      | **to, co robi CI**: tidy + lint + test + openapi:check |
+| `task test`                       | `go test ./... -race`                                  |
+| `task lint`                       | golangci-lint                                          |
+| `task fmt`                        | formatowanie                                           |
+| `task run`                        | serwis na hoście                                       |
+| `task build`                      | binarka do `bin/`                                      |
+| `task cover`                      | pokrycie + raport HTML                                 |
+| `task openapi`                    | przegeneruj `api/openapi.yaml`                         |
+| `task migrate`                    | zastosuj migracje (Atlas na hoście)                    |
+| `task migrate:diff NAME=…`        | wygeneruj migrację po zmianie modelu                   |
+| `task migrate:status`             | co jest zastosowane                                    |
+| `task bootstrap -- -email …`      | nadaj pierwszą rolę właściciela                        |
+| `task clean`                      | usuń artefakty                                         |
 
 `task --list` pokazuje wszystko z opisami. `task check` i `task migrate:diff`
 zawsze idą z hosta.
 
-Nowa migracja wygenerowana na hoście, przy API w kontenerze, nadal wgrywa się przez `task migrate` — Postgres jest
-opublikowany na pętli zwrotnej.
+Nowa migracja wygenerowana na hoście, przy API w kontenerze, wgrywa się przez
+`task compose:migrate` albo `task migrate` — Postgres jest opublikowany na pętli zwrotnej.
 
 ## Testy wymagające bazy
 
 Domyślnie `task test` **nie potrzebuje bazy**. Testy repozytoriów pomijają się same, dopóki nie ustawisz zmiennej:
 
 ```bash
-docker compose up -d postgres && task migrate
+task up -- postgres && task migrate
 POSTGRES_TEST=1 go test ./internal/store/repositories -v
 ```
 
-Nie wołaj gołego `docker compose up -d`: to podniesie też API i zajmie port 4000.
+Nie wołaj gołego `task up`: to podniesie też API i zajmie port 8000.
 
 CI uruchamia je na kontenerze usługowym, więc SQL jest sprawdzany przy każdym pushu.
 Szczegóły: [instrukcja testów](007_write_tests.md).
@@ -206,7 +211,7 @@ Najważniejsze zmienne (pełna lista z komentarzami w `.env.example`):
 | Zmienna                             | Domyślnie            | Uwagi                                                  |
 |-------------------------------------|----------------------|--------------------------------------------------------|
 | `ENV`                               | `development`        | `production` włącza twardą walidację i wyłącza `/docs` |
-| `API_HOST` / `API_PORT`             | `127.0.0.1` / `4000` | w kontenerze Compose ustawia host na `0.0.0.0`         |
+| `API_HOST` / `API_PORT`             | `127.0.0.1` / `8000` | w kontenerze Compose ustawia host na `0.0.0.0`         |
 | `AUTH_TOKEN_SECRET`                 | wartość dev          | produkcja wymaga własnej, min. 32 bajty                |
 | `AUTH_TOKEN_TTL`                    | `1h`                 | format czasu Go; gołe `30` jest odrzucane              |
 | `AUTH_RESET_SECRET`                 | wartość dev          | **osobny** sekret od tokenowego                        |

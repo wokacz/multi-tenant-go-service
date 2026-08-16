@@ -11,13 +11,13 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/wokacz/go-example/internal/api/problem"
-	"github.com/wokacz/go-example/internal/auth"
-	"github.com/wokacz/go-example/internal/domain/audit"
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/domain/orgs"
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/mail"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 )
 
 // Prefix is the path every operation in this package lives under. Operational

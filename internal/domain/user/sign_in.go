@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // deviceTokenBytes is the length of the opaque secret a client keeps to be

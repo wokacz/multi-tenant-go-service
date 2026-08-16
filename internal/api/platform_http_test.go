@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 )
 
 // platformProbes describes how to call every system-scoped operation, the same

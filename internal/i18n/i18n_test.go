@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/i18n"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
 )
 
 // TestEveryPermissionIsTranslatedInEveryLocale is the completeness guard.

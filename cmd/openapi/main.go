@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/wokacz/go-example/internal/api"
+	"github.com/wokacz/multi-tenant-go-service/internal/api"
 )
 
 func main() {

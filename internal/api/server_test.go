@@ -17,15 +17,15 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/wokacz/go-example/internal/auth"
-	"github.com/wokacz/go-example/internal/config"
-	"github.com/wokacz/go-example/internal/domain/audit"
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/domain/orgs"
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/mail"
-	"github.com/wokacz/go-example/internal/store/models"
-	"github.com/wokacz/go-example/internal/store/repositories/memory"
+	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/mail"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
 var testPepper = []byte("0123456789abcdef0123456789abcdef")
@@ -122,7 +122,7 @@ func newTestAPIConfig(
 		Env:               config.EnvDevelopment,
 		APIName:           "test",
 		APIHost:           "127.0.0.1",
-		APIPort:           4000,
+		APIPort:           8000,
 		HealthTimeout:     time.Second,
 		MaxRequestBytes:   1 << 20,
 		ReadHeaderTimeout: time.Second,
@@ -492,7 +492,7 @@ func TestProductionHidesOpenAPI(t *testing.T) {
 		Env:               config.EnvProduction,
 		APIName:           "test",
 		APIHost:           "127.0.0.1",
-		APIPort:           4000,
+		APIPort:           8000,
 		HealthTimeout:     time.Second,
 		MaxRequestBytes:   1 << 20,
 		ReadHeaderTimeout: time.Second,

@@ -15,11 +15,11 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/wokacz/go-example/internal/domain/authz"
-	"github.com/wokacz/go-example/internal/domain/orgs"
-	"github.com/wokacz/go-example/internal/domain/user"
-	"github.com/wokacz/go-example/internal/i18n"
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // statusClientClosedRequest is nginx's convention for "the client hung up

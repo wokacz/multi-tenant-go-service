@@ -6,9 +6,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/wokacz/go-example/internal/api/problem"
-	"github.com/wokacz/go-example/internal/auth"
-	"github.com/wokacz/go-example/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 )
 
 type SetTwoFactorInput struct {

@@ -147,7 +147,7 @@ repo := repositories.NewOrgs(db)
 ```
 
 ```bash
-docker compose up -d postgres && task migrate
+task up -- postgres && task migrate
 POSTGRES_TEST=1 go test ./internal/store/repositories -v
 ```
 

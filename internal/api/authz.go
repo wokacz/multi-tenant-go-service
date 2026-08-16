@@ -7,9 +7,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
-	"github.com/wokacz/go-example/internal/api/problem"
-	"github.com/wokacz/go-example/internal/auth"
-	"github.com/wokacz/go-example/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 )
 
 // orgIDParam is the path parameter carrying the organization. It is read by the

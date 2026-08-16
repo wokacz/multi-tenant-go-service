@@ -75,11 +75,11 @@ docs/                   design decisions and how-to guides (Polish)
 ## Commands
 
 ```bash
-docker compose up           # full stack in containers; see docs/guides/001
-task check                  # tidy + lint + test + openapi:check — exactly what CI runs
-task test                   # go test ./... -race
+task up                 # full stack in containers; see docs/guides/001
+task check              # tidy + lint + test + openapi:check — exactly what CI runs
+task test               # go test ./... -race
 task lint
-task run                    # API on the host (Postgres still from compose)
+task run                # API on the host (Postgres still from compose)
 task migrate
 task migrate:diff NAME=<name>    # after changing a model
 task openapi                     # after changing a handler

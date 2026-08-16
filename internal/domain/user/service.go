@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/wokacz/go-example/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // MaxUserPage caps the installation-wide account listing. It is the same shape

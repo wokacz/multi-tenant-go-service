@@ -1,12 +1,12 @@
 // A module of its own so that atlas-provider-gorm — which pulls in every GORM
 // driver and a slice of gRPC — stays out of the API's dependency graph.
-module github.com/wokacz/go-example/loader
+module github.com/wokacz/multi-tenant-go-service/loader
 
 go 1.26.6
 
 require (
 	ariga.io/atlas-provider-gorm v0.6.0
-	github.com/wokacz/go-example v0.0.0
+	github.com/wokacz/multi-tenant-go-service v0.0.0
 )
 
 require (
@@ -86,4 +86,4 @@ require (
 // The models live in the parent module. Nested modules may still import a
 // parent's internal packages, because the internal rule is about the directory
 // tree rather than the module boundary.
-replace github.com/wokacz/go-example => ../
+replace github.com/wokacz/multi-tenant-go-service => ../
