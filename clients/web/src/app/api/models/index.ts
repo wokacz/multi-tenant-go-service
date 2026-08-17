@@ -314,7 +314,7 @@ export interface MemberResponse {
 }
 
 export interface MembershipResponse {
-  /** Membership id, used to accept or decline an invitation */
+  /** Membership id, which is what DELETE /v1/me/memberships/{membershipID} takes to leave */
   id: string;
   organization: OrganizationResponse;
   /** Keys of the roles the caller holds here */

@@ -796,7 +796,7 @@ components:
       additionalProperties: false
       properties:
         id:
-          description: Membership id, used to accept or decline an invitation
+          description: Membership id, which is what DELETE /v1/me/memberships/{membershipID} takes to leave
           format: uuid
           type: string
         organization:
@@ -1786,6 +1786,57 @@ paths:
       summary: List sign-in history
       tags:
         - devices
+  /v1/me/memberships/{membershipID}:
+    delete:
+      description: "Removes the caller's own membership. Self-service: no permission is required, and none can take it away — until this existed the only ways out were asking an administrator or calling remove-member on yourself, which needs members.remove, so the callers most likely to want out were the ones who could not. The path names the membership rather than the organization, and the id comes from GET /v1/me/organizations: an {orgID} in a path means the middleware resolved a permission there, and nothing does here. A membership that is not the caller's own is 404, and the last owner of an organization is refused with 409 — appoint another owner first."
+      operationId: leave-organization
+      parameters:
+        - description: The caller's own membership, from GET /v1/me/organizations
+          in: path
+          name: membershipID
+          required: true
+          schema:
+            description: The caller's own membership, from GET /v1/me/organizations
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Leave an organization
+      tags:
+        - organizations
   /v1/me/organizations:
     get:
       description: "Returns every organization the account belongs to, including the ones it is suspended in, so a client can tell those apart. Invitations are not memberships and are listed separately at GET /v1/me/invitations. Self-service: no permission is required, and none can take it away."

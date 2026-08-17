@@ -376,7 +376,7 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 		// Removal is the one thing that must still work on such a row: everything
 		// else reports it as missing, so refusing here too would leave it in the
 		// organization with no way to take it out.
-		if err := b.repo.RemoveMember(t.Context(), orgID, goneMember, orgs.RefuseLastOwnerLoss(true)); err != nil {
+		if err := b.repo.RemoveMember(t.Context(), orgID, goneMember, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
 			t.Errorf("RemoveMember() for a deleted account = %v, want it removed", err)
 		}
 	})
@@ -413,7 +413,7 @@ func TestTheOwnerStateBothSidesSee(t *testing.T) {
 
 			var seen orgs.OwnerState
 
-			err := b.repo.RemoveMember(t.Context(), orgID, memberID, func(s orgs.OwnerState) error {
+			err := b.repo.RemoveMember(t.Context(), orgID, memberID, models.ActionMemberRemoved, func(s orgs.OwnerState) error {
 				seen = s
 
 				return errStop

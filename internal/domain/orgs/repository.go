@@ -68,7 +68,10 @@ var (
 
 // Membership is the view of one organization from one account's point of view.
 type Membership struct {
-	ID           uuid.UUID // the membership, used to accept or decline an invitation
+	// ID is the membership itself, which is what a self-service caller names to
+	// leave. It used to be how an invitation was accepted or declined, back when an
+	// invitation was a membership row; those go by token now.
+	ID           uuid.UUID
 	Organization models.Organization
 	Status       models.MembershipStatus
 	RoleKeys     []string
@@ -253,11 +256,16 @@ type Memberships interface {
 	// RemoveMember deletes the membership and, by cascade, its role
 	// assignments.
 	//
+	// action is what the audit entry says, and it is a parameter for the same
+	// reason guard is: the row disappearing looks identical from here, and only the
+	// caller knows whether an administrator removed somebody or somebody left. The
+	// store times the write; the domain decides what it means.
+	//
 	// It is the one method here that still works on a membership whose account
 	// has been deleted, and it must stay that way: everything else reports such a
 	// row as not found, so refusing here too would leave it in the organization
 	// with no way to take it out. Do not add a Member lookup in front of this.
-	RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, guard OwnerGuard) error
+	RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, action models.AuthzAction, guard OwnerGuard) error
 
 	// ReplaceMemberRoles sets the member's roles to exactly roleIDs, in one
 	// transaction.

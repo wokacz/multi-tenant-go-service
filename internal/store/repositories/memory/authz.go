@@ -549,7 +549,12 @@ func (m *Authz) SetMemberStatus(
 	return nil
 }
 
-func (m *Authz) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
+func (m *Authz) RemoveMember(
+	ctx context.Context,
+	orgID, memberID uuid.UUID,
+	action models.AuthzAction,
+	guard orgs.OwnerGuard,
+) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -565,7 +570,7 @@ func (m *Authz) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, gua
 	m.recordLocked(ctx, models.AuthzEvent{
 		OrganizationID: &orgID,
 		SubjectID:      m.subjectOfLocked(memberID),
-		Action:         models.ActionMemberRemoved,
+		Action:         action,
 	})
 
 	delete(m.memberships, memberID)

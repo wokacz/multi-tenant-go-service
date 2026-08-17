@@ -152,7 +152,8 @@ func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID
 			// No member to compare ranks with. The row may still exist with a
 			// deleted account behind it, and removing it is the only way to clean
 			// that up, so the repository decides.
-			return s.repo.RemoveMember(ctx, orgID, memberID, RefuseLastOwnerLoss(true))
+			return s.repo.RemoveMember(ctx, orgID, memberID,
+				models.ActionMemberRemoved, RefuseLastOwnerLoss(true))
 		}
 
 		return err
@@ -162,7 +163,8 @@ func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID
 		return err
 	}
 
-	return s.repo.RemoveMember(ctx, orgID, memberID, RefuseLastOwnerLoss(true))
+	return s.repo.RemoveMember(ctx, orgID, memberID,
+		models.ActionMemberRemoved, RefuseLastOwnerLoss(true))
 }
 
 // SetMemberRoles replaces somebody's roles.

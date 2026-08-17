@@ -364,9 +364,12 @@ func TestAnOwnerCanStillActOnAnAdministrator(t *testing.T) {
 		expect(t, http.StatusNoContent)
 }
 
-// TestTheRankRuleDoesNotBlockLeaving keeps the one exit an organization has open.
-// The caller's own membership carries exactly the permissions their grant does, so
-// the comparison passes — this pins that it stays that way.
+// TestTheRankRuleDoesNotBlockLeaving covers walking out through remove-member,
+// which is the administrative route and needs members.remove. The self-service one
+// is leave-organization; this stays because an administrator removing their own
+// membership must not be caught by the rank rule. The caller's own membership
+// carries exactly the permissions their grant does, so the comparison passes —
+// this pins that it stays that way.
 func TestTheRankRuleDoesNotBlockLeaving(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleAdmin)
 

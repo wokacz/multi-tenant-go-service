@@ -394,6 +394,40 @@ Statusy odmowy są rozróżnione, bo wołający **trzyma token** — istnienie z
 | token nieznany          | 404    | `not_found`                   |
 | oferta wygasła          | 410    | `invitation_expired`          |
 
+## Wyjście z organizacji
+
+| Operacja           | Ścieżka                                     | Kategoria                |
+|--------------------|---------------------------------------------|--------------------------|
+| opuszczenie własne | `DELETE /v1/me/memberships/{membershipID}`  | samoobsługowa            |
+| usunięcie kogoś    | `DELETE /v1/orgs/{orgID}/members/{memberID}`| `members.remove`         |
+
+Dwie operacje, bo różni je **co je autoryzuje** — dokładnie jak przy wycofaniu i odrzuceniu zaproszenia. Do niedawna
+istniała tylko druga, więc jedyne wyjścia to była prośba do administratora albo `remove-member` na sobie samym, co
+wymaga `members.remove`: wołający najbardziej zainteresowani wyjściem — ci bez żadnych uprawnień — byli jedynymi,
+którzy nie mogli. Uprawnienie za tą operacją znaczyłoby, że organizacja może skonfigurować rolę, która nie potrafi
+odejść.
+
+**Ścieżka nazywa członkostwo, nie organizację.** `{orgID}` w ścieżce znaczy „middleware rozstrzygnął tu uprawnienie" i
+ma znaczyć tylko to; `TestHandlersDoNotReadTheOrgIDParameter` pilnuje, że handler nigdy nie czyta tego parametru z
+requestu. Trasa samoobsługowa z `{orgID}` byłaby pierwszym wyjątkiem od tej reguły — a identyfikator członkostwa i tak
+przychodzi z `GET /v1/me/organizations`, więc klient nic nie traci.
+
+Autoryzacją jest to, że **członkostwo znajduje się na własnej liście wołającego**. Cudze `id` daje 404, nie 403: 403
+potwierdziłoby, że taki wiersz istnieje. Nic w tej ścieżce nie bierze identyfikatora organizacji z requestu, więc nie ma
+kształtu, w którym trafiłby on do zawężonej metody repozytorium bez sprawdzenia.
+
+**Reguła ostatniego właściciela obowiązuje bez zmian** — 409 z kodem `last_owner`. Ktoś musi móc administrować
+organizacją, a „odchodzę" nie jest powodem do wyjątku; odmowa mówi wołającemu, żeby najpierw wskazał innego właściciela,
+i to jest rzecz, którą może zrobić.
+
+Dziennik rozróżnia oba wyjścia: `member.left` i `member.removed`. Czytający mógłby je rozpoznać porównując aktora z
+podmiotem, ale „Ada usunęła Adę z organizacji" nie jest tym, co się stało. To ta sama para co
+`member.invitation_declined` i `member.invitation_withdrawn`.
+
+Akcja jest **parametrem** `RemoveMember` z tego samego powodu, z jakiego `guard` jest callbackiem: usunięcie wiersza
+wygląda w store identycznie, a tylko wołający wie, czy administrator kogoś usunął, czy ktoś odszedł. Store odpowiada za
+moment zapisu, domena za jego znaczenie.
+
 ## Reguły transakcyjne: gdzie mieszka decyzja
 
 Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu organizacji.

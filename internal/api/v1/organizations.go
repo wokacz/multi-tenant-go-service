@@ -43,7 +43,7 @@ func newOrganizationResponse(o *models.Organization) OrganizationResponse {
 // listing at GET /v1/me/invitations — being in both would be two answers to
 // "which organizations am I in".
 type MembershipResponse struct {
-	ID           uuid.UUID            `json:"id" format:"uuid" doc:"Membership id, used to accept or decline an invitation"`
+	ID           uuid.UUID            `json:"id" format:"uuid" doc:"Membership id, which is what DELETE /v1/me/memberships/{membershipID} takes to leave"`
 	Organization OrganizationResponse `json:"organization"`
 	Status       string               `json:"status" enum:"active,suspended" doc:"Where the caller stands in this organization"`
 	Roles        []string             `json:"roles" doc:"Keys of the roles the caller holds here"`
@@ -151,6 +151,50 @@ func registerOrganizations(api huma.API, service *orgs.Service) {
 		DefaultStatus: http.StatusNoContent,
 		Errors:        append(orgErrors(), http.StatusConflict),
 	}, h.remove)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "leave-organization",
+		Method:      http.MethodDelete,
+		Path:        Prefix + "/me/memberships/{membershipID}",
+		Summary:     "Leave an organization",
+		Description: "Removes the caller's own membership. Self-service: no " +
+			"permission is required, and none can take it away — until this " +
+			"existed the only ways out were asking an administrator or calling " +
+			"remove-member on yourself, which needs members.remove, so the callers " +
+			"most likely to want out were the ones who could not. " +
+			"The path names the membership rather than the organization, and the id " +
+			"comes from GET /v1/me/organizations: an {orgID} in a path means the " +
+			"middleware resolved a permission there, and nothing does here. " +
+			"A membership that is not the caller's own is 404, and the last owner of " +
+			"an organization is refused with 409 — appoint another owner first.",
+		Tags:          []string{"organizations"},
+		Security:      bearer(),
+		DefaultStatus: http.StatusNoContent,
+		Errors: []int{
+			http.StatusUnauthorized,
+			http.StatusNotFound,
+			http.StatusConflict,
+		},
+	}, h.leave)
+}
+
+// leave is self-service, so there is no grant to read: the session says who is
+// asking, and orgs.Leave resolves the membership inside the caller's own list.
+func (h *organizationHandlers) leave(ctx context.Context, in *LeaveOrganizationInput) (*struct{}, error) {
+	sess, ok := auth.SessionFrom(ctx)
+	if !ok {
+		return nil, problem.Error(ctx, user.ErrUnauthorized)
+	}
+
+	if err := h.orgs.Leave(ctx, sess.UserID, in.MembershipID); err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return nil, nil
+}
+
+type LeaveOrganizationInput struct {
+	MembershipID uuid.UUID `path:"membershipID" format:"uuid" doc:"The caller's own membership, from GET /v1/me/organizations"`
 }
 
 type UpdateOrganizationRequest struct {

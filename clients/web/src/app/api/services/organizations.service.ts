@@ -53,6 +53,45 @@ export class OrganizationsService {
     return context.set(this.clientContextToken, 'default');
   }
 
+  leaveOrganization(
+    membershipID: string,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  leaveOrganization(
+    membershipID: string,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  leaveOrganization(
+    membershipID: string,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Removes the caller's own membership. Self-service: no permission is required, and none can take it away — until this existed the only ways out were asking an administrator or calling remove-member on yourself, which needs members.remove, so the callers most likely to want out were the ones who could not. The path names the membership rather than the organization, and the id comes from GET /v1/me/organizations: an {orgID} in a path means the middleware resolved a permission there, and nothing does here. A membership that is not the caller's own is 404, and the last owner of an organization is refused with 409 — appoint another owner first. */
+  leaveOrganization(
+    membershipID: string,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/memberships/${membershipID}`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+
+    return this.httpClient.request('delete', url, {
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
   listMyOrganizations(
     observe?: 'body',
     options?: RequestOptions<'json'>,

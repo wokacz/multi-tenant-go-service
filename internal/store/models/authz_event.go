@@ -40,7 +40,15 @@ const (
 	// "who ended this" is the question the entry exists to answer.
 	ActionMemberInvitationWithdrawn AuthzAction = "member.invitation_withdrawn"
 
-	ActionMemberRemoved      AuthzAction = "member.removed"
+	ActionMemberRemoved AuthzAction = "member.removed"
+
+	// ActionMemberLeft is somebody walking out on their own, as opposed to being
+	// shown the door. Both delete the same row, and a reader could tell them apart
+	// by comparing actor to subject, but "Ada removed Ada from the organization" is
+	// not what happened and not what a history should say. The same pair of actions
+	// exists for an invitation ending: declined by the invitee, withdrawn by the
+	// organization.
+	ActionMemberLeft         AuthzAction = "member.left"
 	ActionMemberSuspended    AuthzAction = "member.suspended"
 	ActionMemberReinstated   AuthzAction = "member.reinstated"
 	ActionMemberRolesChanged AuthzAction = "member.roles_changed"
@@ -59,7 +67,7 @@ func (a AuthzAction) Valid() bool {
 	case ActionOrganizationCreated, ActionOrganizationUpdated, ActionOrganizationDeleted,
 		ActionMemberInvited, ActionMemberAccepted, ActionMemberJoined,
 		ActionMemberInvitationDeclined, ActionMemberInvitationWithdrawn,
-		ActionMemberRemoved, ActionMemberSuspended,
+		ActionMemberRemoved, ActionMemberLeft, ActionMemberSuspended,
 		ActionMemberReinstated, ActionMemberRolesChanged,
 		ActionRoleCreated, ActionRoleUpdated, ActionRoleDeleted, ActionRolePermissionsChanged,
 		ActionSystemRoleGranted, ActionSystemRoleRevoked:

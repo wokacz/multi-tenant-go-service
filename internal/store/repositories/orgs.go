@@ -140,6 +140,7 @@ type memberRow struct {
 // "AND u.deleted_at IS NULL" filtered nothing and a deleted account stayed on the
 // list with an empty name. Every membership has an account behind it now, so the
 // rule "a row whose account is gone is not a member" is the join itself.
+//
 // It is paged, and the order carries the membership id as a tiebreaker. Names are
 // not unique, and a sort with ties is free to return them in any order it likes
 // between two queries — which with an offset means a page boundary that drops one
@@ -364,7 +365,12 @@ func (r *Orgs) SetMemberStatus(
 	return translateOrgError("set member status", err)
 }
 
-func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
+func (r *Orgs) RemoveMember(
+	ctx context.Context,
+	orgID, memberID uuid.UUID,
+	action models.AuthzAction,
+	guard orgs.OwnerGuard,
+) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := applyOwnerGuard(tx, orgID, memberID, guard); err != nil {
 			return err
@@ -372,7 +378,7 @@ func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, guar
 
 		// The subject is read before the row goes, or there is nothing left to
 		// attribute the entry to.
-		event := &models.AuthzEvent{OrganizationID: &orgID, Action: models.ActionMemberRemoved}
+		event := &models.AuthzEvent{OrganizationID: &orgID, Action: action}
 		if err := recordAboutMember(ctx, tx, orgID, memberID, event); err != nil {
 			return err
 		}

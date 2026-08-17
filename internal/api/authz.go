@@ -58,6 +58,11 @@ var selfServiceOperations = map[string]bool{
 	"confirm-email-change":  true,
 	"decline-invitation":    true,
 
+	// Leaving is the caller acting on their own membership. A permission behind it
+	// would mean an organization could configure a role that cannot walk away — and
+	// the callers most likely to want out are the ones holding no permissions at all.
+	"leave-organization": true,
+
 	// The permission catalog describes what the product can do, not what any
 	// organization's data is. Gating it would leave a caller who may edit roles
 	// unable to see the list of permissions to put in them.

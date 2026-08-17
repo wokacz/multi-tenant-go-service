@@ -152,7 +152,7 @@ func TestTheOwnerStateTheGuardSeesCountsOnlyRealOwners(t *testing.T) {
 
 		var seen orgs.OwnerState
 
-		err := repo.RemoveMember(t.Context(), org.ID, memberID, func(state orgs.OwnerState) error {
+		err := repo.RemoveMember(t.Context(), org.ID, memberID, models.ActionMemberRemoved, func(state orgs.OwnerState) error {
 			seen = state
 
 			return errStop
@@ -318,12 +318,12 @@ func TestAnOwnerWhoseAccountIsDeletedDoesNotBlockRemoval(t *testing.T) {
 		t.Fatalf("delete user: %v", err)
 	}
 
-	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID, orgs.RefuseLastOwnerLoss(true)); err != nil {
+	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("RemoveMember() for an owner whose account is deleted = %v, want it removed", err)
 	}
 
 	// The rule still holds for the owner who is actually there.
-	err := repo.RemoveMember(t.Context(), org.ID, liveMembership.ID, orgs.RefuseLastOwnerLoss(true))
+	err := repo.RemoveMember(t.Context(), org.ID, liveMembership.ID, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true))
 	if !errors.Is(err, orgs.ErrLastOwner) {
 		t.Errorf("RemoveMember() for the last live owner = %v, want ErrLastOwner", err)
 	}
@@ -488,7 +488,7 @@ func TestRemovingAMemberCascadesTheirRoleAssignments(t *testing.T) {
 
 	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
 
-	if err := repo.RemoveMember(t.Context(), org.ID, membership.ID, orgs.RefuseLastOwnerLoss(true)); err != nil {
+	if err := repo.RemoveMember(t.Context(), org.ID, membership.ID, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("RemoveMember() = %v", err)
 	}
 
@@ -594,7 +594,7 @@ func TestConcurrentDemotionsLeaveOneOwner(t *testing.T) {
 
 	var seen orgs.OwnerState
 
-	err := repo.RemoveMember(t.Context(), org.ID, first.ID, func(state orgs.OwnerState) error {
+	err := repo.RemoveMember(t.Context(), org.ID, first.ID, models.ActionMemberRemoved, func(state orgs.OwnerState) error {
 		seen = state
 
 		return errStop
