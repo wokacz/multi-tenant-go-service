@@ -148,13 +148,21 @@ type OwnerGuard func(OwnerState) error
 // count and the delete and lose the assignment to the cascade.
 type RoleGuard func(holders int) error
 
-// Repository is the organization-scoped persistence.
+// Repository is the organization-scoped persistence: everything an operation
+// inside one organization needs.
 //
-// Every method takes the organization id as its second parameter, and that is
-// not a formatting rule. It is what makes the resource half of an authorization
-// decision structural: the middleware establishes that the caller may act in
-// organization X, and there is then no way to load a role, a member or a
-// setting except by naming an organization. Forgetting the scope check becomes
+// It is the union of four groups, and it keeps a single name because orgs.Service
+// genuinely uses all four. Nothing depends on one group alone today; the groups
+// are here because seventeen methods under one comment is a list nobody reads, and
+// because a consumer that only needs the roster should be able to say so and get a
+// smaller double in its tests. cmd/bootstrap already depends on Provisioner alone,
+// which is the same idea one interface further out.
+//
+// Every method in every group takes the organization id as its second parameter,
+// and that is not a formatting rule. It is what makes the resource half of an
+// authorization decision structural: the middleware establishes that the caller
+// may act in organization X, and there is then no way to load a role, a member or
+// a setting except by naming an organization. Forgetting the scope check becomes
 // a compile error rather than a hole somebody has to spot in review, and a row
 // from another tenant simply cannot be reached.
 //
@@ -164,8 +172,18 @@ type RoleGuard func(holders int) error
 // page is visible, while silently answering with the whole table is what
 // pagination exists to prevent.
 //
-// TestScopedRepositoryMethodsTakeAnOrganization enforces the shape.
+// TestScopedRepositoryMethodsTakeAnOrganization enforces the shape. It reflects
+// over this interface, and embedded methods are promoted, so a group added to the
+// list below is covered without anybody remembering to extend the test.
 type Repository interface {
+	Organizations
+	Memberships
+	Roles
+	Invitations
+}
+
+// Organizations is the organization row itself.
+type Organizations interface {
 	// Organization returns the organization, or ErrNotFound when it does not
 	// exist or has been deleted.
 	Organization(ctx context.Context, orgID uuid.UUID) (*models.Organization, error)
@@ -176,59 +194,57 @@ type Repository interface {
 	// DeleteOrganization soft deletes it. It returns models.ErrProtected for an
 	// organization marked as protected — the default one is.
 	DeleteOrganization(ctx context.Context, orgID uuid.UUID) error
+}
 
-	// Members lists everyone in the organization, including invitations and
-	// suspensions, with the roles each holds.
+// Memberships is who is in the organization, and what each of them holds.
+type Memberships interface {
+	// Members lists everyone in the organization, suspensions included, with the
+	// roles each holds.
 	//
-	// A membership whose account has been deleted is not listed. Soft deleting an
-	// account does not fire the foreign key cascade, so the membership row
-	// outlives its person; reporting it would put an entry with no name and
-	// nobody behind it into every administrator's list. An invitation, which has
-	// no account yet, *is* listed — the difference between "nobody has taken this
-	// up" and "the person is gone" is worth keeping.
+	// It does not list invitations, and this comment claimed otherwise for two
+	// commits after they moved to a table of their own. InvitationsForOrganization
+	// is where they are now.
 	//
-	// This is the one statement of that rule. Every method here that resolves a
-	// membership to a person answers it the same way: Member, MemberByUser, and
+	// A membership whose account has been deleted is not listed either. Soft
+	// deleting an account does not fire the foreign key cascade, so the membership
+	// row outlives its person; reporting it would put an entry with no name and
+	// nobody behind it into every administrator's list.
+	//
+	// That rule has one statement, and this is it. Every method here that resolves
+	// a membership to a person answers it the same way: Member, MemberByUser, and
 	// the last-owner check.
 	//
 	// Paged, because it was not: an organization with fifty thousand members
 	// answered with all of them, and then asked for their roles with an IN list of
-	// fifty thousand ids. Ordered by name so the pages are stable between calls.
+	// fifty thousand ids. Ordered by (name, id), which is total, so a page boundary
+	// falls in the same place twice.
 	Members(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]Member, error)
 
 	// Member returns one membership by its id, or ErrNotFound when it belongs
 	// to another organization or its account has been deleted.
 	Member(ctx context.Context, orgID, memberID uuid.UUID) (*Member, error)
 
+	// MemberByUser finds the membership belonging to an account, or ErrNotFound.
+	// A deleted account is ErrNotFound, the same as in Members and Member.
+	MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*Member, error)
+
+	// MemberPermissions is the union of what this membership's roles grant, in
+	// one query rather than one per role.
+	//
+	// Status is deliberately not considered. A suspended member grants nothing
+	// while suspended, but the question this answers is "how much power does this
+	// row carry", which is what EnsureCanAffect compares against the caller — and
+	// a suspended owner should not become removable by an administrator merely
+	// because somebody suspended them first.
+	MemberPermissions(ctx context.Context, orgID, memberID uuid.UUID) ([]authz.Permission, error)
+
 	// AddMember creates an active membership for an existing account and
 	// assigns the given roles, in one transaction. It is the provisioning
 	// path — bootstrap, promoting the first owner — not the invitation path.
 	//
-	// An outstanding invitation for the same address is claimed (activated and
-	// given these roles) rather than refused. That is wanted where the caller is
-	// an operator acting out of band: without it, an account that happens to
-	// have been invited could never be promoted, because the invitation blocks
-	// the insert and nobody yet holds the permission to withdraw it. It is not
-	// wanted on the registration path, which is why JoinDefaultOrganization
-	// looks for an invitation before calling this — claiming one there would
-	// accept an invitation on the invitee's behalf and downgrade its roles.
-	//
-	// It returns ErrAlreadyMember when the account is already a live member.
+	// It returns ErrAlreadyMember when the account is already a live member, and
+	// ErrNotFound when there is no such account.
 	AddMember(ctx context.Context, orgID, userID uuid.UUID, roleIDs []uuid.UUID, invitedBy uuid.UUID, at time.Time) (*Member, error)
-
-	// InviteMember records an invitation for the address and stores the hash of
-	// its token.
-	//
-	// It does not look the address up in the account table: that lookup is what
-	// would tell the caller whether the person is registered anywhere in the
-	// installation. Unknown and known addresses produce the same row and the same
-	// response.
-	//
-	// ErrAlreadyMember covers both "this organization already has an outstanding
-	// invitation for that address" and "that address is already a member" — one
-	// answer, because the caller may act on either the same way and telling them
-	// apart is not worth a second code.
-	InviteMember(ctx context.Context, orgID uuid.UUID, email, tokenHash string, roleIDs []uuid.UUID, invitedBy uuid.UUID, expiresAt, at time.Time) (*Invitation, error)
 
 	// SetMemberStatus suspends or reinstates a membership. guard is called inside
 	// the transaction, with the organization row locked.
@@ -252,9 +268,13 @@ type Repository interface {
 	// this organization's, which is what stops a role being borrowed across
 	// tenants.
 	ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID, guard OwnerGuard) error
+}
 
+// Roles is the organization's roles and what they grant.
+type Roles interface {
 	// Roles lists the organization's roles with their permissions and holder
-	// counts, paged and ordered by key.
+	// counts, paged. The shipped ones come first, then by key, which is unique
+	// within an organization and makes the order total.
 	Roles(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]Role, error)
 
 	// Role returns one role, or ErrNotFound when it belongs to another
@@ -264,20 +284,6 @@ type Repository interface {
 	// RoleByKey finds a role by its stable key, which is how the shipped roles
 	// are addressed by anything that did not read them from the database first.
 	RoleByKey(ctx context.Context, orgID uuid.UUID, key string) (*Role, error)
-
-	// MemberByUser finds the membership belonging to an account, or ErrNotFound.
-	// A deleted account is ErrNotFound, the same as in Members and Member.
-	MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*Member, error)
-
-	// MemberPermissions is the union of what this membership's roles grant, in
-	// one query rather than one per role.
-	//
-	// Status is deliberately not considered. A suspended member grants nothing
-	// while suspended, but the question this answers is "how much power does this
-	// row carry", which is what EnsureCanAffect compares against the caller — and
-	// a suspended owner should not become removable by an administrator merely
-	// because somebody suspended them first.
-	MemberPermissions(ctx context.Context, orgID, memberID uuid.UUID) ([]authz.Permission, error)
 
 	// CreateRole stores a role and its permissions in one transaction. It
 	// returns ErrRoleKeyTaken when the key is already used here.
@@ -296,13 +302,56 @@ type Repository interface {
 	ReplaceRolePermissions(ctx context.Context, orgID, roleID uuid.UUID, permissions []authz.Permission) error
 }
 
+// Invitations is the offer of membership, from the organization's side.
+//
+// Its counterparts on the invitee's side — finding an invitation by its token,
+// accepting one, declining one, listing the ones addressed to you — are in
+// Directory, because none of them can name an organization: the token is all the
+// holder has. Splitting the surface along that line is not an accident of who
+// wrote what. It is the difference between authorization by permission and
+// authorization by holding a secret, and each half is scoped by what it can be.
+type Invitations interface {
+	// InviteMember records an invitation for the address and stores the hash of
+	// its token.
+	//
+	// It does not look the address up in the account table: that lookup is what
+	// would tell the caller whether the person is registered anywhere in the
+	// installation. Unknown and known addresses produce the same row and the same
+	// response.
+	//
+	// ErrAlreadyMember covers both "this organization already has an outstanding
+	// invitation for that address" and "that address is already a member" — one
+	// answer, because the caller may act on either the same way and telling them
+	// apart is not worth a second code.
+	InviteMember(ctx context.Context, orgID uuid.UUID, email, tokenHash string, roleIDs []uuid.UUID, invitedBy uuid.UUID, expiresAt, at time.Time) (*Invitation, error)
+
+	// InvitationsForOrganization lists the pending invitations an organization has
+	// issued, so an administrator can see what is outstanding. Before invitations
+	// had their own table they appeared in the members list, which is where anybody
+	// looking for them still expects to find them — hence a listing of their own
+	// rather than nothing at all.
+	InvitationsForOrganization(ctx context.Context, orgID uuid.UUID, now time.Time) ([]Invitation, error)
+
+	// ReissueInvitation replaces the token hash and the expiry on an outstanding
+	// invitation, so the old link stops working. Anything else called "resend"
+	// either keeps a leaked link alive or collides with the row already there.
+	ReissueInvitation(ctx context.Context, orgID, invitationID uuid.UUID, tokenHash string, expiresAt time.Time) (*Invitation, error)
+
+	// WithdrawInvitation removes an offer the organization made.
+	WithdrawInvitation(ctx context.Context, orgID, invitationID uuid.UUID) error
+}
+
 // Directory is the persistence that deliberately is not scoped to one
 // organization: the questions an account asks about itself, before any
-// organization has been chosen, and the account lookup an invitation needs.
+// organization has been chosen, and the invitation an invitee reaches through the
+// token they were sent.
 //
 // It is a separate interface rather than a handful of exceptions inside
 // Repository, so that "every method here is scoped" stays a rule with no
-// asterisks.
+// asterisks. It had grown three of them — listing, reissuing and withdrawing an
+// invitation all name an organization and all sat here, because that is where the
+// invitation code was being written at the time. They are in Invitations now, and
+// the scoping test covers them for the first time as a result.
 type Directory interface {
 	// MembershipsForUser lists the live organizations the account belongs to,
 	// including suspensions, so the client can render those differently rather
@@ -328,23 +377,6 @@ type Directory interface {
 	// authorization: the person who can read the mailbox is the person entitled to
 	// refuse.
 	DeclineInvitation(ctx context.Context, invitationID uuid.UUID) error
-
-	// InvitationsForOrganization lists the pending invitations an organization has
-	// issued, so an administrator can see what is outstanding. Before invitations
-	// had their own table they appeared in the members list, which is where anybody
-	// looking for them still expects to find them — hence a listing of their own
-	// rather than nothing at all.
-	InvitationsForOrganization(ctx context.Context, orgID uuid.UUID, now time.Time) ([]Invitation, error)
-
-	// ReissueInvitation replaces the token hash and the expiry on an outstanding
-	// invitation, so the old link stops working. Anything else called "resend"
-	// either keeps a leaked link alive or collides with the row already there.
-	ReissueInvitation(ctx context.Context, orgID, invitationID uuid.UUID, tokenHash string, expiresAt time.Time) (*Invitation, error)
-
-	// WithdrawInvitation removes an offer the organization made. It is scoped by
-	// organization for the same reason every other scoped method is: an invitation
-	// id from another tenant must answer nothing.
-	WithdrawInvitation(ctx context.Context, orgID, invitationID uuid.UUID) error
 
 	// InvitationsForEmail lists the pending invitations addressed to one account,
 	// so a client can show "you have been invited to X" without the token. Taking

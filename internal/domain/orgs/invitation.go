@@ -167,7 +167,7 @@ func newInvitationToken() (string, error) {
 // without putting it anywhere else would have left an offer nobody could see or
 // take back.
 func (s *Service) Invitations(ctx context.Context, grant *authz.Grant) ([]Invitation, error) {
-	return s.dir.InvitationsForOrganization(ctx, grant.OrganizationID(), time.Now().UTC())
+	return s.repo.InvitationsForOrganization(ctx, grant.OrganizationID(), time.Now().UTC())
 }
 
 // WithdrawInvitation takes back an offer the organization made.
@@ -177,7 +177,7 @@ func (s *Service) Invitations(ctx context.Context, grant *authz.Grant) ([]Invita
 // invitee holds the token, the organization holds members.remove. Folding them into
 // one endpoint would mean one of the two authorizations standing in for the other.
 func (s *Service) WithdrawInvitation(ctx context.Context, grant *authz.Grant, invitationID uuid.UUID) error {
-	return s.dir.WithdrawInvitation(ctx, grant.OrganizationID(), invitationID)
+	return s.repo.WithdrawInvitation(ctx, grant.OrganizationID(), invitationID)
 }
 
 // Reissue replaces an outstanding invitation's token and pushes its expiry out,
@@ -198,7 +198,7 @@ func (s *Service) Reissue(
 
 	now := time.Now().UTC()
 
-	invitation, err := s.dir.ReissueInvitation(ctx, grant.OrganizationID(), invitationID,
+	invitation, err := s.repo.ReissueInvitation(ctx, grant.OrganizationID(), invitationID,
 		HashInvitationToken(token), now.Add(InvitationTTL))
 	if err != nil {
 		return nil, "", err

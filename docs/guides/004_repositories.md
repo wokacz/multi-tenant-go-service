@@ -53,6 +53,35 @@ Konwencje:
 Rzeczy niezwiązane z pojedynczą organizacją (tworzenie organizacji, listowanie kont) idą do **osobnego** interfejsu —
 `Provisioner`, `Directory` — żeby zasada „każda metoda tutaj jest zawężona" nie miała gwiazdek.
 
+### Grupy w jednym interfejsie
+
+Kiedy interfejs przekracza kilkanaście metod, dziel go na **grupy i składaj z powrotem przez zagnieżdżenie**, zamiast
+zostawiać jedną listę albo rozdawać konsumentom cztery pola:
+
+```go
+type Repository interface {
+Organizations
+Memberships
+Roles
+Invitations
+}
+```
+
+Dlaczego tak:
+
+- `orgs.Service` używa wszystkich czterech grup, więc jedno pole `repo Repository` jest uczciwsze niż cztery pola, które
+  zawsze dostają ten sam obiekt,
+- konsument, który potrzebuje tylko listy członków, może zażądać `orgs.Memberships` — i **nie ma jak** sięgnąć po rolę,
+- podwójna implementacja w teście jest wtedy odpowiednio mniejsza (`cmd/bootstrap` bierze sam `Provisioner`),
+- refleksja widzi metody promowane, więc `TestScopedRepositoryMethodsTakeAnOrganization` obejmuje wszystkie grupy —
+  także tę dodaną później, bez dopisywania jej do testu.
+
+**Pułapka, która już się zdarzyła.** Trzy metody zaproszeń (`InvitationsForOrganization`, `ReissueInvitation`,
+`WithdrawInvitation`) przyjmują `orgID`, ale przez kilka commitów leżały w `Directory` — bo tam dopisywano wtedy kod
+zaproszeń. `Directory` jest z definicji niezawężony i test refleksyjny go nie czyta, więc były to jedyne zawężone metody
+w pakiecie, których nic nie pilnowało. Jeśli metoda przyjmuje `orgID`, jej miejsce jest w grupie wewnątrz `Repository`,
+a nie w `Directory` — niezależnie od tego, obok czego wygodnie ją pisać.
+
 ## Paginacja
 
 Każda metoda, która zwraca listę, przyjmuje `limit` i `offset`. Limit **przycina

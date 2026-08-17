@@ -219,6 +219,12 @@ func TestSelfServiceOperationsHaveNoOrganizationInTheirPath(t *testing.T) {
 // there is no way to ask for a row without naming an organization. This asserts
 // the interface keeps that shape, so the check cannot be forgotten — it is not
 // a check at all, it is the only available call.
+//
+// orgs.Repository is an embedding of four groups, and reflection sees promoted
+// methods, so this covers every one of them and will cover a fifth group without
+// being told about it. That matters more than it sounds: three invitation methods
+// spent several commits in orgs.Directory, which this test does not read, and so
+// were the only scoped methods in the package nothing was pinning.
 func TestScopedRepositoryMethodsTakeAnOrganization(t *testing.T) {
 	iface := reflect.TypeOf((*orgs.Repository)(nil)).Elem()
 	want := reflect.TypeOf(uuid.UUID{})

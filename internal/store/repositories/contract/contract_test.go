@@ -635,7 +635,7 @@ func TestReissuingAnInvitationInvalidatesTheOldToken(t *testing.T) {
 			t.Fatalf("InviteMember() = _, %v", err)
 		}
 
-		if _, err := b.dir.ReissueInvitation(t.Context(), orgID, invitation.ID,
+		if _, err := b.repo.ReissueInvitation(t.Context(), orgID, invitation.ID,
 			orgs.HashInvitationToken(second), now.Add(orgs.InvitationTTL)); err != nil {
 			t.Fatalf("ReissueInvitation() = _, %v", err)
 		}
@@ -666,17 +666,17 @@ func TestAnInvitationIsScopedToItsOrganization(t *testing.T) {
 			t.Fatalf("InviteMember() = _, %v", err)
 		}
 
-		if err := b.dir.WithdrawInvitation(t.Context(), foreign, invitation.ID); !errors.Is(err, orgs.ErrNotFound) {
+		if err := b.repo.WithdrawInvitation(t.Context(), foreign, invitation.ID); !errors.Is(err, orgs.ErrNotFound) {
 			t.Errorf("withdrawing from another organization = %v, want ErrNotFound", err)
 		}
 
-		if _, err := b.dir.ReissueInvitation(t.Context(), foreign, invitation.ID,
+		if _, err := b.repo.ReissueInvitation(t.Context(), foreign, invitation.ID,
 			orgs.HashInvitationToken("other"), now.Add(orgs.InvitationTTL)); !errors.Is(err, orgs.ErrNotFound) {
 			t.Errorf("reissuing from another organization = %v, want ErrNotFound", err)
 		}
 
 		// And it is still there, so the refusals refused rather than half-acting.
-		if err := b.dir.WithdrawInvitation(t.Context(), orgID, invitation.ID); err != nil {
+		if err := b.repo.WithdrawInvitation(t.Context(), orgID, invitation.ID); err != nil {
 			t.Errorf("WithdrawInvitation() from its own organization = %v", err)
 		}
 	})
