@@ -49,7 +49,11 @@ func TestSetMemberStatusRefusesInvited(t *testing.T) {
 		authz.PermOrganizationRead,
 	})
 
-	err := service.SetMemberStatus(t.Context(), grant, member, models.MembershipInvited)
+	// "invited" is no longer a status the enum knows, and this operation must keep
+	// refusing it — a row carrying it would be a membership nobody agreed to. The
+	// literal stands in for any status somebody adds to the enum later and forgets
+	// is settable from here.
+	err := service.SetMemberStatus(t.Context(), grant, member, models.MembershipStatus("invited"))
 	if !errors.Is(err, orgs.ErrInvalidStatus) {
 		t.Errorf("SetMemberStatus(invited) = %v, want ErrInvalidStatus", err)
 	}

@@ -57,15 +57,15 @@ func TestPermissionsAreTheUnionOfEveryRole(t *testing.T) {
 	}
 }
 
-// TestOnlyAnActiveMembershipGrantsAnything is the rule that an invitation is not
-// yet a membership and a suspension is not a deletion.
+// TestOnlyAnActiveMembershipGrantsAnything is the rule that a suspension is not a
+// deletion.
 //
-// Both must be indistinguishable from "no such organization" at the boundary,
-// which is why they resolve to ErrNotMember rather than to an empty grant: an
-// empty grant would produce a 403, and a 403 confirms the organization exists.
+// It must be indistinguishable from "no such organization" at the boundary, which
+// is why it resolves to ErrNotMember rather than to an empty grant: an empty grant
+// would produce a 403, and a 403 confirms the organization exists. An invitation
+// used to be the second case here and is no longer a membership at all.
 func TestOnlyAnActiveMembershipGrantsAnything(t *testing.T) {
 	for name, status := range map[string]models.MembershipStatus{
-		"invited":   models.MembershipInvited,
 		"suspended": models.MembershipSuspended,
 	} {
 		t.Run(name, func(t *testing.T) {

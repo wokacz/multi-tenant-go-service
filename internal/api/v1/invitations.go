@@ -44,6 +44,15 @@ type InvitationOutput struct {
 	Body InvitationResponse
 }
 
+func newInvitationResponse(i *orgs.Invitation) InvitationResponse {
+	return InvitationResponse{
+		Organization: newOrganizationResponse(&i.Organization),
+		Email:        i.Email,
+		Roles:        i.RoleKeys,
+		ExpiresAt:    i.ExpiresAt,
+	}
+}
+
 type ListMyInvitationsInput struct{}
 
 type ListMyInvitationsOutput struct {

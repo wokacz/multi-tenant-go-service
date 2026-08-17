@@ -66,6 +66,11 @@ func probesFor(f *authzFixture, roleID uuid.UUID) map[string]probe {
 	member := org + "/members/" + f.membership.String()
 	role := org + "/roles/" + roleID.String()
 
+	// An invitation id that does not exist is enough: this matrix is about which
+	// permission the middleware demands, and that is decided before the handler
+	// looks anything up.
+	invitation := org + "/invitations/" + uuid.Must(uuid.NewV7()).String()
+
 	return map[string]probe{
 		"get-organization":    {http.MethodGet, org, ""},
 		"update-organization": {http.MethodPatch, org, `{"name":"Renamed"}`},
@@ -83,6 +88,10 @@ func probesFor(f *authzFixture, roleID uuid.UUID) map[string]probe {
 		"update-role":          {http.MethodPatch, role, `{"name":"Probed"}`},
 		"set-role-permissions": {http.MethodPut, role + "/permissions", `{"permissions":[]}`},
 		"delete-role":          {http.MethodDelete, role, ""},
+
+		"list-invitations":    {http.MethodGet, org + "/invitations", ""},
+		"reissue-invitation":  {http.MethodPost, invitation + "/reissue", ""},
+		"withdraw-invitation": {http.MethodDelete, invitation, ""},
 
 		"list-audit-events": {http.MethodGet, org + "/audit", ""},
 	}
@@ -181,35 +190,41 @@ func TestTheSnapshotAgreesWithEnforcement(t *testing.T) {
 	}
 }
 
-// TestTheSnapshotOmitsOrganizationsThatGrantNothing keeps a suspended or merely
-// invited membership from looking usable.
+// TestTheSnapshotOmitsOrganizationsThatGrantNothing keeps a suspended membership
+// from looking usable.
+//
+// It used to cover an invited one as well, listed with an empty permission set so
+// it would not silently vanish from the UI. An invitation is not a membership any
+// more, so it is not in the snapshot at all — GET /v1/me/invitations is where a
+// client finds it, and that is a better answer than a membership that grants
+// nothing.
 func TestTheSnapshotOmitsOrganizationsThatGrantNothing(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleViewer)
 
-	invited := f.repo.SeedOrganization("beta", "Beta")
-	f.repo.SeedMember(invited, f.userID, models.MembershipInvited,
-		f.repo.SeedShippedRole(invited, authz.RoleOwner))
+	suspended := f.repo.SeedOrganization("beta", "Beta")
+	f.repo.SeedMember(suspended, f.userID, models.MembershipSuspended,
+		f.repo.SeedShippedRole(suspended, authz.RoleOwner))
 
 	snapshot := f.snapshot(t)
 
 	for _, entry := range snapshot.Organizations {
-		if entry.ID != invited {
+		if entry.ID != suspended {
 			continue
 		}
 
-		if entry.Status != string(models.MembershipInvited) {
-			t.Errorf("status = %q, want invited", entry.Status)
+		if entry.Status != string(models.MembershipSuspended) {
+			t.Errorf("status = %q, want suspended", entry.Status)
 		}
 
 		if len(entry.Permissions) != 0 {
-			t.Errorf("an invitation lists permissions %v; it grants nothing until accepted",
+			t.Errorf("a suspended membership lists permissions %v; it grants nothing",
 				entry.Permissions)
 		}
 
 		return
 	}
 
-	t.Error("the invitation is missing from the snapshot entirely; it should be visible but empty")
+	t.Error("the suspension is missing from the snapshot entirely; it should be visible but empty")
 }
 
 // TestTheSnapshotIsScopedToTheCaller is the tenancy check on the read path.

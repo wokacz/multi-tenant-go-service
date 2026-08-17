@@ -87,11 +87,9 @@ func (s *Service) SetMemberStatus(
 	memberID uuid.UUID,
 	status models.MembershipStatus,
 ) error {
-	// Not status.Valid(): that also accepts "invited", and this operation does not
-	// get to move anybody into a state meaning "waiting for their consent". Only
-	// the DTO's enum stopped it before, which leaves the rule on the edge of the
-	// API rather than where it belongs — and out of reach of any caller that is
-	// not an HTTP request.
+	// status.Valid() would do now that "invited" is gone from the enum, but the
+	// two are written out on purpose: this operation suspends and reinstates, and
+	// a status added to the enum later must not become settable here by default.
 	if status != models.MembershipActive && status != models.MembershipSuspended {
 		return ErrInvalidStatus
 	}
@@ -101,13 +99,6 @@ func (s *Service) SetMemberStatus(
 	member, err := s.repo.Member(ctx, orgID, memberID)
 	if err != nil {
 		return err
-	}
-
-	// An invitation is accepted by the invitee, not flipped to active by an
-	// administrator. PATCH would skip consent and, for an unknown address,
-	// have no account to attach.
-	if member.Status == models.MembershipInvited {
-		return ErrInvalidStatus
 	}
 
 	if err := s.ensureCanAffectMember(ctx, grant, member); err != nil {

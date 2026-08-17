@@ -65,10 +65,13 @@ func TestDefaultOrganizationCanBeProtected(t *testing.T) {
 func TestMembershipStatusOnlyGrantsWhenActive(t *testing.T) {
 	tests := map[models.MembershipStatus]struct{ valid, grants bool }{
 		models.MembershipActive:    {true, true},
-		models.MembershipInvited:   {true, false},
 		models.MembershipSuspended: {true, false},
 		"":                         {false, false},
 		"member":                   {false, false},
+		// "invited" was a status and is not one any more. It stays in the table as
+		// a case that must be rejected: a row carrying it is a membership that
+		// nobody agreed to, and the enum is what stops one being written.
+		"invited": {false, false},
 	}
 
 	for status, want := range tests {
@@ -91,25 +94,21 @@ func TestMembershipBeforeSaveRejectsAnUnknownStatus(t *testing.T) {
 	}
 
 	m.Status = models.MembershipActive
-	m.Email = "ada@example.com"
-	id := uuid.Must(uuid.NewV7())
-	m.UserID = &id
+	m.UserID = uuid.Must(uuid.NewV7())
 	if err := m.BeforeSave(nil); err != nil {
 		t.Errorf("BeforeSave() = %v, want nil", err)
 	}
 }
 
-func TestMembershipBeforeSaveRequiresAnEmail(t *testing.T) {
-	m := &models.Membership{Status: models.MembershipInvited}
+// TestMembershipBeforeSaveRequiresAnAccount is the invariant that replaced two
+// earlier ones. A membership used to be allowed without an account — that was how
+// an invitation was stored — so the rule had to be "an *active* one needs an
+// account", and an address column stood in for the missing person. Now every
+// membership is somebody.
+func TestMembershipBeforeSaveRequiresAnAccount(t *testing.T) {
+	m := &models.Membership{Status: models.MembershipActive}
 	if err := m.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for an empty email")
-	}
-}
-
-func TestMembershipBeforeSaveRequiresAnAccountWhenActive(t *testing.T) {
-	m := &models.Membership{Status: models.MembershipActive, Email: "ada@example.com"}
-	if err := m.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for an active membership with no account")
+		t.Error("BeforeSave() = nil, want an error for a membership with no account")
 	}
 }
 
@@ -118,7 +117,7 @@ func TestMembershipBeforeSaveRequiresAnAccountWhenActive(t *testing.T) {
 func TestActivateStampsJoinedAtOnlyOnce(t *testing.T) {
 	joined := time.Date(2020, time.March, 1, 12, 0, 0, 0, time.UTC)
 
-	m := &models.Membership{Status: models.MembershipInvited}
+	m := &models.Membership{Status: models.MembershipSuspended}
 	m.Activate(joined)
 
 	if m.JoinedAt == nil || !m.JoinedAt.Equal(joined) {

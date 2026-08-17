@@ -102,8 +102,16 @@ func TestAuthorizationUniqueIndexes(t *testing.T) {
 		"one membership per user and organization": {
 			&models.Membership{}, "idx_membership_user_org", []string{"user_id", "organization_id"},
 		},
-		"one membership per email and organization": {
-			&models.Membership{}, "idx_membership_org_email", []string{"organization_id", "email"},
+		// The address is no longer on a membership: an invitation is not one, and
+		// carried the address only because it had no account to point at.
+		"one invitation per address and organization": {
+			&models.Invitation{}, "idx_invitation_org_email", []string{"organization_id", "email"},
+		},
+		"one invitation token is unique across the installation": {
+			&models.Invitation{}, "idx_invitations_token_hash", []string{"token_hash"},
+		},
+		"one role per invitation": {
+			&models.InvitationRole{}, "idx_invitation_role", []string{"invitation_id", "role_id"},
 		},
 		"role keys are unique inside an organization": {
 			&models.Role{}, "idx_role_org_key", []string{"organization_id", "key"},

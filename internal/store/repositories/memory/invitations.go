@@ -33,7 +33,7 @@ func (m *Authz) InviteMember(
 			continue
 		}
 
-		if membership.UserID != nil && m.emailOfLocked(*membership.UserID) == email {
+		if m.emailOfLocked(membership.UserID) == email {
 			return nil, orgs.ErrAlreadyMember
 		}
 	}
@@ -150,11 +150,9 @@ func (m *Authz) AcceptInvitation(ctx context.Context, invitationID, userID uuid.
 		}
 	}
 
-	uid := userID
 	membership := &models.Membership{
 		OrganizationID: invitation.OrganizationID,
-		UserID:         &uid,
-		Email:          invitation.Email,
+		UserID:         userID,
 		Status:         models.MembershipActive,
 		InvitedBy:      invitation.InvitedBy,
 	}
@@ -167,9 +165,10 @@ func (m *Authz) AcceptInvitation(ctx context.Context, invitationID, userID uuid.
 	accepted := at.UTC()
 	invitation.AcceptedAt = &accepted
 
+	subject := userID
 	m.recordLocked(ctx, models.AuthzEvent{
 		OrganizationID: &invitation.OrganizationID,
-		SubjectID:      &uid,
+		SubjectID:      &subject,
 		Action:         models.ActionMemberAccepted,
 	})
 
@@ -241,4 +240,82 @@ func (m *Authz) SeedInvitation(orgID uuid.UUID, email, token string, expiresAt t
 	m.inviteRoles[invitation.ID] = uniqueIDs(roleIDs)
 
 	return invitation.ID
+}
+
+func (m *Authz) InvitationsForOrganization(
+	_ context.Context,
+	orgID uuid.UUID,
+	now time.Time,
+) ([]orgs.Invitation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := []orgs.Invitation{}
+
+	for _, invitation := range m.invitations {
+		if invitation.OrganizationID != orgID || invitation.AcceptedAt != nil {
+			continue
+		}
+
+		if !invitation.ExpiresAt.After(now) {
+			continue
+		}
+
+		out = append(out, m.invitationLocked(invitation))
+	}
+
+	slices.SortFunc(out, func(a, b orgs.Invitation) int {
+		return b.ExpiresAt.Compare(a.ExpiresAt)
+	})
+
+	return out, nil
+}
+
+func (m *Authz) WithdrawInvitation(ctx context.Context, orgID, invitationID uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	invitation, ok := m.invitations[invitationID]
+	if !ok || invitation.OrganizationID != orgID || invitation.AcceptedAt != nil {
+		return orgs.ErrNotFound
+	}
+
+	m.recordLocked(ctx, models.AuthzEvent{
+		OrganizationID: &orgID,
+		Action:         models.ActionMemberInvitationWithdrawn,
+		Detail:         invitation.Email,
+	})
+
+	delete(m.invitations, invitationID)
+	delete(m.inviteRoles, invitationID)
+
+	return nil
+}
+
+func (m *Authz) ReissueInvitation(
+	ctx context.Context,
+	orgID, invitationID uuid.UUID,
+	tokenHash string,
+	expiresAt time.Time,
+) (*orgs.Invitation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	invitation, ok := m.invitations[invitationID]
+	if !ok || invitation.OrganizationID != orgID || invitation.AcceptedAt != nil {
+		return nil, orgs.ErrNotFound
+	}
+
+	invitation.TokenHash = tokenHash
+	invitation.ExpiresAt = expiresAt.UTC()
+
+	m.recordLocked(ctx, models.AuthzEvent{
+		OrganizationID: &orgID,
+		Action:         models.ActionMemberInvited,
+		Detail:         invitation.Email,
+	})
+
+	view := m.invitationLocked(invitation)
+
+	return &view, nil
 }

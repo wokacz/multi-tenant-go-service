@@ -80,6 +80,9 @@ var operationAccess = map[string]accessRule{
 
 	"list-members":         {authz.PermMembersRead, authz.ScopeOrganization},
 	"add-member":           {authz.PermMembersInvite, authz.ScopeOrganization},
+	"list-invitations":     {authz.PermMembersRead, authz.ScopeOrganization},
+	"reissue-invitation":   {authz.PermMembersInvite, authz.ScopeOrganization},
+	"withdraw-invitation":  {authz.PermMembersRemove, authz.ScopeOrganization},
 	"update-member-status": {authz.PermMembersSuspend, authz.ScopeOrganization},
 	"remove-member":        {authz.PermMembersRemove, authz.ScopeOrganization},
 	"set-member-roles":     {authz.PermMembersRolesAssign, authz.ScopeOrganization},

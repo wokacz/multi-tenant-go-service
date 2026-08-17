@@ -66,11 +66,9 @@ func newMembership(
 ) *models.Membership {
 	t.Helper()
 
-	uid := userID
 	membership := &models.Membership{
 		OrganizationID: orgID,
-		UserID:         &uid,
-		Email:          emailForUser(t, db, userID),
+		UserID:         userID,
 		Status:         status,
 	}
 	if err := db.Create(membership).Error; err != nil {
@@ -85,17 +83,6 @@ func newMembership(
 	}
 
 	return membership
-}
-
-func emailForUser(t *testing.T, db *store.DB, userID uuid.UUID) string {
-	t.Helper()
-
-	var email string
-	if err := db.Model(&models.User{}).Select("email").Where("id = ?", userID).Scan(&email).Error; err != nil || email == "" {
-		t.Fatalf("email for %s: %v (%q)", userID, err, email)
-	}
-
-	return email
 }
 
 func TestOrganizationPermissionKeysUnionsEveryRole(t *testing.T) {
@@ -159,7 +146,7 @@ func TestAMemberWithNoRolesIsDistinctFromAStranger(t *testing.T) {
 }
 
 func TestOnlyActiveMembershipsResolve(t *testing.T) {
-	for _, status := range []models.MembershipStatus{models.MembershipInvited, models.MembershipSuspended} {
+	for _, status := range []models.MembershipStatus{models.MembershipSuspended} {
 		t.Run(string(status), func(t *testing.T) {
 			db := testDB(t)
 			repo := repositories.NewAuthz(db)

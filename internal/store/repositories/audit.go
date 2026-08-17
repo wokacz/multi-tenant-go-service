@@ -183,16 +183,16 @@ func recordAboutMember(
 
 	var membership models.Membership
 
-	err := tx.Select("user_id", "email").
+	err := tx.Select("user_id").
 		First(&membership, "id = ? AND organization_id = ?", memberID, orgID).Error
 	if err != nil {
 		return fmt.Errorf("store: audit subject: %w", err)
 	}
 
-	event.SubjectID = membership.UserID
-	if event.SubjectID == nil && event.Detail == "" {
-		event.Detail = membership.Email
-	}
+	// Every membership has an account behind it now, so there is no longer a case
+	// where the subject is unknown and the address has to stand in for it.
+	subject := membership.UserID
+	event.SubjectID = &subject
 
 	return record(ctx, tx, event)
 }

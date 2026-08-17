@@ -159,3 +159,50 @@ func newInvitationToken() (string, error) {
 
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
+
+// Invitations lists what an organization has outstanding.
+//
+// It is the administrator's half of the invitation lifecycle. While an invitation
+// was a membership row it appeared in the members list, so removing it from there
+// without putting it anywhere else would have left an offer nobody could see or
+// take back.
+func (s *Service) Invitations(ctx context.Context, grant *authz.Grant) ([]Invitation, error) {
+	return s.dir.InvitationsForOrganization(ctx, grant.OrganizationID(), time.Now().UTC())
+}
+
+// WithdrawInvitation takes back an offer the organization made.
+//
+// Declining and withdrawing are separate operations on purpose, and not because
+// they do different things to the row. They are authorized by different facts: the
+// invitee holds the token, the organization holds members.remove. Folding them into
+// one endpoint would mean one of the two authorizations standing in for the other.
+func (s *Service) WithdrawInvitation(ctx context.Context, grant *authz.Grant, invitationID uuid.UUID) error {
+	return s.dir.WithdrawInvitation(ctx, grant.OrganizationID(), invitationID)
+}
+
+// Reissue replaces an outstanding invitation's token and pushes its expiry out,
+// returning the new token to mail.
+//
+// The old token stops working, which is the point: "resend" that mailed the same
+// secret again would mean a leaked link stays valid for another week, and one that
+// created a second invitation would collide with the first on (organization, email).
+func (s *Service) Reissue(
+	ctx context.Context,
+	grant *authz.Grant,
+	invitationID uuid.UUID,
+) (*Invitation, string, error) {
+	token, err := newInvitationToken()
+	if err != nil {
+		return nil, "", err
+	}
+
+	now := time.Now().UTC()
+
+	invitation, err := s.dir.ReissueInvitation(ctx, grant.OrganizationID(), invitationID,
+		HashInvitationToken(token), now.Add(InvitationTTL))
+	if err != nil {
+		return nil, "", err
+	}
+
+	return invitation, token, nil
+}

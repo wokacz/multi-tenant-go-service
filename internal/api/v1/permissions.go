@@ -43,15 +43,17 @@ type SnapshotSystem struct {
 
 // SnapshotMembership is one organization as the caller sees it.
 //
-// Organizations the caller is only invited to, or suspended in, are listed with
-// their status and an empty permission set. Dropping them would make them
-// vanish from the UI with no explanation; pretending they grant something would
-// be worse.
+// Organizations the caller is suspended in are listed with their status and an
+// empty permission set. Dropping them would make them vanish from the UI with no
+// explanation; pretending they grant something would be worse.
+//
+// Invitations are absent: they are not memberships, and GET /v1/me/invitations is
+// where a client finds them.
 type SnapshotMembership struct {
 	ID          uuid.UUID `json:"id" format:"uuid"`
 	Slug        string    `json:"slug"`
 	Name        string    `json:"name"`
-	Status      string    `json:"status" enum:"invited,active,suspended"`
+	Status      string    `json:"status" enum:"active,suspended"`
 	Roles       []string  `json:"roles" doc:"Role keys held here"`
 	Permissions []string  `json:"permissions" doc:"Permission keys held here"`
 }

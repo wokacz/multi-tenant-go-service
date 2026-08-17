@@ -274,13 +274,14 @@ func TestSelfServiceSurvivesHavingNoRolesAtAll(t *testing.T) {
 	}
 }
 
-// TestMyOrganizationsShowsInvitationsAndSuspensions checks that the list a
-// client renders does not silently drop the states a person most needs to see.
-func TestMyOrganizationsShowsInvitationsAndSuspensions(t *testing.T) {
+// TestMyOrganizationsShowsSuspensions checks that the list a client renders does
+// not silently drop the state a person most needs to see.
+//
+// An invitation used to appear here too, with status "invited". It is not a
+// membership any more and has its own listing at GET /v1/me/invitations — being in
+// both would have meant two answers to "which organizations am I in".
+func TestMyOrganizationsShowsSuspensions(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleViewer)
-
-	invited := f.repo.SeedOrganization("beta", "Beta")
-	f.repo.SeedMember(invited, f.userID, models.MembershipInvited)
 
 	suspended := f.repo.SeedOrganization("gamma", "Gamma")
 	f.repo.SeedMember(suspended, f.userID, models.MembershipSuspended)
@@ -311,7 +312,6 @@ func TestMyOrganizationsShowsInvitationsAndSuspensions(t *testing.T) {
 
 	want := map[string]string{
 		"acme":  string(models.MembershipActive),
-		"beta":  string(models.MembershipInvited),
 		"gamma": string(models.MembershipSuspended),
 	}
 

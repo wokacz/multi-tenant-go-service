@@ -479,6 +479,25 @@ components:
       required:
         - devices
       type: object
+    ListInvitationsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListInvitationsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        invitations:
+          items:
+            $ref: "#/components/schemas/InvitationResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - invitations
+      type: object
     ListLoginEventsOutputBody:
       additionalProperties: false
       properties:
@@ -701,7 +720,6 @@ components:
         status:
           description: Whether the membership grants anything
           enum:
-            - invited
             - active
             - suspended
           type: string
@@ -734,7 +752,6 @@ components:
         status:
           description: Where the caller stands in this organization
           enum:
-            - invited
             - active
             - suspended
           type: string
@@ -1078,7 +1095,6 @@ components:
           type: string
         status:
           enum:
-            - invited
             - active
             - suspended
           type: string
@@ -1687,7 +1703,7 @@ paths:
         - devices
   /v1/me/organizations:
     get:
-      description: "Returns every organization the account belongs to, including the ones it has only been invited to and the ones it is suspended in, so a client can tell those apart. Self-service: no permission is required, and none can take it away."
+      description: "Returns every organization the account belongs to, including the ones it is suspended in, so a client can tell those apart. Invitations are not memberships and are listed separately at GET /v1/me/invitations. Self-service: no permission is required, and none can take it away."
       operationId: list-my-organizations
       responses:
         "200":
@@ -2053,6 +2069,189 @@ paths:
       security:
         - bearer: []
       summary: Read the organization's history of authorization changes
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/invitations:
+    get:
+      description: "Offers this organization has made that nobody has taken up yet. Requires members.read. No tokens: the organization issued them but cannot accept on anybody's behalf."
+      operationId: list-invitations
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListInvitationsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List outstanding invitations
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/invitations/{invitationID}:
+    delete:
+      description: "Takes back an offer. Distinct from the invitee declining it: the two are authorized by different facts — the invitee holds the token, the organization holds members.remove — and the audit entry says which of them ended it."
+      operationId: withdraw-invitation
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Invitation id
+          in: path
+          name: invitationID
+          required: true
+          schema:
+            description: Invitation id
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Withdraw an invitation
+      tags:
+        - organizations
+  /v1/orgs/{orgID}/invitations/{invitationID}/reissue:
+    post:
+      description: Mails a fresh token and pushes the expiry out. The previous token stops working — resending the same secret would keep a leaked link alive, and issuing a second invitation would collide with the first. Requires members.invite.
+      operationId: reissue-invitation
+      parameters:
+        - description: Organization id
+          in: path
+          name: orgID
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+        - description: Invitation id
+          in: path
+          name: invitationID
+          required: true
+          schema:
+            description: Invitation id
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationResponse"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Send an invitation again
       tags:
         - organizations
   /v1/orgs/{orgID}/members:

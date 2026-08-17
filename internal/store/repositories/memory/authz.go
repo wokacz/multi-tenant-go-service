@@ -109,7 +109,9 @@ func (m *Authz) recordLocked(ctx context.Context, event models.AuthzEvent) {
 // entry survives the membership being deleted.
 func (m *Authz) subjectOfLocked(memberID uuid.UUID) *uuid.UUID {
 	if membership, ok := m.memberships[memberID]; ok {
-		return membership.UserID
+		id := membership.UserID
+
+		return &id
 	}
 
 	return nil
@@ -124,11 +126,11 @@ func memberSortKey(m orgs.Member) string {
 }
 
 func sameAccount(membership *models.Membership, userID uuid.UUID) bool {
-	return membership != nil && membership.UserID != nil && *membership.UserID == userID
+	return membership != nil && membership.UserID == userID
 }
 
 func (m *Authz) accountDeletedLocked(membership *models.Membership) bool {
-	return membership.UserID != nil && m.deletedUsers[*membership.UserID]
+	return m.deletedUsers[membership.UserID]
 }
 
 func (m *Authz) emailOfLocked(userID uuid.UUID) string {
@@ -139,12 +141,6 @@ func (m *Authz) emailOfLocked(userID uuid.UUID) string {
 	}
 
 	return userID.String() + "@seed.test"
-}
-
-func ptrID(id uuid.UUID) *uuid.UUID {
-	copy := id
-
-	return &copy
 }
 
 func (m *Authz) Events(_ context.Context, orgID uuid.UUID, limit, offset int) ([]audit.Event, error) {
@@ -305,11 +301,10 @@ func (m *Authz) MembershipsForUser(_ context.Context, userID uuid.UUID) ([]orgs.
 	var out []orgs.Membership
 
 	for _, membership := range m.memberships {
-		matchesAccount := sameAccount(membership, userID)
-		matchesInvite := membership.Status == models.MembershipInvited &&
-			membership.UserID == nil &&
-			membership.Email == m.emailOfLocked(userID)
-		if !matchesAccount && !matchesInvite {
+		// Only memberships. An invitation is not one, and matching it by address
+		// here is what used to make "the organizations I belong to" include places
+		// that had merely asked.
+		if !sameAccount(membership, userID) {
 			continue
 		}
 
@@ -441,40 +436,15 @@ func (m *Authz) AddMember(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	email := m.emailOfLocked(userID)
-
+	// No invitation to claim any more. This used to walk the memberships looking
+	// for an invited row with a matching address and activate it, because an
+	// invitation was a membership and the unique index would otherwise refuse the
+	// insert. Invitations are their own table now, so provisioning is just an
+	// insert.
 	for _, membership := range m.memberships {
-		if membership.OrganizationID != orgID {
-			continue
-		}
-
-		if sameAccount(membership, userID) {
+		if membership.OrganizationID == orgID && sameAccount(membership, userID) {
 			return nil, orgs.ErrAlreadyMember
 		}
-
-		if membership.Email != email {
-			continue
-		}
-
-		if membership.Status != models.MembershipInvited || membership.UserID != nil {
-			return nil, orgs.ErrAlreadyMember
-		}
-
-		if err := m.rolesBelongLocked(orgID, roleIDs); err != nil {
-			return nil, err
-		}
-
-		membership.UserID = ptrID(userID)
-		membership.Activate(at)
-		m.memberRoles[membership.ID] = uniqueIDs(roleIDs)
-
-		m.recordLocked(ctx, models.AuthzEvent{
-			OrganizationID: &orgID, SubjectID: &userID, Action: models.ActionMemberAccepted,
-		})
-
-		member := m.memberLocked(membership)
-
-		return &member, nil
 	}
 
 	if err := m.rolesBelongLocked(orgID, roleIDs); err != nil {
@@ -484,8 +454,7 @@ func (m *Authz) AddMember(
 	id := uuid.Must(uuid.NewV7())
 	membership := &models.Membership{
 		Model:          models.Model{ID: id},
-		UserID:         ptrID(userID),
-		Email:          m.emailOfLocked(userID),
+		UserID:         userID,
 		OrganizationID: orgID,
 		Status:         models.MembershipActive,
 	}
@@ -977,8 +946,7 @@ func (m *Authz) activeMembershipLocked(userID, orgID uuid.UUID) *models.Membersh
 func (m *Authz) memberLocked(membership *models.Membership) orgs.Member {
 	member := orgs.Member{
 		ID:       membership.ID,
-		UserID:   membership.AccountID(),
-		Email:    membership.Email,
+		UserID:   membership.UserID,
 		Status:   membership.Status,
 		JoinedAt: membership.JoinedAt,
 		Roles:    []orgs.RoleSummary{},
@@ -1162,11 +1130,9 @@ func (m *Authz) SeedMember(
 	defer m.mu.Unlock()
 
 	id := uuid.Must(uuid.NewV7())
-	uid := userID
 	m.memberships[id] = &models.Membership{
 		Model:          models.Model{ID: id},
-		UserID:         &uid,
-		Email:          m.emailOfLocked(userID),
+		UserID:         userID,
 		OrganizationID: orgID,
 		Status:         status,
 	}

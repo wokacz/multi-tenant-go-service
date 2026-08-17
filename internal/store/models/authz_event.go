@@ -35,6 +35,11 @@ const (
 	// sent to. The row is deleted, so this entry is the only trace it existed.
 	ActionMemberInvitationDeclined AuthzAction = "member.invitation_declined"
 
+	// ActionMemberInvitationWithdrawn is the organization taking an offer back,
+	// as opposed to the invitee refusing it. Two actions rather than one, because
+	// "who ended this" is the question the entry exists to answer.
+	ActionMemberInvitationWithdrawn AuthzAction = "member.invitation_withdrawn"
+
 	ActionMemberRemoved      AuthzAction = "member.removed"
 	ActionMemberSuspended    AuthzAction = "member.suspended"
 	ActionMemberReinstated   AuthzAction = "member.reinstated"
@@ -53,7 +58,7 @@ func (a AuthzAction) Valid() bool {
 	switch a {
 	case ActionOrganizationCreated, ActionOrganizationUpdated, ActionOrganizationDeleted,
 		ActionMemberInvited, ActionMemberAccepted, ActionMemberJoined,
-		ActionMemberInvitationDeclined,
+		ActionMemberInvitationDeclined, ActionMemberInvitationWithdrawn,
 		ActionMemberRemoved, ActionMemberSuspended,
 		ActionMemberReinstated, ActionMemberRolesChanged,
 		ActionRoleCreated, ActionRoleUpdated, ActionRoleDeleted, ActionRolePermissionsChanged,

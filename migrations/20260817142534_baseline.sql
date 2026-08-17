@@ -186,19 +186,16 @@ CREATE TABLE "memberships" (
   "id" uuid NOT NULL,
   "created_at" timestamptz NULL,
   "updated_at" timestamptz NULL,
-  "user_id" uuid NULL,
+  "user_id" uuid NOT NULL,
   "organization_id" uuid NOT NULL,
-  "email" character varying(255) NOT NULL,
   "status" character varying(20) NOT NULL,
   "invited_by" uuid NULL,
   "joined_at" timestamptz NULL,
   PRIMARY KEY ("id"),
   CONSTRAINT "fk_memberships_user" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "fk_organizations_memberships" FOREIGN KEY ("organization_id") REFERENCES "organizations" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "chk_memberships_status" CHECK ((status)::text = ANY ((ARRAY['invited'::character varying, 'active'::character varying, 'suspended'::character varying])::text[]))
+  CONSTRAINT "chk_memberships_status" CHECK ((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[]))
 );
--- Create index "idx_membership_org_email" to table: "memberships"
-CREATE UNIQUE INDEX "idx_membership_org_email" ON "memberships" ("organization_id", "email");
 -- Create index "idx_membership_user_org" to table: "memberships"
 CREATE UNIQUE INDEX "idx_membership_user_org" ON "memberships" ("user_id", "organization_id");
 -- Create "membership_roles" table

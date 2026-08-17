@@ -171,11 +171,9 @@ func (r *Orgs) AcceptInvitation(ctx context.Context, invitationID, userID uuid.U
 			return err
 		}
 
-		uid := userID
 		membership := &models.Membership{
 			OrganizationID: invitation.OrganizationID,
-			UserID:         &uid,
-			Email:          invitation.Email,
+			UserID:         userID,
 			Status:         models.MembershipActive,
 			InvitedBy:      invitation.InvitedBy,
 		}
@@ -197,9 +195,11 @@ func (r *Orgs) AcceptInvitation(ctx context.Context, invitationID, userID uuid.U
 			return err
 		}
 
+		subject := userID
+
 		return record(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &invitation.OrganizationID,
-			SubjectID:      &uid,
+			SubjectID:      &subject,
 			Action:         models.ActionMemberAccepted,
 		})
 	})
@@ -260,4 +260,95 @@ func (r *Orgs) invitation(ctx context.Context, invitationID uuid.UUID) (*orgs.In
 		ExpiresAt:    row.ExpiresAt,
 		RoleKeys:     keys,
 	}, nil
+}
+
+func (r *Orgs) InvitationsForOrganization(
+	ctx context.Context,
+	orgID uuid.UUID,
+	now time.Time,
+) ([]orgs.Invitation, error) {
+	var rows []models.Invitation
+
+	err := r.db.WithContext(ctx).
+		Where("organization_id = ? AND accepted_at IS NULL AND expires_at > ?", orgID, now).
+		Order("created_at DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("store: invitations for organization: %w", err)
+	}
+
+	out := make([]orgs.Invitation, 0, len(rows))
+
+	for i := range rows {
+		view, err := r.invitation(ctx, rows[i].ID)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, *view)
+	}
+
+	return out, nil
+}
+
+func (r *Orgs) WithdrawInvitation(ctx context.Context, orgID, invitationID uuid.UUID) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Scoped by organization: an invitation id from another tenant answers
+		// nothing rather than answering truthfully.
+		var invitation models.Invitation
+		if err := tx.First(&invitation, "id = ? AND organization_id = ? AND accepted_at IS NULL",
+			invitationID, orgID).Error; err != nil {
+			return err
+		}
+
+		if err := record(ctx, tx, &models.AuthzEvent{
+			OrganizationID: &orgID,
+			Action:         models.ActionMemberInvitationWithdrawn,
+			Detail:         invitation.Email,
+		}); err != nil {
+			return err
+		}
+
+		return tx.Delete(&invitation).Error
+	})
+
+	return translateOrgError("withdraw invitation", err)
+}
+
+func (r *Orgs) ReissueInvitation(
+	ctx context.Context,
+	orgID, invitationID uuid.UUID,
+	tokenHash string,
+	expiresAt time.Time,
+) (*orgs.Invitation, error) {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var invitation models.Invitation
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&invitation, "id = ? AND organization_id = ? AND accepted_at IS NULL",
+				invitationID, orgID).Error; err != nil {
+			return err
+		}
+
+		// Hooks skipped for the same reason the other targeted updates skip them:
+		// BeforeSave would run against a zero-valued struct and refuse an empty
+		// address that is not being changed.
+		res := tx.Session(&gorm.Session{SkipHooks: true}).
+			Model(&models.Invitation{}).
+			Where("id = ?", invitationID).
+			Updates(map[string]any{"token_hash": tokenHash, "expires_at": expiresAt.UTC()})
+		if res.Error != nil {
+			return res.Error
+		}
+
+		return record(ctx, tx, &models.AuthzEvent{
+			OrganizationID: &orgID,
+			Action:         models.ActionMemberInvited,
+			Detail:         invitation.Email,
+		})
+	})
+	if err != nil {
+		return nil, translateOrgError("reissue invitation", err)
+	}
+
+	return r.invitation(ctx, invitationID)
 }

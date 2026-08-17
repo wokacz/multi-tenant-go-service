@@ -125,30 +125,29 @@ func (r *Orgs) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 // memberRow is the flat shape the member queries scan into.
 type memberRow struct {
 	ID       uuid.UUID
-	UserID   *uuid.UUID
+	UserID   uuid.UUID
 	Name     string
 	Email    string
 	Status   models.MembershipStatus
 	JoinedAt *time.Time
 }
 
-// The join has to be a left one, because an invitation carries no user id and
-// still has to appear. That is also the trap: a condition in a LEFT JOIN does
-// not remove rows, it only blanks the joined columns, so "AND u.deleted_at IS
-// NULL" on its own filtered nothing and a deleted account stayed on the list
-// with an empty name. The predicate that actually drops it belongs in the WHERE
-// clause: a row either has no account at all, or has one that the join matched.
-const liveAccountOrInvitation = "(m.user_id IS NULL OR u.id IS NOT NULL)"
+// The join is inner, and now it can be. It had to be a left join while an
+// invitation was a membership with no user id, and that was the trap: a condition
+// in a LEFT JOIN does not remove rows, it only blanks the joined columns, so
+// "AND u.deleted_at IS NULL" filtered nothing and a deleted account stayed on the
+// list with an empty name. Every membership has an account behind it now, so the
+// rule "a row whose account is gone is not a member" is the join itself.
 
 func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID) ([]orgs.Member, error) {
 	var rows []memberRow
 
 	err := r.db.WithContext(ctx).
 		Table("memberships AS m").
-		Select("m.id, m.user_id, COALESCE(u.name, '') AS name, COALESCE(u.email, m.email) AS email, m.status, m.joined_at").
-		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ? AND "+liveAccountOrInvitation, orgID).
-		Order("COALESCE(u.name, m.email) ASC").
+		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
+		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
+		Where("m.organization_id = ?", orgID).
+		Order("u.name ASC").
 		Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("store: members: %w", err)
@@ -162,9 +161,9 @@ func (r *Orgs) Member(ctx context.Context, orgID, memberID uuid.UUID) (*orgs.Mem
 
 	err := r.db.WithContext(ctx).
 		Table("memberships AS m").
-		Select("m.id, m.user_id, COALESCE(u.name, '') AS name, COALESCE(u.email, m.email) AS email, m.status, m.joined_at").
-		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ? AND m.id = ? AND "+liveAccountOrInvitation, orgID, memberID).
+		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
+		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
+		Where("m.organization_id = ? AND m.id = ?", orgID, memberID).
 		Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("store: member: %w", err)
@@ -196,10 +195,8 @@ func (r *Orgs) attachRoles(ctx context.Context, rows []memberRow) ([]orgs.Member
 			Email:    row.Email,
 			Status:   row.Status,
 			JoinedAt: row.JoinedAt,
+			UserID:   row.UserID,
 			Roles:    []orgs.RoleSummary{},
-		}
-		if row.UserID != nil {
-			member.UserID = *row.UserID
 		}
 
 		out = append(out, member)
@@ -259,17 +256,9 @@ func (r *Orgs) AddMember(
 	invitedBy uuid.UUID,
 	at time.Time,
 ) (*orgs.Member, error) {
-	var account models.User
-	if err := r.db.WithContext(ctx).Select("id", "email").
-		First(&account, "id = ?", userID).Error; err != nil {
-		return nil, translateOrgError("add member", err)
-	}
-
-	uid := userID
 	membership := &models.Membership{
 		OrganizationID: orgID,
-		UserID:         &uid,
-		Email:          account.Email,
+		UserID:         userID,
 		Status:         models.MembershipActive,
 	}
 
@@ -280,36 +269,17 @@ func (r *Orgs) AddMember(
 
 	membership.Activate(at)
 
+	// This used to open a savepoint, attempt the insert, roll back on a unique
+	// violation and claim an outstanding invitation instead — because an invitation
+	// was a membership row and the index refused the second one. Invitations have
+	// their own table now, so provisioning is an insert and a duplicate means what
+	// it says.
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		action := models.ActionMemberJoined
-
-		// A unique violation aborts the Postgres transaction. The savepoint
-		// lets us recover and claim an outstanding invitation in the same
-		// transaction instead of returning 25P02 from the follow-up SELECT.
-		if err := tx.SavePoint("add_member").Error; err != nil {
-			return err
-		}
-
 		if err := tx.Create(membership).Error; err != nil {
-			if !errors.Is(err, gorm.ErrDuplicatedKey) {
-				return err
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				return orgs.ErrAlreadyMember
 			}
 
-			if err := tx.RollbackTo("add_member").Error; err != nil {
-				return err
-			}
-
-			claimed, claimErr := claimInvitation(tx, orgID, userID, account.Email, at)
-			if claimErr != nil {
-				return claimErr
-			}
-
-			membership = claimed
-			action = models.ActionMemberAccepted
-		}
-
-		if err := tx.Where("membership_id = ?", membership.ID).
-			Delete(&models.MembershipRole{}).Error; err != nil {
 			return err
 		}
 
@@ -320,7 +290,7 @@ func (r *Orgs) AddMember(
 		return record(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			SubjectID:      &userID,
-			Action:         action,
+			Action:         models.ActionMemberJoined,
 		})
 	})
 	if err != nil {
@@ -771,8 +741,10 @@ func (r *Orgs) MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]orgs
 		Table("memberships AS m").
 		Select("m.id AS membership_id, m.status, o.*").
 		Joins("JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL").
-		Where("m.user_id = ? OR (m.status = ? AND m.user_id IS NULL AND m.email = (SELECT email FROM users WHERE id = ? AND deleted_at IS NULL))",
-			userID, models.MembershipInvited, userID).
+		// Only this account's memberships. The subquery that also matched an
+		// invitation by address is gone with the status it looked for: an
+		// invitation is not one of the organizations you belong to.
+		Where("m.user_id = ?", userID).
 		Order("o.name ASC").
 		Scan(&rows).Error
 	if err != nil {
@@ -995,48 +967,6 @@ func (r *Orgs) MemberPermissions(ctx context.Context, orgID, memberID uuid.UUID)
 	}
 
 	return out, nil
-}
-
-// claimInvitation activates an outstanding invitation for this address so a
-// provisioning AddMember (bootstrap, promoting the first owner) does not bounce
-// off the unique email index. A live membership for the same address is still
-// ErrAlreadyMember.
-//
-// It is reached only from paths where an operator is acting out of band. The
-// registration path must not claim anything — that would accept an invitation
-// on the invitee's behalf and replace its roles — so JoinDefaultOrganization
-// checks for an invitation before it calls AddMember.
-func claimInvitation(
-	tx *gorm.DB,
-	orgID, userID uuid.UUID,
-	email string,
-	at time.Time,
-) (*models.Membership, error) {
-	var existing models.Membership
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("organization_id = ? AND email = ? AND status = ? AND user_id IS NULL",
-			orgID, email, models.MembershipInvited).
-		First(&existing).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, orgs.ErrAlreadyMember
-		}
-
-		return nil, err
-	}
-
-	uid := userID
-	existing.UserID = &uid
-	existing.Activate(at)
-
-	if err := tx.Save(&existing).Error; err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return nil, orgs.ErrAlreadyMember
-		}
-
-		return nil, err
-	}
-
-	return &existing, nil
 }
 
 // lockOrganization takes the row lock every serialised change to an organization

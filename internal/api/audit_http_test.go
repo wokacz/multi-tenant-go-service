@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
@@ -106,10 +108,13 @@ var mutatingProbes = map[string]models.AuthzAction{
 	"update-role":          models.ActionRoleUpdated,
 	"set-role-permissions": models.ActionRolePermissionsChanged,
 	"delete-role":          models.ActionRoleDeleted,
+	"reissue-invitation":   models.ActionMemberInvited,
+	"withdraw-invitation":  models.ActionMemberInvitationWithdrawn,
 }
 
 var readOnlyProbes = []string{
 	"get-organization", "list-members", "list-roles", "get-role", "list-audit-events",
+	"list-invitations",
 }
 
 // TestEveryMutatingOperationIsAudited is the guard the audit trail actually
@@ -165,7 +170,11 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 			// add-member. Ada is already the owner.
 			outsider := registerOutsider(t, f)
 
-			probes := auditProbes(f, held, free, other, outsider)
+			// An outstanding invitation for the two operations that act on one.
+			invitation := f.repo.SeedInvitation(f.orgID, "invited@example.com",
+				"a-probe-token", time.Now().UTC().Add(orgs.InvitationTTL), held)
+
+			probes := auditProbes(f, held, free, other, invitation, outsider)
 
 			p, ok := probes[id]
 			if !ok {
@@ -241,10 +250,15 @@ func registerOutsider(t *testing.T, f *authzFixture) string {
 //
 // heldRole is assigned to memberID; freeRole is not, so deleting it is not
 // refused for being in use.
-func auditProbes(f *authzFixture, heldRole, freeRole, memberID uuid.UUID, outsider string) map[string]probe {
+func auditProbes(
+	f *authzFixture,
+	heldRole, freeRole, memberID, invitationID uuid.UUID,
+	outsider string,
+) map[string]probe {
 	org := f.orgPath("")
 	member := f.orgPath("/members/" + memberID.String())
 	role := f.orgPath("/roles/" + heldRole.String())
+	invitation := f.orgPath("/invitations/" + invitationID.String())
 
 	return map[string]probe{
 		"update-organization":  {http.MethodPatch, org, `{"name":"Renamed"}`},
@@ -257,6 +271,11 @@ func auditProbes(f *authzFixture, heldRole, freeRole, memberID uuid.UUID, outsid
 		"update-role":          {http.MethodPatch, role, `{"name":"Probed"}`},
 		"set-role-permissions": {http.MethodPut, role + "/permissions", `{"permissions":[]}`},
 		"delete-role":          {http.MethodDelete, f.orgPath("/roles/" + freeRole.String()), ""},
+
+		// Reissue is listed under add-member's action: mailing a fresh token is the
+		// same event from the invitee's side, and the entry says which address.
+		"reissue-invitation":  {http.MethodPost, invitation + "/reissue", ""},
+		"withdraw-invitation": {http.MethodDelete, invitation, ""},
 	}
 }
 

@@ -38,10 +38,14 @@ func newOrganizationResponse(o *models.Organization) OrganizationResponse {
 // Invitations and suspensions are included rather than filtered out, with the
 // status spelled out, so a client can show "you were suspended here" instead of
 // having the organization silently vanish from the list.
+//
+// An invitation is not one of these. It is not a membership, and it has its own
+// listing at GET /v1/me/invitations — being in both would be two answers to
+// "which organizations am I in".
 type MembershipResponse struct {
 	ID           uuid.UUID            `json:"id" format:"uuid" doc:"Membership id, used to accept or decline an invitation"`
 	Organization OrganizationResponse `json:"organization"`
-	Status       string               `json:"status" enum:"invited,active,suspended" doc:"Where the caller stands in this organization"`
+	Status       string               `json:"status" enum:"active,suspended" doc:"Where the caller stands in this organization"`
 	Roles        []string             `json:"roles" doc:"Keys of the roles the caller holds here"`
 }
 
@@ -98,9 +102,10 @@ func registerOrganizations(api huma.API, service *orgs.Service) {
 		Path:        Prefix + "/me/organizations",
 		Summary:     "List the caller's organizations",
 		Description: "Returns every organization the account belongs to, including " +
-			"the ones it has only been invited to and the ones it is suspended " +
-			"in, so a client can tell those apart. Self-service: no permission " +
-			"is required, and none can take it away.",
+			"the ones it is suspended in, so a client can tell those apart. " +
+			"Invitations are not memberships and are listed separately at " +
+			"GET /v1/me/invitations. Self-service: no permission is required, and " +
+			"none can take it away.",
 		Tags:     []string{"organizations"},
 		Security: bearer(),
 		Errors:   []int{http.StatusUnauthorized},

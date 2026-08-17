@@ -313,6 +313,23 @@ type Directory interface {
 	// refuse.
 	DeclineInvitation(ctx context.Context, invitationID uuid.UUID) error
 
+	// InvitationsForOrganization lists the pending invitations an organization has
+	// issued, so an administrator can see what is outstanding. Before invitations
+	// had their own table they appeared in the members list, which is where anybody
+	// looking for them still expects to find them — hence a listing of their own
+	// rather than nothing at all.
+	InvitationsForOrganization(ctx context.Context, orgID uuid.UUID, now time.Time) ([]Invitation, error)
+
+	// ReissueInvitation replaces the token hash and the expiry on an outstanding
+	// invitation, so the old link stops working. Anything else called "resend"
+	// either keeps a leaked link alive or collides with the row already there.
+	ReissueInvitation(ctx context.Context, orgID, invitationID uuid.UUID, tokenHash string, expiresAt time.Time) (*Invitation, error)
+
+	// WithdrawInvitation removes an offer the organization made. It is scoped by
+	// organization for the same reason every other scoped method is: an invitation
+	// id from another tenant must answer nothing.
+	WithdrawInvitation(ctx context.Context, orgID, invitationID uuid.UUID) error
+
 	// InvitationsForEmail lists the pending invitations addressed to one account,
 	// so a client can show "you have been invited to X" without the token. Taking
 	// one up still needs the token from the message.

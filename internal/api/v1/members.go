@@ -27,7 +27,7 @@ type MemberResponse struct {
 	UserID   *uuid.UUID            `json:"user_id,omitempty" format:"uuid" doc:"The account behind the membership. Absent while the invitation is outstanding, so listing members cannot tell a registered address from an unknown one."`
 	Name     string                `json:"name,omitempty" doc:"Display name. Absent until the invitation is accepted."`
 	Email    string                `json:"email" format:"email" doc:"Email address"`
-	Status   string                `json:"status" enum:"invited,active,suspended" doc:"Whether the membership grants anything"`
+	Status   string                `json:"status" enum:"active,suspended" doc:"Whether the membership grants anything"`
 	JoinedAt *time.Time            `json:"joined_at,omitempty" doc:"When the membership first became active"`
 	Roles    []RoleSummaryResponse `json:"roles" doc:"Roles held in this organization"`
 }
@@ -47,22 +47,15 @@ func newMemberResponse(m *orgs.Member) MemberResponse {
 		})
 	}
 
-	var userID *uuid.UUID
-	name := m.Name
-	if m.Status == models.MembershipInvited {
-		// Hide the account until they accept. The row is keyed by email so
-		// that listing members after an invite cannot tell a registered
-		// address from an unknown one.
-		name = ""
-	} else if m.UserID != uuid.Nil {
-		id := m.UserID
-		userID = &id
-	}
+	// No account to hide any more: every member is a person. The pointer stays
+	// because the field is optional in the contract, and changing that would break
+	// clients for no gain.
+	id := m.UserID
 
 	return MemberResponse{
 		ID:       m.ID,
-		UserID:   userID,
-		Name:     name,
+		UserID:   &id,
+		Name:     m.Name,
 		Email:    m.Email,
 		Status:   string(m.Status),
 		JoinedAt: m.JoinedAt,
@@ -198,6 +191,48 @@ func registerMembers(api huma.API, service *orgs.Service, mailer mail.Sender, lo
 		Security: bearer(),
 		Errors:   append(orgErrors(), http.StatusConflict, http.StatusUnprocessableEntity),
 	}, h.setRoles)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-invitations",
+		Method:      http.MethodGet,
+		Path:        Prefix + "/orgs/{orgID}/invitations",
+		Summary:     "List outstanding invitations",
+		Description: "Offers this organization has made that nobody has taken up yet. " +
+			"Requires members.read. No tokens: the organization issued them but " +
+			"cannot accept on anybody's behalf.",
+		Tags:     []string{"organizations"},
+		Security: bearer(),
+		Errors:   orgErrors(),
+	}, h.listInvitations)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "reissue-invitation",
+		Method:      http.MethodPost,
+		Path:        Prefix + "/orgs/{orgID}/invitations/{invitationID}/reissue",
+		Summary:     "Send an invitation again",
+		Description: "Mails a fresh token and pushes the expiry out. The previous token " +
+			"stops working — resending the same secret would keep a leaked link " +
+			"alive, and issuing a second invitation would collide with the first. " +
+			"Requires members.invite.",
+		Tags:     []string{"organizations"},
+		Security: bearer(),
+		Errors:   append(orgErrors(), http.StatusTooManyRequests),
+	}, h.reissueInvitation)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "withdraw-invitation",
+		Method:      http.MethodDelete,
+		Path:        Prefix + "/orgs/{orgID}/invitations/{invitationID}",
+		Summary:     "Withdraw an invitation",
+		Description: "Takes back an offer. Distinct from the invitee declining it: the " +
+			"two are authorized by different facts — the invitee holds the token, " +
+			"the organization holds members.remove — and the audit entry says which " +
+			"of them ended it.",
+		Tags:          []string{"organizations"},
+		Security:      bearer(),
+		DefaultStatus: http.StatusNoContent,
+		Errors:        orgErrors(),
+	}, h.withdrawInvitation)
 }
 
 func (h *memberHandlers) list(ctx context.Context, _ *ListMembersInput) (*ListMembersOutput, error) {
@@ -242,12 +277,7 @@ func (h *memberHandlers) add(ctx context.Context, in *AddMemberInput) (*Invitati
 		}
 	}
 
-	return &InvitationOutput{Body: InvitationResponse{
-		Organization: newOrganizationResponse(&invitation.Organization),
-		Email:        invitation.Email,
-		Roles:        invitation.RoleKeys,
-		ExpiresAt:    invitation.ExpiresAt,
-	}}, nil
+	return &InvitationOutput{Body: newInvitationResponse(invitation)}, nil
 }
 
 func (h *memberHandlers) setStatus(ctx context.Context, in *UpdateMemberStatusInput) (*MemberOutput, error) {
@@ -294,4 +324,74 @@ func (h *memberHandlers) setRoles(ctx context.Context, in *SetMemberRolesInput) 
 	}
 
 	return &MemberOutput{Body: newMemberResponse(member)}, nil
+}
+
+type InvitationPathInput struct {
+	OrgID        uuid.UUID `path:"orgID" format:"uuid" doc:"Organization id"`
+	InvitationID uuid.UUID `path:"invitationID" format:"uuid" doc:"Invitation id"`
+}
+
+type ListInvitationsInput struct {
+	OrgID uuid.UUID `path:"orgID" format:"uuid" doc:"Organization id"`
+}
+
+type ListInvitationsOutput struct {
+	Body struct {
+		Invitations []InvitationResponse `json:"invitations"`
+	}
+}
+
+func (h *memberHandlers) listInvitations(ctx context.Context, _ *ListInvitationsInput) (*ListInvitationsOutput, error) {
+	grant, err := grantFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	invitations, err := h.orgs.Invitations(ctx, grant)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	out := &ListInvitationsOutput{}
+	out.Body.Invitations = make([]InvitationResponse, 0, len(invitations))
+
+	for i := range invitations {
+		out.Body.Invitations = append(out.Body.Invitations, newInvitationResponse(&invitations[i]))
+	}
+
+	return out, nil
+}
+
+func (h *memberHandlers) reissueInvitation(ctx context.Context, in *InvitationPathInput) (*InvitationOutput, error) {
+	grant, err := grantFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	invitation, token, err := h.orgs.Reissue(ctx, grant, in.InvitationID)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	if h.mail != nil {
+		if err := h.mail.SendInvitation(ctx, invitation.Email,
+			invitation.Organization.Name, token, invitation.ExpiresAt); err != nil {
+			logger(h.log).ErrorContext(ctx, "invitation mail failed", "error", err)
+		}
+	}
+
+	return &InvitationOutput{Body: newInvitationResponse(invitation)}, nil
+}
+
+func (h *memberHandlers) withdrawInvitation(ctx context.Context, in *InvitationPathInput) (*struct{}, error) {
+	grant, err := grantFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.orgs.WithdrawInvitation(ctx, grant, in.InvitationID); err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return nil, nil
 }

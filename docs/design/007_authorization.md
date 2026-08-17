@@ -284,6 +284,12 @@ przenosi dowód z „twierdzę, że to mój adres" na „umiem przeczytać tę s
 `invitation_roles` odbija `membership_roles`: role muszą przejść od oferty do członkostwa **bez ponownego wyboru** —
 przyjmujący nie może decydować, co przyjmuje.
 
+Po stronie `memberships` zniknęły **wszystkie** ślady dawnego rozwiązania: status `invited`, kolumna `email` i
+nullowalny `user_id`. Każde członkostwo ma teraz konto, więc join do `users` może być wewnętrzny, a unikat
+`(user_id, organization_id)` znów działa — przy nullowalnej kolumnie nie działał, bo Postgres traktuje dwa `NULL`-e jako
+różne. Zniknęła też maszyneria savepointów w `AddMember`, która istniała wyłącznie po to, żeby provisioning nie odbijał
+się od zaproszenia na ten sam adres.
+
 **Hash to zwykłe `SHA-256`, bez pepperu**, i to celowa różnica wobec kodów sześciocyfrowych. Tamte mają mało entropii
 i potrzebują sekretu, żeby zgadywanie offline było drogie. Tu są 32 losowe bajty — nie ma czego zgadywać, a klucz byłby
 tylko kolejnym sekretem do zgubienia. Odciski urządzeń są hashowane tak samo i z tego samego powodu.
@@ -295,6 +301,27 @@ i „już ma zaproszenie" — wołający reaguje na jedno i drugie tak samo.
 
 **Odpowiedź nie zawiera tokenu.** Administrator, który mógłby go odczytać, mógłby przyjąć zaproszenie za zaproszonego —
 czyli dokładnie to, co token miał zlikwidować. Token istnieje w tym procesie w jednym momencie i idzie do maila.
+
+### Cykl życia po stronie organizacji
+
+| Operacja  | Ścieżka                                                       | Uprawnienie      |
+|-----------|---------------------------------------------------------------|------------------|
+| lista     | `GET /v1/orgs/{orgID}/invitations`                            | `members.read`   |
+| ponowne wysłanie | `POST /v1/orgs/{orgID}/invitations/{id}/reissue`        | `members.invite` |
+| wycofanie | `DELETE /v1/orgs/{orgID}/invitations/{id}`                    | `members.remove` |
+
+Te trzy istnieją, bo zaproszenie **wypadło z listy członków**. Dopóki było wierszem `memberships`, administrator widział
+je i wycofywał przez `remove-member`; usunięcie go stamtąd bez dania niczego w zamian zostawiłoby ofertę, której nikt nie
+widzi i nie może odwołać.
+
+**Ponowne wysłanie wymienia token** i przesuwa wygaśnięcie. Nie „wysyła tego samego jeszcze raz" — to utrzymywałoby
+wyciekniętą wiadomość ważną kolejny tydzień — i nie tworzy drugiego zaproszenia, bo zderzyłoby się z unikatem
+`(organization_id, email)`. Stary link przestaje działać, i to jest cel.
+
+**Wycofanie i odrzucenie to dwie operacje**, choć robią wierszowi to samo. Różnią się tym, **co je autoryzuje**:
+zaproszony ma token, organizacja ma `members.remove`. Zlanie ich w jedną znaczyłoby, że jedna z tych autoryzacji
+zastępuje drugą. Dziennik też je rozróżnia (`member.invitation_withdrawn` vs `member.invitation_declined`), bo „kto to
+zakończył" jest dokładnie tym pytaniem, na które wpis odpowiada.
 
 ### Przyjęcie: dwa warunki, dwa różne pytania
 
