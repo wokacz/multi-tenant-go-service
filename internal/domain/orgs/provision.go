@@ -92,10 +92,29 @@ func (s *Service) EnsureDefaultOrganization(ctx context.Context) (*models.Organi
 // is "member" rather than something wider on purpose: registering is not an act
 // of authorization, and an installation that wants more gives it out
 // explicitly.
+//
+// An outstanding invitation to the default organization stops it. AddMember
+// would collide with that invitation on (organization_id, email) and the
+// repository would claim it — activating a membership nobody accepted and
+// replacing the roles it was issued with by "member". Registering is not an
+// accept: the address on a fresh account is not verified, so it proves nothing
+// about the mailbox. Such an account therefore has no active membership at all
+// until it accepts through /v1/me/invitations, which is correct — self-service
+// works without one, and the alternative silently downgrades what the invitee
+// was offered.
 func (s *Service) JoinDefaultOrganization(ctx context.Context, userID uuid.UUID) error {
 	org, err := s.EnsureDefaultOrganization(ctx)
 	if err != nil {
 		return err
+	}
+
+	waiting, err := s.hasRowIn(ctx, userID, org.ID)
+	if err != nil {
+		return err
+	}
+
+	if waiting {
+		return nil
 	}
 
 	role, err := s.repo.RoleByKey(ctx, org.ID, string(authz.RoleMember))
@@ -109,6 +128,33 @@ func (s *Service) JoinDefaultOrganization(ctx context.Context, userID uuid.UUID)
 	}
 
 	return err
+}
+
+// hasRowIn reports whether the account already has any row in the organization:
+// an active membership, a suspension, or an invitation addressed to it.
+//
+// It goes through the directory rather than the scoped repository because an
+// invited row carries no user id — MemberByUser cannot see it, and matching the
+// address is exactly what MembershipsForUser already does.
+//
+// It is a read before a write, so there is a window: an invitation created
+// between this check and AddMember's insert is still claimed. The outcome is a
+// downgrade rather than an escalation, and the window closes for good when
+// invitations move to their own table and stop sharing the uniqueness
+// constraint with memberships.
+func (s *Service) hasRowIn(ctx context.Context, userID, orgID uuid.UUID) (bool, error) {
+	memberships, err := s.dir.MembershipsForUser(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+
+	for i := range memberships {
+		if memberships[i].Organization.ID == orgID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // MaxOrganizationPage caps the installation-wide listing, the same way

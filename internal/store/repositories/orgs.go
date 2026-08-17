@@ -1056,30 +1056,6 @@ func (r *Orgs) DeclineInvitation(ctx context.Context, memberID uuid.UUID, email 
 	return translateOrgError("decline invitation", err)
 }
 
-func (r *Orgs) AcceptInvitationsByEmail(ctx context.Context, userID uuid.UUID, email string, at time.Time) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var invitations []models.Membership
-		if err := tx.Where("status = ? AND user_id IS NULL AND email = ?",
-			models.MembershipInvited, email).Find(&invitations).Error; err != nil {
-			return err
-		}
-
-		for i := range invitations {
-			if err := acceptInvitationTx(ctx, tx, invitations[i].ID, userID, email, at); err != nil {
-				if errors.Is(err, orgs.ErrAlreadyMember) {
-					continue
-				}
-
-				return err
-			}
-		}
-
-		return nil
-	})
-
-	return translateOrgError("accept invitations by email", err)
-}
-
 func acceptInvitationTx(
 	ctx context.Context,
 	tx *gorm.DB,
@@ -1118,9 +1094,14 @@ func acceptInvitationTx(
 }
 
 // claimInvitation activates an outstanding invitation for this address so a
-// provisioning AddMember (bootstrap, join-default) does not bounce off the
-// unique email index. A live membership for the same address is still
+// provisioning AddMember (bootstrap, promoting the first owner) does not bounce
+// off the unique email index. A live membership for the same address is still
 // ErrAlreadyMember.
+//
+// It is reached only from paths where an operator is acting out of band. The
+// registration path must not claim anything — that would accept an invitation
+// on the invitee's behalf and replace its roles — so JoinDefaultOrganization
+// checks for an invitation before it calls AddMember.
 func claimInvitation(
 	tx *gorm.DB,
 	orgID, userID uuid.UUID,

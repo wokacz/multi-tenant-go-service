@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -1248,30 +1247,6 @@ func (m *Authz) DeclineInvitation(ctx context.Context, memberID uuid.UUID, email
 
 	delete(m.memberships, memberID)
 	delete(m.memberRoles, memberID)
-
-	return nil
-}
-
-func (m *Authz) AcceptInvitationsByEmail(ctx context.Context, userID uuid.UUID, email string, at time.Time) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	var ids []uuid.UUID
-	for id, membership := range m.memberships {
-		if membership.Status == models.MembershipInvited && membership.UserID == nil && membership.Email == email {
-			ids = append(ids, id)
-		}
-	}
-
-	for _, id := range ids {
-		if err := m.acceptInvitationLocked(ctx, id, userID, email, at); err != nil {
-			if errors.Is(err, orgs.ErrAlreadyMember) {
-				continue
-			}
-
-			return err
-		}
-	}
 
 	return nil
 }

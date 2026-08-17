@@ -145,11 +145,13 @@ func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*struct
 	// looks exactly like a broken sign-up. Joining the default organization as a
 	// plain member is what makes an installation that never configures
 	// organizations behave like one that has no organizations at all.
+	//
+	// Outstanding invitations are deliberately *not* accepted here. This address
+	// has not been verified — signing up proves nothing about the mailbox — so
+	// accepting on its behalf would hand whoever registers an invited address
+	// first the roles it was invited with, in somebody else's organization. The
+	// invitee accepts through POST /v1/me/invitations/{id}/accept.
 	if h.orgs != nil {
-		if err := h.orgs.AttachInvitations(ctx, created.ID, created.Email); err != nil {
-			return nil, problem.Error(ctx, err)
-		}
-
 		if err := h.orgs.JoinDefaultOrganization(ctx, created.ID); err != nil {
 			return nil, problem.Error(ctx, err)
 		}

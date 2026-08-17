@@ -234,15 +234,42 @@ Zaproszony przyjmuje albo odrzuca **sam**, bo zgoda nie może być zastąpiona p
 Ścieżka jest pod `/v1/me`, nie pod `{orgID}`: zaproszony często nie ma jeszcze członkostwa, które middleware mogłoby
 zautoryzować, a cudze zaproszenie jest nieodróżnialne od brakującego (`404`).
 
-Rejestracja najpierw aktywuje zaległe zaproszenia na ten adres (`AttachInvitations`), potem dołącza do organizacji
-`default`. Kolejność jest nośna: odwrotna zostawiłaby zaproszenie do `default` jako `invited` i potraktowała unikalny
-adres jako „już członek".
+### Rejestracja nie jest przyjęciem
+
+Rejestracja **nie aktywuje** zaległych zaproszeń na podany adres. Robiła to wcześniej — nowe konto lądowało od razu we
+wszystkich organizacjach, do których zaproszono ten adres — i to była dziura, nie wygoda: **adres konta nie jest
+weryfikowany** (patrz [Czego tu nie ma](#czego-tu-nie-ma)), więc rejestracja nie dowodzi niczego o skrzynce. Kto pierwszy
+zarejestrował zaproszony adres, dziedziczył zaproszenie razem z rolami w cudzej organizacji — a prawowity adresat nie
+mógł się już zarejestrować, bo adres był zajęty, i widział `204` jak przy sukcesie.
+
+Zaproszenie przyjmuje wyłącznie zaproszony, przez `POST /v1/me/invitations/{invitationID}/accept`.
+
+Z tego wynika drugi, mniej oczywisty warunek. Rejestracja dołącza jeszcze do organizacji `default`, a ta ścieżka idzie
+przez `AddMember`, który przy kolizji na unikacie `(organization_id, email)` **przejmuje** zaproszenie: aktywuje
+członkostwo i podmienia nadane role na `member`. Samo usunięcie automatycznego przyjęcia zostawiłoby więc dziurę otwartą
+dla organizacji `default`, i to z cichą degradacją ról. Dlatego `JoinDefaultOrganization` najpierw sprawdza, czy konto ma
+już jakikolwiek wiersz w `default` — w tym zaproszenie adresowane na jego adres — i wtedy nie robi nic.
+
+Konsekwencja, którą trzeba znać: konto zaproszone do `default` po rejestracji **nie ma żadnego aktywnego członkostwa**,
+dopóki nie przyjmie zaproszenia. To jest poprawne — samoobsługa (`/v1/me/*`) działa bez członkostwa, a alternatywą jest
+odebranie zaproszonemu tego, co mu zaoferowano.
+
+Przejmowanie zaproszenia w `AddMember` **zostaje**, bo obsługuje ścieżkę operatora działającego poza API (bootstrap,
+wskazanie pierwszego właściciela): bez niego konto, które ktoś zdążył zaprosić, nie dałoby się promować, a zaproszenia
+nie ma jak wycofać, dopóki nikt nie ma uprawnienia w tej organizacji.
+
+Zostaje wąskie okno: zaproszenie utworzone **pomiędzy** sprawdzeniem a wstawieniem wiersza nadal zostanie przejęte.
+Skutkiem jest degradacja ról, nie eskalacja, i zamknie się dopiero wtedy, gdy zaproszenia dostaną własną tabelę i
+przestaną dzielić unikat z członkostwami.
 
 Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu
 organizacji. Dwa nakładające się zdegradowania nie mogą oba zobaczyć `owners > 1` i oba przejść.
 
 ## Czego tu nie ma
 
+- **Weryfikacja adresu e-mail.** Nie ma ani kolumny, ani endpointu: adres na koncie jest niepotwierdzony przez cały czas
+  jego życia. Dlatego adres **nie może być czynnikiem, który cokolwiek nadaje** — na tym opiera się decyzja, że
+  [rejestracja nie jest przyjęciem](#rejestracja-nie-jest-przyjęciem).
 - **Tłumaczenia ról własnych.** Tabela `role_translations` istnieje, ale nic jej nie czyta ani nie zapisuje. Nazwy ról
   tworzonych przez użytkownika pokazują się z kolumny `roles.name`, w jednym języku.
 - **Cache uprawnień.** Rozwiązanie uprawnień to jedno zapytanie, migawka też. Cache dokłada ryzyko nieświeżej decyzji za

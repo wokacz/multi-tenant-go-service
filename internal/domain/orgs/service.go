@@ -115,12 +115,6 @@ func (s *Service) DeclineInvitation(ctx context.Context, email string, memberID 
 	return s.dir.DeclineInvitation(ctx, memberID, normalizeEmail(email))
 }
 
-// AttachInvitations activates every outstanding invitation for a newly
-// registered address. Proving they own the mailbox is the accept.
-func (s *Service) AttachInvitations(ctx context.Context, userID uuid.UUID, email string) error {
-	return s.dir.AcceptInvitationsByEmail(ctx, userID, normalizeEmail(email), time.Now().UTC())
-}
-
 // SetMemberStatus suspends or reinstates somebody.
 func (s *Service) SetMemberStatus(
 	ctx context.Context,

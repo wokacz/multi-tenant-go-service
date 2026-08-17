@@ -117,11 +117,18 @@ type Repository interface {
 
 	// AddMember creates an active membership for an existing account and
 	// assigns the given roles, in one transaction. It is the provisioning
-	// path — registration, bootstrap — not the invitation path. An outstanding
-	// invitation for the same address is claimed (activated and given these
-	// roles) rather than refused, so joining the default organization after
-	// an invite cannot leave the row invited. It returns ErrAlreadyMember
-	// when the account is already a live member.
+	// path — bootstrap, promoting the first owner — not the invitation path.
+	//
+	// An outstanding invitation for the same address is claimed (activated and
+	// given these roles) rather than refused. That is wanted where the caller is
+	// an operator acting out of band: without it, an account that happens to
+	// have been invited could never be promoted, because the invitation blocks
+	// the insert and nobody yet holds the permission to withdraw it. It is not
+	// wanted on the registration path, which is why JoinDefaultOrganization
+	// looks for an invitation before calling this — claiming one there would
+	// accept an invitation on the invitee's behalf and downgrade its roles.
+	//
+	// It returns ErrAlreadyMember when the account is already a live member.
 	AddMember(ctx context.Context, orgID, userID uuid.UUID, roleIDs []uuid.UUID, invitedBy uuid.UUID, at time.Time) (*Member, error)
 
 	// InviteMember records an outstanding invitation for the address. It does
@@ -207,10 +214,13 @@ type Directory interface {
 	// DeclineInvitation withdraws an outstanding invitation addressed to
 	// email. A mismatch is ErrNotFound, for the same reason as AcceptInvitation.
 	DeclineInvitation(ctx context.Context, memberID uuid.UUID, email string) error
-
-	// AcceptInvitationsByEmail activates every outstanding invitation for the
-	// address. Registration uses it: proving they own the mailbox is the
-	// accept, so they land in the organizations they were invited to without a
-	// second round trip.
-	AcceptInvitationsByEmail(ctx context.Context, userID uuid.UUID, email string, at time.Time) error
 }
+
+// There is deliberately no AcceptInvitationsByEmail here.
+//
+// Registration used to call one, so that a new account landed in every
+// organization it had been invited to without a second round trip. That made
+// registering an accept — and the address on a new account is never verified,
+// so whoever registers an invited address first inherits the invitation and its
+// roles. An invitation is accepted by the invitee, through /v1/me/invitations,
+// and by nothing else.
