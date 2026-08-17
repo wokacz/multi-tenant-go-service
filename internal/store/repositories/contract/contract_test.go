@@ -28,6 +28,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
@@ -49,8 +50,11 @@ type backend struct {
 	dir   orgs.Directory
 	prov  orgs.Provisioner
 	perms authz.Repository
+	users user.Repository
 
 	newAccount    func(t *testing.T) (uuid.UUID, string)
+	registerEmail func(t *testing.T, email string) error
+	newOrgSlug    func(t *testing.T, slug string) error
 	deleteAccount func(t *testing.T, userID uuid.UUID)
 	newOrg        func(t *testing.T) uuid.UUID
 	deleteOrg     func(t *testing.T, orgID uuid.UUID)
@@ -82,6 +86,7 @@ func newMemoryBackend(t *testing.T) *backend {
 		dir:   repo,
 		prov:  repo,
 		perms: repo,
+		users: users,
 
 		newAccount: func(t *testing.T) (uuid.UUID, string) {
 			t.Helper()
@@ -97,8 +102,28 @@ func newMemoryBackend(t *testing.T) *backend {
 
 			return u.ID, u.Email
 		},
+		registerEmail: func(t *testing.T, email string) error {
+			t.Helper()
+
+			return users.Create(t.Context(), &models.User{
+				Name: "Bob", Email: email, PasswordHash: "not-a-real-hash",
+			})
+		},
+		newOrgSlug: func(t *testing.T, slug string) error {
+			t.Helper()
+
+			_, err := repo.CreateOrganization(t.Context(), &models.Organization{Slug: slug, Name: "Org"}, nil)
+
+			return err
+		},
 		deleteAccount: func(t *testing.T, userID uuid.UUID) {
 			t.Helper()
+
+			// The account and the authorization state live in two fakes here, so
+			// both have to be told — the SQL has one row and one soft delete.
+			if err := users.Delete(t.Context(), userID); err != nil {
+				t.Fatalf("delete account: %v", err)
+			}
 
 			repo.SeedSoftDeletedUser(userID)
 		},
@@ -160,6 +185,7 @@ func newPostgresBackend(t *testing.T) *backend {
 		dir:   repo,
 		prov:  repo,
 		perms: repositories.NewAuthz(db),
+		users: users,
 
 		newAccount: func(t *testing.T) (uuid.UUID, string) {
 			t.Helper()
@@ -174,6 +200,20 @@ func newPostgresBackend(t *testing.T) *backend {
 			}
 
 			return u.ID, u.Email
+		},
+		registerEmail: func(t *testing.T, email string) error {
+			t.Helper()
+
+			return users.Create(t.Context(), &models.User{
+				Name: "Bob", Email: email, PasswordHash: "not-a-real-hash",
+			})
+		},
+		newOrgSlug: func(t *testing.T, slug string) error {
+			t.Helper()
+
+			_, err := repo.CreateOrganization(t.Context(), &models.Organization{Slug: slug, Name: "Org"}, nil)
+
+			return err
 		},
 		deleteAccount: func(t *testing.T, userID uuid.UUID) {
 			t.Helper()
@@ -817,6 +857,84 @@ func TestAddMemberRefusesAnUnknownAccount(t *testing.T) {
 			nil, uuid.Nil, time.Now().UTC())
 		if !errors.Is(err, orgs.ErrNotFound) {
 			t.Errorf("AddMember() for an account that does not exist = %v, want ErrNotFound", err)
+		}
+	})
+}
+
+// TestADeletedAccountReleasesItsAddress is M9: the unique index is partial, so a
+// soft delete stops occupying the address.
+//
+// A plain unique index held it for ever. Nobody could register it again, and because
+// registration hides a duplicate behind 204 to avoid an enumeration oracle, the
+// person trying was told it worked and could then never sign in — a dead end with no
+// error anywhere to explain it.
+func TestADeletedAccountReleasesItsAddress(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		userID, email := b.newAccount(t)
+
+		if err := b.registerEmail(t, email); err == nil {
+			t.Fatal("registering a live account's address succeeded; the index is not unique")
+		}
+
+		b.deleteAccount(t, userID)
+
+		if err := b.registerEmail(t, email); err != nil {
+			t.Errorf("registering a deleted account's address = %v, want it free again", err)
+		}
+	})
+}
+
+// TestADeletedOrganizationReleasesItsSlug is the same rule for organizations, where
+// the symptom was a 409 with nothing to explain it.
+func TestADeletedOrganizationReleasesItsSlug(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		slug := "reuse-" + uuid.Must(uuid.NewV7()).String()
+
+		if err := b.newOrgSlug(t, slug); err != nil {
+			t.Fatalf("create organization: %v", err)
+		}
+
+		if err := b.newOrgSlug(t, slug); !errors.Is(err, orgs.ErrSlugTaken) {
+			t.Fatalf("a second live organization with the same slug = %v, want ErrSlugTaken", err)
+		}
+
+		existing, err := b.prov.OrganizationBySlug(t.Context(), slug)
+		if err != nil {
+			t.Fatalf("OrganizationBySlug() = _, %v", err)
+		}
+
+		b.deleteOrg(t, existing.ID)
+
+		if err := b.newOrgSlug(t, slug); err != nil {
+			t.Errorf("reusing a deleted organization's slug = %v, want it free again", err)
+		}
+	})
+}
+
+// TestADeletedAccountIsNotFoundByEitherLookup pins a difference that only shows at
+// this level.
+//
+// Postgres hides a soft-deleted account because GORM's scope does it, without anybody
+// writing it down; the fake looked it up regardless. It is invisible through the API —
+// deleting an account also revokes its devices, so requireBearer refuses on the
+// device before the account lookup matters — which is exactly why it belongs here
+// rather than in an HTTP test that would pass either way.
+func TestADeletedAccountIsNotFoundByEitherLookup(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		userID, email := b.newAccount(t)
+
+		if _, err := b.users.ByID(t.Context(), userID); err != nil {
+			t.Fatalf("ByID() for a live account = %v", err)
+		}
+
+		b.deleteAccount(t, userID)
+
+		if _, err := b.users.ByID(t.Context(), userID); !errors.Is(err, user.ErrNotFound) {
+			t.Errorf("ByID() for a deleted account = %v, want ErrNotFound", err)
+		}
+
+		if _, err := b.users.ByEmail(t.Context(), email); !errors.Is(err, user.ErrNotFound) {
+			t.Errorf("ByEmail() for a deleted account = %v, want ErrNotFound", err)
 		}
 	})
 }

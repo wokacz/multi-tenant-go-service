@@ -14,8 +14,14 @@ type User struct {
 	Model
 	SoftDelete
 
-	Name         string `gorm:"size:100;not null"`
-	Email        string `gorm:"size:255;not null;uniqueIndex"`
+	Name string `gorm:"size:100;not null"`
+	// Unique only among live accounts. A plain unique index plus a soft delete
+	// means a deleted account occupies its address for ever: nobody could register
+	// it again, and because registration hides a duplicate behind 204 to avoid an
+	// enumeration oracle, the person trying would be told it worked and then never
+	// be able to sign in. The partial index frees the address while the old row —
+	// and the address on it — stays, so the audit trail can still say who did what.
+	Email        string `gorm:"size:255;not null;index:idx_users_email,unique,where:deleted_at IS NULL"`
 	PasswordHash string `gorm:"size:255;not null" json:"-"`
 
 	// SessionEpoch is copied into the JWT at issue time and incremented when

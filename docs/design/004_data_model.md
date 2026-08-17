@@ -61,6 +61,35 @@ sortowanie po `id DESC` to sortowanie po czasie utworzenia, bez dodatkowego inde
 ponownie kończyłoby się błędem duplikatu dla roli, której użytkownik nie widzi. Zamiast tego serwis odmawia usunięcia
 roli, którą ktoś jeszcze posiada, co jest lepszą gwarancją niż cofnięcie, do którego nikt nie ma dostępu.
 
+### Unikat przy miękkim usuwaniu musi być częściowy
+
+`users.email` i `organizations.slug` mają unikat **tylko wśród żywych wierszy**:
+
+```sql
+CREATE UNIQUE INDEX "idx_users_email" ON "users" ("email") WHERE (deleted_at IS NULL);
+```
+
+To ta sama pułapka, którą przy `Role` rozwiązano rezygnacją z miękkiego usuwania — tu rozwiązana drugim sposobem, bo
+historia konta i organizacji ma przeżyć usunięcie. Przy zwykłym unikacie usunięte konto **zajmowało swój adres na
+zawsze**: nikt nie mógł go zarejestrować ponownie, a ponieważ rejestracja ukrywa duplikat pod `204` (żeby status nie
+służył do odgadywania, które adresy istnieją), osoba próbująca dostawała informację o sukcesie i **nigdy** nie mogła się
+zalogować. Żaden błąd nigdzie tego nie wyjaśniał. Przy organizacji objawem było `409 slug_taken`, na które nie dało się
+zareagować.
+
+Wyrażone tagiem GORM-a, więc model zostaje źródłem prawdy:
+
+```go
+Email string `gorm:"size:255;not null;index:idx_users_email,unique,where:deleted_at IS NULL"`
+```
+
+Adres i slug **zostają na starym wierszu** — nie są anonimizowane — bo dziennik zmian rozwiązuje aktora `LEFT JOIN`-em do
+`users` i bez nich przestałby odpowiadać na pytanie „kto to zrobił". Konsekwencja, o której trzeba wiedzieć: po zwolnieniu
+adresu ktoś inny może go zarejestrować, więc dwa wiersze mogą mieć ten sam adres — jeden usunięty, jeden żywy. Zapytania
+szukające po adresie muszą przechodzić przez model (zakres soft delete GORM-a), nie przez `Table(...)`.
+
+Dla sluga jest to bezpieczne, bo **nic nie adresuje organizacji slugiem** — każda trasa bierze id. Gdyby kiedyś zaczęło,
+ponowne użycie sluga sprawiłoby, że stary link wskazuje innego najemcę, i ta decyzja wymagałaby ponownego rozważenia.
+
 ## Pułapki, które już raz kosztowały
 
 ### Miękkie usuwanie nie odpala kaskady

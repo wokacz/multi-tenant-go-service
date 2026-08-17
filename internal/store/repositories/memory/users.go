@@ -76,12 +76,16 @@ func (m *Users) Create(_ context.Context, u *models.User) error {
 	return nil
 }
 
+// ByID hides a deleted account, which is what GORM's soft-delete scope does for
+// the SQL implementation without anybody writing it down. It matters more than it
+// looks: requireBearer loads the account on every request, so this is what makes a
+// deleted account's token stop working.
 func (m *Users) ByID(_ context.Context, id uuid.UUID) (*models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	u, ok := m.users[id]
-	if !ok {
+	if !ok || u.IsDeleted() {
 		return nil, user.ErrNotFound
 	}
 
@@ -130,6 +134,12 @@ func (m *Users) Delete(_ context.Context, userID uuid.UUID) error {
 		return err
 	}
 
+	// The address is free again. byEmail is this fake's unique index, and the SQL
+	// one is partial — unique only among live accounts — so a deleted account must
+	// stop occupying its address here too. Without this the fake would keep
+	// refusing a registration Postgres accepts.
+	delete(m.byEmail, u.Email)
+
 	// The model hook revokes the devices; the fake does the same so a test
 	// cannot pass here and fail against Postgres.
 	for _, device := range m.devices {
@@ -165,6 +175,10 @@ func (m *Users) ByEmail(_ context.Context, email string) (*models.User, error) {
 
 	id, ok := m.byEmail[email]
 	if !ok {
+		return nil, user.ErrNotFound
+	}
+
+	if u := m.users[id]; u == nil || u.IsDeleted() {
 		return nil, user.ErrNotFound
 	}
 

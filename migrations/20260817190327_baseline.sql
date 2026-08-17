@@ -58,7 +58,7 @@ CREATE TABLE "users" (
 -- Create index "idx_users_deleted_at" to table: "users"
 CREATE INDEX "idx_users_deleted_at" ON "users" ("deleted_at");
 -- Create index "idx_users_email" to table: "users"
-CREATE UNIQUE INDEX "idx_users_email" ON "users" ("email");
+CREATE UNIQUE INDEX "idx_users_email" ON "users" ("email") WHERE (deleted_at IS NULL);
 -- Create "devices" table
 CREATE TABLE "devices" (
   "id" uuid NOT NULL,
@@ -111,7 +111,7 @@ CREATE TABLE "organizations" (
 -- Create index "idx_organizations_deleted_at" to table: "organizations"
 CREATE INDEX "idx_organizations_deleted_at" ON "organizations" ("deleted_at");
 -- Create index "idx_organizations_slug" to table: "organizations"
-CREATE UNIQUE INDEX "idx_organizations_slug" ON "organizations" ("slug");
+CREATE UNIQUE INDEX "idx_organizations_slug" ON "organizations" ("slug") WHERE (deleted_at IS NULL);
 -- Create "roles" table
 CREATE TABLE "roles" (
   "id" uuid NOT NULL,
