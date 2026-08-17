@@ -11,7 +11,7 @@ components:
           readOnly: true
           type: string
         email:
-          description: Address of an existing account
+          description: Address to invite. An existing account is not required.
           format: email
           maxLength: 255
           type: string
@@ -576,7 +576,7 @@ components:
           format: date-time
           type: string
         name:
-          description: Display name
+          description: Display name. Absent until the invitation is accepted.
           type: string
         roles:
           description: Roles held in this organization
@@ -593,13 +593,11 @@ components:
             - suspended
           type: string
         user_id:
-          description: The account behind the membership
+          description: The account behind the membership. Absent while the invitation is outstanding, so listing members cannot tell a registered address from an unknown one.
           format: uuid
           type: string
       required:
         - id
-        - user_id
-        - name
         - email
         - status
         - roles
@@ -607,6 +605,10 @@ components:
     MembershipResponse:
       additionalProperties: false
       properties:
+        id:
+          description: Membership id, used to accept or decline an invitation
+          format: uuid
+          type: string
         organization:
           $ref: "#/components/schemas/OrganizationResponse"
         roles:
@@ -624,6 +626,7 @@ components:
             - suspended
           type: string
       required:
+        - id
         - organization
         - status
         - roles
@@ -1291,6 +1294,102 @@ paths:
       summary: Revoke a device
       tags:
         - devices
+  /v1/me/invitations/{invitationID}:
+    delete:
+      description: "Withdraws an outstanding invitation addressed to this account. Self-service: an invitation for another address is indistinguishable from a missing one."
+      operationId: decline-invitation
+      parameters:
+        - description: Membership id of the outstanding invitation
+          in: path
+          name: invitationID
+          required: true
+          schema:
+            description: Membership id of the outstanding invitation
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Decline an invitation
+      tags:
+        - users
+  /v1/me/invitations/{invitationID}/accept:
+    post:
+      description: "Turns an outstanding invitation addressed to this account into an active membership. Self-service: no permission is required, and an invitation for another address is indistinguishable from a missing one."
+      operationId: accept-invitation
+      parameters:
+        - description: Membership id of the outstanding invitation
+          in: path
+          name: invitationID
+          required: true
+          schema:
+            description: Membership id of the outstanding invitation
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Accept an invitation
+      tags:
+        - users
   /v1/me/login-events:
     get:
       description: Returns the account's recent sign-in attempts, newest first. Attempts against an address that is not registered are not recorded, so an empty history means nobody has tried this account.
@@ -1763,7 +1862,7 @@ paths:
       tags:
         - organizations
     post:
-      description: Puts an existing account into the organization with the given roles. Requires members.invite, and every role named must be one the caller could grant themselves — otherwise this endpoint would be a way to acquire permissions the caller does not have.
+      description: Stores an invitation for the address with the given roles. The account need not exist yet; unknown and known addresses produce the same response, so the call cannot be used to discover who is registered. Requires members.invite, and every role named must be one the caller could grant themselves — otherwise this endpoint would be a way to acquire permissions the caller does not have.
       operationId: add-member
       parameters:
         - description: Organization id
@@ -1831,7 +1930,7 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Add a member
+      summary: Invite a member
       tags:
         - organizations
   /v1/orgs/{orgID}/members/{memberID}:

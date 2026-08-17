@@ -17,6 +17,7 @@ import (
 type authzFixture struct {
 	server     *Server
 	repo       *memory.Authz
+	mailer     *capturingMailer
 	token      string
 	userID     uuid.UUID
 	orgID      uuid.UUID
@@ -44,6 +45,7 @@ func newAuthzFixture(t *testing.T, roles ...authz.RoleKey) *authzFixture {
 	return &authzFixture{
 		server:     server,
 		repo:       repo,
+		mailer:     mailer,
 		token:      session.Token,
 		userID:     session.User.ID,
 		orgID:      orgID,

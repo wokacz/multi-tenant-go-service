@@ -154,6 +154,9 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, orgs.ErrInvalidName):
 		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidName)
 
+	case errors.Is(err, orgs.ErrInvalidEmail):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidEmail)
+
 	case errors.Is(err, orgs.ErrInvalidStatus):
 		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidStatus)
 

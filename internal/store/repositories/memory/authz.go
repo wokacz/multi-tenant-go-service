@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -105,12 +106,42 @@ func (m *Authz) recordLocked(ctx context.Context, event models.AuthzEvent) {
 // entry survives the membership being deleted.
 func (m *Authz) subjectOfLocked(memberID uuid.UUID) *uuid.UUID {
 	if membership, ok := m.memberships[memberID]; ok {
-		id := membership.UserID
-
-		return &id
+		return membership.UserID
 	}
 
 	return nil
+}
+
+func memberSortKey(m orgs.Member) string {
+	if m.Name != "" {
+		return m.Name
+	}
+
+	return m.Email
+}
+
+func sameAccount(membership *models.Membership, userID uuid.UUID) bool {
+	return membership != nil && membership.UserID != nil && *membership.UserID == userID
+}
+
+func (m *Authz) accountDeletedLocked(membership *models.Membership) bool {
+	return membership.UserID != nil && m.deletedUsers[*membership.UserID]
+}
+
+func (m *Authz) emailOfLocked(userID uuid.UUID) string {
+	if m.users != nil {
+		if u, err := m.users.ByID(context.Background(), userID); err == nil {
+			return u.Email
+		}
+	}
+
+	return userID.String() + "@seed.test"
+}
+
+func ptrID(id uuid.UUID) *uuid.UUID {
+	copy := id
+
+	return &copy
 }
 
 func (m *Authz) Events(_ context.Context, orgID uuid.UUID, limit, offset int) ([]audit.Event, error) {
@@ -219,7 +250,7 @@ func (m *Authz) PermissionKeysByOrganization(_ context.Context, userID uuid.UUID
 	out := map[uuid.UUID][]string{}
 
 	for _, membership := range m.memberships {
-		if membership.UserID != userID {
+		if !sameAccount(membership, userID) {
 			continue
 		}
 
@@ -271,7 +302,11 @@ func (m *Authz) MembershipsForUser(_ context.Context, userID uuid.UUID) ([]orgs.
 	var out []orgs.Membership
 
 	for _, membership := range m.memberships {
-		if membership.UserID != userID {
+		matchesAccount := sameAccount(membership, userID)
+		matchesInvite := membership.Status == models.MembershipInvited &&
+			membership.UserID == nil &&
+			membership.Email == m.emailOfLocked(userID)
+		if !matchesAccount && !matchesInvite {
 			continue
 		}
 
@@ -290,7 +325,12 @@ func (m *Authz) MembershipsForUser(_ context.Context, userID uuid.UUID) ([]orgs.
 
 		slices.Sort(keys)
 
-		out = append(out, orgs.Membership{Organization: *org, Status: membership.Status, RoleKeys: keys})
+		out = append(out, orgs.Membership{
+			ID:           membership.ID,
+			Organization: *org,
+			Status:       membership.Status,
+			RoleKeys:     keys,
+		})
 	}
 
 	// The SQL orders by name; map iteration does not, and a test asserting on
@@ -358,7 +398,7 @@ func (m *Authz) Members(_ context.Context, orgID uuid.UUID) ([]orgs.Member, erro
 	var out []orgs.Member
 
 	for _, membership := range m.memberships {
-		if membership.OrganizationID != orgID || m.deletedUsers[membership.UserID] {
+		if membership.OrganizationID != orgID || m.accountDeletedLocked(membership) {
 			continue
 		}
 
@@ -366,7 +406,7 @@ func (m *Authz) Members(_ context.Context, orgID uuid.UUID) ([]orgs.Member, erro
 	}
 
 	slices.SortFunc(out, func(a, b orgs.Member) int {
-		return strings.Compare(a.Name, b.Name)
+		return strings.Compare(memberSortKey(a), memberSortKey(b))
 	})
 
 	return out, nil
@@ -379,7 +419,7 @@ func (m *Authz) Member(_ context.Context, orgID, memberID uuid.UUID) (*orgs.Memb
 	membership, ok := m.memberships[memberID]
 	// Scoped by organization, so a membership id from another tenant simply
 	// does not match.
-	if !ok || membership.OrganizationID != orgID || m.deletedUsers[membership.UserID] {
+	if !ok || membership.OrganizationID != orgID || m.accountDeletedLocked(membership) {
 		return nil, orgs.ErrNotFound
 	}
 
@@ -398,10 +438,40 @@ func (m *Authz) AddMember(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	email := m.emailOfLocked(userID)
+
 	for _, membership := range m.memberships {
-		if membership.UserID == userID && membership.OrganizationID == orgID {
+		if membership.OrganizationID != orgID {
+			continue
+		}
+
+		if sameAccount(membership, userID) {
 			return nil, orgs.ErrAlreadyMember
 		}
+
+		if membership.Email != email {
+			continue
+		}
+
+		if membership.Status != models.MembershipInvited || membership.UserID != nil {
+			return nil, orgs.ErrAlreadyMember
+		}
+
+		if err := m.rolesBelongLocked(orgID, roleIDs); err != nil {
+			return nil, err
+		}
+
+		membership.UserID = ptrID(userID)
+		membership.Activate(at)
+		m.memberRoles[membership.ID] = uniqueIDs(roleIDs)
+
+		m.recordLocked(ctx, models.AuthzEvent{
+			OrganizationID: &orgID, SubjectID: &userID, Action: models.ActionMemberAccepted,
+		})
+
+		member := m.memberLocked(membership)
+
+		return &member, nil
 	}
 
 	if err := m.rolesBelongLocked(orgID, roleIDs); err != nil {
@@ -411,7 +481,8 @@ func (m *Authz) AddMember(
 	id := uuid.Must(uuid.NewV7())
 	membership := &models.Membership{
 		Model:          models.Model{ID: id},
-		UserID:         userID,
+		UserID:         ptrID(userID),
+		Email:          m.emailOfLocked(userID),
 		OrganizationID: orgID,
 		Status:         models.MembershipActive,
 	}
@@ -435,6 +506,52 @@ func (m *Authz) AddMember(
 	return &member, nil
 }
 
+func (m *Authz) InviteMember(
+	ctx context.Context,
+	orgID uuid.UUID,
+	email string,
+	roleIDs []uuid.UUID,
+	invitedBy uuid.UUID,
+	at time.Time,
+) (*orgs.Member, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, membership := range m.memberships {
+		if membership.OrganizationID == orgID && membership.Email == email {
+			return nil, orgs.ErrAlreadyMember
+		}
+	}
+
+	if err := m.rolesBelongLocked(orgID, roleIDs); err != nil {
+		return nil, err
+	}
+
+	id := uuid.Must(uuid.NewV7())
+	membership := &models.Membership{
+		Model:          models.Model{ID: id, CreatedAt: at.UTC()},
+		Email:          email,
+		OrganizationID: orgID,
+		Status:         models.MembershipInvited,
+	}
+
+	if invitedBy != uuid.Nil {
+		by := invitedBy
+		membership.InvitedBy = &by
+	}
+
+	m.memberships[id] = membership
+	m.memberRoles[id] = uniqueIDs(roleIDs)
+
+	m.recordLocked(ctx, models.AuthzEvent{
+		OrganizationID: &orgID, Action: models.ActionMemberInvited, Detail: email,
+	})
+
+	member := m.memberLocked(membership)
+
+	return &member, nil
+}
+
 func (m *Authz) SetMemberStatus(
 	ctx context.Context,
 	orgID, memberID uuid.UUID,
@@ -447,6 +564,10 @@ func (m *Authz) SetMemberStatus(
 	membership, ok := m.memberships[memberID]
 	if !ok || membership.OrganizationID != orgID {
 		return orgs.ErrNotFound
+	}
+
+	if err := m.refuseLastOwnerLossLocked(orgID, memberID, !status.GrantsPermissions()); err != nil {
+		return err
 	}
 
 	action := models.ActionMemberSuspended
@@ -476,6 +597,10 @@ func (m *Authz) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) err
 		return orgs.ErrNotFound
 	}
 
+	if err := m.refuseLastOwnerLossLocked(orgID, memberID, true); err != nil {
+		return err
+	}
+
 	m.recordLocked(ctx, models.AuthzEvent{
 		OrganizationID: &orgID,
 		SubjectID:      m.subjectOfLocked(memberID),
@@ -495,6 +620,10 @@ func (m *Authz) ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUI
 	membership, ok := m.memberships[memberID]
 	if !ok || membership.OrganizationID != orgID {
 		return orgs.ErrNotFound
+	}
+
+	if err := m.refuseLastOwnerLossLocked(orgID, memberID, m.replacingRolesDropsOwnerLocked(orgID, roleIDs)); err != nil {
+		return err
 	}
 
 	if err := m.rolesBelongLocked(orgID, roleIDs); err != nil {
@@ -666,7 +795,7 @@ func (m *Authz) OwnerCount(_ context.Context, orgID uuid.UUID) (int, error) {
 			continue
 		}
 
-		if m.deletedUsers[membership.UserID] {
+		if m.accountDeletedLocked(membership) {
 			continue
 		}
 
@@ -804,11 +933,11 @@ func (m *Authz) MemberByUser(_ context.Context, orgID, userID uuid.UUID) (*orgs.
 	defer m.mu.Unlock()
 
 	for _, membership := range m.memberships {
-		if membership.OrganizationID != orgID || membership.UserID != userID {
+		if membership.OrganizationID != orgID || !sameAccount(membership, userID) {
 			continue
 		}
 
-		if m.deletedUsers[membership.UserID] {
+		if m.accountDeletedLocked(membership) {
 			continue
 		}
 
@@ -846,7 +975,7 @@ func (m *Authz) activeMembershipLocked(userID, orgID uuid.UUID) *models.Membersh
 	}
 
 	for _, membership := range m.memberships {
-		if membership.UserID != userID || membership.OrganizationID != orgID {
+		if !sameAccount(membership, userID) || membership.OrganizationID != orgID {
 			continue
 		}
 
@@ -863,14 +992,15 @@ func (m *Authz) activeMembershipLocked(userID, orgID uuid.UUID) *models.Membersh
 func (m *Authz) memberLocked(membership *models.Membership) orgs.Member {
 	member := orgs.Member{
 		ID:       membership.ID,
-		UserID:   membership.UserID,
+		UserID:   membership.AccountID(),
+		Email:    membership.Email,
 		Status:   membership.Status,
 		JoinedAt: membership.JoinedAt,
 		Roles:    []orgs.RoleSummary{},
 	}
 
-	if m.users != nil {
-		if u, err := m.users.ByID(context.Background(), membership.UserID); err == nil {
+	if member.UserID != uuid.Nil && m.users != nil {
+		if u, err := m.users.ByID(context.Background(), member.UserID); err == nil {
 			member.Name, member.Email = u.Name, u.Email
 		}
 	}
@@ -1047,9 +1177,11 @@ func (m *Authz) SeedMember(
 	defer m.mu.Unlock()
 
 	id := uuid.Must(uuid.NewV7())
+	uid := userID
 	m.memberships[id] = &models.Membership{
 		Model:          models.Model{ID: id},
-		UserID:         userID,
+		UserID:         &uid,
+		Email:          m.emailOfLocked(userID),
 		OrganizationID: orgID,
 		Status:         status,
 	}
@@ -1085,4 +1217,158 @@ func (m *Authz) SeedSystemRole(userID uuid.UUID, key string) {
 	if !slices.Contains(m.systemRoles[userID], key) {
 		m.systemRoles[userID] = append(m.systemRoles[userID], key)
 	}
+}
+
+func (m *Authz) AcceptInvitation(
+	ctx context.Context,
+	memberID, userID uuid.UUID,
+	email string,
+	at time.Time,
+) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.acceptInvitationLocked(ctx, memberID, userID, email, at)
+}
+
+func (m *Authz) DeclineInvitation(ctx context.Context, memberID uuid.UUID, email string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	membership, ok := m.memberships[memberID]
+	if !ok || membership.Status != models.MembershipInvited || membership.Email != email {
+		return orgs.ErrNotFound
+	}
+
+	m.recordLocked(ctx, models.AuthzEvent{
+		OrganizationID: &membership.OrganizationID,
+		Action:         models.ActionMemberRemoved,
+		Detail:         email,
+	})
+
+	delete(m.memberships, memberID)
+	delete(m.memberRoles, memberID)
+
+	return nil
+}
+
+func (m *Authz) AcceptInvitationsByEmail(ctx context.Context, userID uuid.UUID, email string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var ids []uuid.UUID
+	for id, membership := range m.memberships {
+		if membership.Status == models.MembershipInvited && membership.UserID == nil && membership.Email == email {
+			ids = append(ids, id)
+		}
+	}
+
+	for _, id := range ids {
+		if err := m.acceptInvitationLocked(ctx, id, userID, email, at); err != nil {
+			if errors.Is(err, orgs.ErrAlreadyMember) {
+				continue
+			}
+
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *Authz) acceptInvitationLocked(
+	ctx context.Context,
+	memberID, userID uuid.UUID,
+	email string,
+	at time.Time,
+) error {
+	membership, ok := m.memberships[memberID]
+	if !ok || membership.Status != models.MembershipInvited || membership.Email != email {
+		return orgs.ErrNotFound
+	}
+
+	for _, existing := range m.memberships {
+		if existing.ID != memberID && sameAccount(existing, userID) && existing.OrganizationID == membership.OrganizationID {
+			return orgs.ErrAlreadyMember
+		}
+	}
+
+	membership.UserID = ptrID(userID)
+	membership.Activate(at)
+
+	m.recordLocked(ctx, models.AuthzEvent{
+		OrganizationID: &membership.OrganizationID,
+		SubjectID:      &userID,
+		Action:         models.ActionMemberAccepted,
+	})
+
+	return nil
+}
+
+func (m *Authz) refuseLastOwnerLossLocked(orgID, memberID uuid.UUID, losingCapability bool) error {
+	if !losingCapability {
+		return nil
+	}
+
+	membership, ok := m.memberships[memberID]
+	if !ok || membership.OrganizationID != orgID {
+		return orgs.ErrNotFound
+	}
+
+	if !membership.Status.GrantsPermissions() || !m.holdsOwnerLocked(memberID) {
+		return nil
+	}
+
+	if m.ownerCountLocked(orgID) <= 1 {
+		return orgs.ErrLastOwner
+	}
+
+	return nil
+}
+
+func (m *Authz) replacingRolesDropsOwnerLocked(orgID uuid.UUID, roleIDs []uuid.UUID) bool {
+	var ownerID uuid.UUID
+	for _, role := range m.roles {
+		if role.OrganizationID == orgID && role.Key == string(authz.RoleOwner) {
+			ownerID = role.ID
+
+			break
+		}
+	}
+
+	if ownerID == uuid.Nil {
+		return false
+	}
+
+	return !slices.Contains(roleIDs, ownerID)
+}
+
+func (m *Authz) holdsOwnerLocked(memberID uuid.UUID) bool {
+	for _, roleID := range m.memberRoles[memberID] {
+		if role, ok := m.roles[roleID]; ok && role.Key == string(authz.RoleOwner) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (m *Authz) ownerCountLocked(orgID uuid.UUID) int {
+	total := 0
+
+	for _, membership := range m.memberships {
+		if membership.OrganizationID != orgID || !membership.Status.GrantsPermissions() {
+			continue
+		}
+
+		if m.accountDeletedLocked(membership) {
+			continue
+		}
+
+		if m.holdsOwnerLocked(membership.ID) {
+			total++
+		}
+	}
+
+	return total
 }

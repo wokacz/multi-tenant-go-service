@@ -23,9 +23,8 @@ Zapis nieudanego logowania do historii jest **celowo ignorowany przy błędach**
 `500`, złe hasło dawałoby `500`, a nieznany adres nadal `401` — czyli dokładnie ten orakl, który wspólny błąd miał
 zamknąć.
 
-Jeden wyjątek jest świadomy: `POST /v1/orgs/{orgID}/members` odpowiada `404`, gdy adresu nie ma w systemie. Endpoint
-stoi za uprawnieniem `members.invite`, więc nie jest oraklem dla anonimowego wołającego, a administrator, który nie
-odróżni „zły adres" od „po cichu nic nie zrobiłem", po prostu wpisze go ponownie.
+`POST /v1/orgs/{orgID}/members` nie szuka adresu w tabeli kont. Znany i nieznany dają ten sam `201` ze statusem
+`invited` i bez `user_id`. Szczegóły: [Autoryzacja — zaproszenia](007_authorization.md#zaproszenia).
 
 ## Limity zapytań
 
@@ -38,12 +37,15 @@ Token bucket per adres IP, osobne kubełki dla grup:
 | `RESET_PER_MINUTE`    | 5         | `POST /v1/password-resets` i `…/confirm`             |
 
 Oba kroki logowania dzielą kubełek — to jedno logowanie, a osobny kubełek byłby tylko drugim miejscem do zgadywania.
-Dodawanie członka dzieli kubełek z rejestracją, bo zamienia dowolny adres w konto, czyli zadaje to samo pytanie z
-drugiej strony.
+Zaproszenie członka dzieli kubełek z rejestracją, bo oba wysyłają pocztę na dowolny adres, który wołający podał.
 
-Klucz to realny peer TCP, nigdy nagłówek, więc podszywanie się pod
-`X-Forwarded-For` nie tworzy nowych kubełków. Mapa kubełków jest czyszczona z wpisów, które zdążyły się w pełni odnowić,
-więc skan po wielu adresach jej nie rozdmucha.
+Klucz to adres klienta. Domyślnie jest to realny peer TCP. `X-Forwarded-For` jest czytany **tylko** wtedy, gdy ten peer
+siedzi w `TRUSTED_PROXIES` (lista CIDR), idąc od prawej i biorąc pierwszy skok, który sam nie jest zaufany. chi `RealIP`
+nie jest używane: przepisuje `RemoteAddr` z nagłówka, który może ustawić każdy. Pusta lista — i to jest domyślne —
+nigdy nie ufa nagłówkowi, więc podszywanie się pod `X-Forwarded-For` nie tworzy nowych kubełków.
+
+Mapa kubełków jest czyszczona z wpisów, które zdążyły się w pełni odnowić, więc skan po wielu adresach jej nie
+rozdmucha.
 
 Wartość `0` wyłącza limiter — ustawienie wyłącznie testowe.
 
@@ -113,11 +115,15 @@ restart zamienia literówkę w powolną zgadywankę.
 
 Produkcja nie wystartuje, gdy:
 
+- `ENV` nie jest ustawione na `production` (albo `development`) — nie ma cichej wartości domyślnej,
 - `AUTH_TOKEN_SECRET` lub `AUTH_RESET_SECRET` jest krótszy niż 32 bajty albo ma wartość deweloperską,
 - nasłuch jest spoza loopbacku bez TLS,
 - `POSTGRES_SSL_MODE` to nie `require` / `verify-ca` / `verify-full`,
 - hasło do Postgresa jest jednym ze znanych słabych,
 - brakuje `SMTP_HOST` — bez niego kody nie mają jak dojść.
+
+Wartości deweloperskie sekretów są uzupełniane **tylko** przy `ENV=development` i nasłuchu na loopbacku. Proces związany
+z `0.0.0.0` — w tym kontener Compose — wymaga własnych sekretów nawet w developmencie.
 
 W produkcji nie są serwowane `/docs`, `/openapi.json` ani `/schemas`.
 

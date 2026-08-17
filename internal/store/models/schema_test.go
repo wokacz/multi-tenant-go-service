@@ -102,6 +102,9 @@ func TestAuthorizationUniqueIndexes(t *testing.T) {
 		"one membership per user and organization": {
 			&models.Membership{}, "idx_membership_user_org", []string{"user_id", "organization_id"},
 		},
+		"one membership per email and organization": {
+			&models.Membership{}, "idx_membership_org_email", []string{"organization_id", "email"},
+		},
 		"role keys are unique inside an organization": {
 			&models.Role{}, "idx_role_org_key", []string{"organization_id", "key"},
 		},

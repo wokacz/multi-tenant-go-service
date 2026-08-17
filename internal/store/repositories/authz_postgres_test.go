@@ -66,7 +66,13 @@ func newMembership(
 ) *models.Membership {
 	t.Helper()
 
-	membership := &models.Membership{OrganizationID: orgID, UserID: userID, Status: status}
+	uid := userID
+	membership := &models.Membership{
+		OrganizationID: orgID,
+		UserID:         &uid,
+		Email:          emailForUser(t, db, userID),
+		Status:         status,
+	}
 	if err := db.Create(membership).Error; err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
@@ -79,6 +85,17 @@ func newMembership(
 	}
 
 	return membership
+}
+
+func emailForUser(t *testing.T, db *store.DB, userID uuid.UUID) string {
+	t.Helper()
+
+	var email string
+	if err := db.Model(&models.User{}).Select("email").Where("id = ?", userID).Scan(&email).Error; err != nil || email == "" {
+		t.Fatalf("email for %s: %v (%q)", userID, err, email)
+	}
+
+	return email
 }
 
 func TestOrganizationPermissionKeysUnionsEveryRole(t *testing.T) {

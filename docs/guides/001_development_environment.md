@@ -1,7 +1,8 @@
 # Środowisko developerskie
 
-Są dwie równorzędne drogi uruchomienia. Obie czytają ten sam `.env`. Compose nadpisuje wyłącznie cztery wartości, które
-nie mogą znaczyć tego samego w obu miejscach: `API_HOST`, `API_PORT`, `POSTGRES_HOST`, `POSTGRES_PORT`.
+Są dwie równorzędne drogi uruchomienia. Obie czytają ten sam `.env`. Compose nadpisuje wartości, które nie mogą znaczyć
+tego samego w obu miejscach: `API_HOST`, `API_PORT`, `POSTGRES_HOST`, `POSTGRES_PORT`, a także sekrety JWT — kontener
+słucha na `0.0.0.0`, więc wbudowane wartości deweloperskie są odrzucane.
 
 ## Czego potrzebujesz
 
@@ -154,7 +155,8 @@ W kontenerach, bez Go na hoście:
 task compose:bootstrap -- -email ada@example.com
 ```
 
-Polecenie jest idempotentne. Dlaczego nie „pierwszy zarejestrowany wygrywa":
+Polecenie jest idempotentne. `-platform-admin` jest wyłączone domyślnie: trzeba go poprosić, żeby pierwsza osoba w
+organizacji nie stała się milcząco administratorem całej instalacji. Dlaczego nie „pierwszy zarejestrowany wygrywa":
 [Autoryzacja](../design/007_authorization.md#bootstrap).
 
 ## Polecenia
@@ -203,21 +205,23 @@ Szczegóły: [instrukcja testów](007_write_tests.md).
 
 Aplikacja **nie czyta `.env`** — czyta zmienne środowiskowe. Na hoście ładuje je
 `dotenv:` w `Taskfile.yml`. W kontenerach wstrzykuje je Compose (`env_file`)
-i nadpisuje cztery wartości z początku tej strony. Uruchomienie binarki z pominięciem Taska wymaga własnego
+i nadpisuje wartości z początku tej strony. Uruchomienie binarki z pominięciem Taska wymaga własnego
 wyeksportowania zmiennych.
 
 Najważniejsze zmienne (pełna lista z komentarzami w `.env.example`):
 
 | Zmienna                             | Domyślnie            | Uwagi                                                  |
 |-------------------------------------|----------------------|--------------------------------------------------------|
-| `ENV`                               | `development`        | `production` włącza twardą walidację i wyłącza `/docs` |
-| `API_HOST` / `API_PORT`             | `127.0.0.1` / `8000` | w kontenerze Compose ustawia host na `0.0.0.0`         |
-| `AUTH_TOKEN_SECRET`                 | wartość dev          | produkcja wymaga własnej, min. 32 bajty                |
-| `AUTH_TOKEN_TTL`                    | `1h`                 | format czasu Go; gołe `30` jest odrzucane              |
-| `AUTH_RESET_SECRET`                 | wartość dev          | **osobny** sekret od tokenowego                        |
-| `POSTGRES_*`                        | localhost / postgres | produkcja wymaga SSL i mocnego hasła                   |
-| `REGISTER_/LOGIN_/RESET_PER_MINUTE` | `5`                  | `0` wyłącza limiter (tylko testy)                      |
-| `SMTP_HOST`                         | puste                | bez niego kody lądują w logu (tylko development)       |
+| `ENV`                               | **wymagane**         | `development` albo `production`; brak cichej wartości          |
+| `API_HOST` / `API_PORT`             | `127.0.0.1` / `8000` | w kontenerze Compose ustawia host na `0.0.0.0`                 |
+| `AUTH_TOKEN_SECRET`                 | wartość dev          | tylko na loopbacku; Compose ustawia własną                     |
+| `AUTH_TOKEN_TTL`                    | `1h`                 | format czasu Go; gołe `30` jest odrzucane                      |
+| `AUTH_RESET_SECRET`                 | wartość dev          | **osobny** sekret od tokenowego; ta sama zasada co tokenowy    |
+| `TRUSTED_PROXIES`                   | puste                | CIDR, którym wolno ufać `X-Forwarded-For`; puste = nigdy       |
+| `POSTGRES_*`                        | localhost / postgres | produkcja wymaga SSL i mocnego hasła                           |
+| `REGISTER_/LOGIN_/RESET_PER_MINUTE` | `5`                  | `0` wyłącza limiter (tylko testy)                              |
+| `SMTP_HOST`                         | puste                | bez niego kody nie idą mailem (tylko development)              |
+| `MAIL_LOG_CODES`                    | puste                | `1` drukuje kody na stderr; Compose ustawia, bo nie ma TTY     |
 
 Timeouty i rozmiary puli połączeń **nie są** konfigurowalne przez środowisko — są stałymi w `internal/config`.
 

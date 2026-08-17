@@ -75,8 +75,8 @@ Usługi żyją w `.docker/compose.yml`. W korzeniu zostaje czteroliniowy `includ
 w katalogu roboczym — bez tego każde polecenie wymagałoby `-f`. `.dockerignore` zostaje w korzeniu, bo Docker szuka go w
 korzeniu **kontekstu** buildu, a kontekst to całe repozytorium (`go.mod`).
 
-Dwie drogi uruchomienia — kontenery i `task run` na hoście — dzielą `.env`. Compose nadpisuje wyłącznie `API_HOST`,
-`API_PORT`, `POSTGRES_HOST` i
-`POSTGRES_PORT`; reszta znaczy to samo w obu miejscach.
+Dwie drogi uruchomienia — kontenery i `task run` na hoście — dzielą `.env`. Compose nadpisuje `API_HOST`,
+`API_PORT`, `POSTGRES_HOST`, `POSTGRES_PORT` oraz sekrety JWT (kontener słucha na `0.0.0.0`, więc wbudowane wartości
+deweloperskie są odrzucane); reszta znaczy to samo w obu miejscach.
 
 Jak uruchomić: [instrukcja środowiska](../guides/001_development_environment.md).

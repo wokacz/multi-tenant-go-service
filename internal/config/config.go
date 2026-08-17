@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -47,8 +48,9 @@ type Config struct {
 	TLSCertFile string
 	TLSKeyFile  string
 
-	// AuthTokenSecret signs session tokens. Development fills in a well-known
-	// value when unset; production refuses to start without a unique secret.
+	// AuthTokenSecret signs session tokens. Development on loopback fills in a
+	// well-known value when unset; anything reachable from another machine
+	// refuses to start without a unique secret.
 	AuthTokenSecret string
 
 	// AuthTokenTTL is how long a session token stays valid. It is the only
@@ -59,8 +61,9 @@ type Config struct {
 
 	// AuthResetSecret peppers HMAC hashes of password-reset codes. It is a
 	// separate secret from AuthTokenSecret so rotating session tokens does
-	// not invalidate codes already delivered. Development fills in a
-	// well-known value when unset; production requires a unique one.
+	// not invalidate codes already delivered. Development on loopback fills
+	// in a well-known value when unset; anything reachable from another
+	// machine requires a unique one.
 	AuthResetSecret string
 
 	// RegisterPerMinute / LoginPerMinute cap bcrypt-heavy endpoints per peer
@@ -111,6 +114,18 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 	SMTPFrom     string
+
+	// TrustedProxies are CIDR ranges whose X-Forwarded-For (and similar)
+	// headers may be believed. Empty means never trust a header: the rate
+	// limiter and audit log key on the TCP peer, which behind an unlisted
+	// proxy is the proxy itself. Spoofing X-Forwarded-For from an untrusted
+	// address cannot mint extra buckets.
+	TrustedProxies []net.IPNet
+
+	// MailLogCodes writes one-time codes to stderr when SMTP is unset. It is
+	// for a laptop with a TTY; shared logs must not receive them. Production
+	// never reaches that path — SMTP_HOST is required there.
+	MailLogCodes bool
 }
 
 // Load reads the configuration from the environment.
@@ -140,7 +155,11 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		Env:     Env(getEnv("ENV", string(EnvDevelopment))),
+		// ENV has no default. A forgotten variable on a server used to
+		// silently select development, including the well-known secrets
+		// below. An explicit value is a one-line .env; an implicit one is a
+		// forgeable installation.
+		Env:     Env(os.Getenv("ENV")),
 		APIName: getEnv("API_NAME", "Example"),
 		APIHost: getEnv("API_HOST", "127.0.0.1"),
 		APIPort: getInt("API_PORT", 8000),
@@ -183,16 +202,26 @@ func Load() (*Config, error) {
 		SMTPUser:     getEnv("SMTP_USER", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getEnv("SMTP_FROM", ""),
+
+		MailLogCodes: getEnvBool("MAIL_LOG_CODES"),
 	}
 
-	// Fill the development secret before validation so a laptop start without
-	// AUTH_TOKEN_SECRET still signs tokens, while production sees the empty
-	// value and refuses.
-	if cfg.AuthTokenSecret == "" && !cfg.Env.IsProduction() {
+	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.TrustedProxies = proxies
+	}
+
+	// Well-known secrets are a laptop convenience, and only there. Filling
+	// them in when the process is reachable from another machine would let a
+	// forgotten AUTH_TOKEN_SECRET mint session tokens with a value that is
+	// in the repository. Production refuses those values even when set.
+	if cfg.AuthTokenSecret == "" && cfg.Env == EnvDevelopment && cfg.BindsLoopback() {
 		cfg.AuthTokenSecret = devAuthTokenSecret
 	}
 
-	if cfg.AuthResetSecret == "" && !cfg.Env.IsProduction() {
+	if cfg.AuthResetSecret == "" && cfg.Env == EnvDevelopment && cfg.BindsLoopback() {
 		cfg.AuthResetSecret = devAuthResetSecret
 	}
 
@@ -235,16 +264,16 @@ func (c *Config) validate() []error {
 		errs = append(errs, fmt.Errorf("config: AUTH_TOKEN_SECRET must be at least %d bytes", minAuthTokenSecretBytes))
 	}
 
-	if c.Env.IsProduction() && c.AuthTokenSecret == devAuthTokenSecret {
-		errs = append(errs, errors.New("config: AUTH_TOKEN_SECRET must not use the development default"))
+	if c.AuthTokenSecret == devAuthTokenSecret && (c.Env.IsProduction() || !c.BindsLoopback()) {
+		errs = append(errs, errors.New("config: AUTH_TOKEN_SECRET must not use the development default unless API_HOST is loopback"))
 	}
 
 	if len(c.AuthResetSecret) < minAuthTokenSecretBytes {
 		errs = append(errs, fmt.Errorf("config: AUTH_RESET_SECRET must be at least %d bytes", minAuthTokenSecretBytes))
 	}
 
-	if c.Env.IsProduction() && c.AuthResetSecret == devAuthResetSecret {
-		errs = append(errs, errors.New("config: AUTH_RESET_SECRET must not use the development default"))
+	if c.AuthResetSecret == devAuthResetSecret && (c.Env.IsProduction() || !c.BindsLoopback()) {
+		errs = append(errs, errors.New("config: AUTH_RESET_SECRET must not use the development default unless API_HOST is loopback"))
 	}
 
 	// auth.NewSigner refuses a non-positive TTL as well, but failing here puts
@@ -377,6 +406,53 @@ func (c *Config) DSN() string {
 	}
 
 	return u.String()
+}
+
+func parseTrustedProxies(value string) ([]net.IPNet, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(value, ",")
+	out := make([]net.IPNet, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		if !strings.Contains(part, "/") {
+			ip := net.ParseIP(part)
+			if ip == nil {
+				return nil, fmt.Errorf("config: TRUSTED_PROXIES contains invalid address %q", part)
+			}
+
+			if ip.To4() != nil {
+				part += "/32"
+			} else {
+				part += "/128"
+			}
+		}
+
+		_, cidr, err := net.ParseCIDR(part)
+		if err != nil {
+			return nil, fmt.Errorf("config: TRUSTED_PROXIES contains invalid CIDR %q", part)
+		}
+
+		out = append(out, *cidr)
+	}
+
+	return out, nil
+}
+
+func getEnvBool(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 // getEnv retrieves the value of the environment variable named by the key.

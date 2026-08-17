@@ -199,18 +199,53 @@ task bootstrap -- -email ada@example.com
 
 Nie „pierwszy zarejestrowany wygrywa" — przy otwartej rejestracji to wyścig, w którym może wziąć udział każdy.
 
+`-platform-admin` jest **wyłączone domyślnie**. Flaga, która milcząco nadaje rolę instalacji, zamienia literówkę w
+pierwszego administratora platformy; trzeba jej poprosić.
+
 Organizacja `default` powstaje leniwie, przy pierwszej rejestracji, wraz ze swoimi rolami systemowymi. Jest
 `IsProtected`, więc zwykła ścieżka usuwania jej odmawia. Nowe konto dołącza do niej jako `member`.
 
 **Instalacja jednoorganizacyjna** nie wymaga niczego: wszyscy lądują w `default`, a model wielonajemcowy jest wtedy
 niewidoczny — ale nie trzeba go dokładać później, gdy się okaże potrzebny.
 
+## Zaproszenia
+
+`POST /v1/orgs/{orgID}/members` **nie szuka adresu w tabeli kont**. Zapisuje członkostwo `status=invited` z pustym
+`user_id` i adresem na wierszu. Znany i nieznany adres dają ten sam `201` i ten sam kształt odpowiedzi (`user_id` oraz
+`name` są nieobecne), więc administrator nie może pytać całej instalacji „czy ta osoba ma tu konto".
+
+Szukanie adresu byłoby oraklem rejestracji: fakt, że ktoś ma konto, jest faktem **międzyorganizacyjnym**, a
+administrator organizacji nie jest do niego uprawniony. Unikalność `(organization_id, email)` odmawia ponownego
+zaproszenia **w tej** organizacji — to już jest fakt, który widać na liście członków.
+
+Ścieżka provisioningu (`AddMember` w repozytorium: bootstrap, dołączenie do `default`) nadal tworzy od razu `active` z
+`user_id`, bo tam konto już istnieje i nie ma czego ukrywać.
+
+Po zapisie handler wysyła mail. Awaria SMTP ląduje w logu; HTTP i tak kończy się `201` — inaczej administrator, który
+nie odróżni „adres już w organizacji" od „poczta nie wyszła", wpisałby go ponownie i dostał `409`.
+
+Zaproszony przyjmuje albo odrzuca **sam**, bo zgoda nie może być zastąpiona przez `PATCH` administratora:
+
+| Operacja | Ścieżka                                         | Kategoria     |
+|----------|-------------------------------------------------|---------------|
+| przyjęcie | `POST /v1/me/invitations/{invitationID}/accept` | samoobsługowa |
+| odrzucenie | `DELETE /v1/me/invitations/{invitationID}`     | samoobsługowa |
+
+Ścieżka jest pod `/v1/me`, nie pod `{orgID}`: zaproszony często nie ma jeszcze członkostwa, które middleware mogłoby
+zautoryzować, a cudze zaproszenie jest nieodróżnialne od brakującego (`404`).
+
+Rejestracja najpierw aktywuje zaległe zaproszenia na ten adres (`AttachInvitations`), potem dołącza do organizacji
+`default`. Kolejność jest nośna: odwrotna zostawiłaby zaproszenie do `default` jako `invited` i potraktowała unikalny
+adres jako „już członek".
+
+Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu
+organizacji. Dwa nakładające się zdegradowania nie mogą oba zobaczyć `owners > 1` i oba przejść.
+
 ## Czego tu nie ma
 
 - **Tłumaczenia ról własnych.** Tabela `role_translations` istnieje, ale nic jej nie czyta ani nie zapisuje. Nazwy ról
   tworzonych przez użytkownika pokazują się z kolumny `roles.name`, w jednym języku.
-- **Status `invited`.** Model go zna, ale `AddMember` tworzy od razu `active` — nie ma przepływu zaproszeń.
 - **Cache uprawnień.** Rozwiązanie uprawnień to jedno zapytanie, migawka też. Cache dokłada ryzyko nieświeżej decyzji za
   oszczędność, której nikt jeszcze nie zmierzył.
-- **TOCTOU.** Decyzja zapada raz, w middleware; handler pracuje na `Grant` z kontekstu. Zmiana roli w trakcie żądania
+- **TOCTOU na grancie.** Decyzja zapada raz, w middleware; handler pracuje na `Grant` z kontekstu. Zmiana roli w trakcie żądania
   nie cofa trwającej operacji. Akceptowalne i warte zapisania, nie warte rozproszonej blokady.

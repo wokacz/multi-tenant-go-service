@@ -23,6 +23,7 @@ const (
 	ActionOrganizationDeleted AuthzAction = "organization.deleted"
 
 	ActionMemberInvited      AuthzAction = "member.invited"
+	ActionMemberAccepted     AuthzAction = "member.accepted"
 	ActionMemberRemoved      AuthzAction = "member.removed"
 	ActionMemberSuspended    AuthzAction = "member.suspended"
 	ActionMemberReinstated   AuthzAction = "member.reinstated"
@@ -40,7 +41,7 @@ const (
 func (a AuthzAction) Valid() bool {
 	switch a {
 	case ActionOrganizationCreated, ActionOrganizationUpdated, ActionOrganizationDeleted,
-		ActionMemberInvited, ActionMemberRemoved, ActionMemberSuspended,
+		ActionMemberInvited, ActionMemberAccepted, ActionMemberRemoved, ActionMemberSuspended,
 		ActionMemberReinstated, ActionMemberRolesChanged,
 		ActionRoleCreated, ActionRoleUpdated, ActionRoleDeleted, ActionRolePermissionsChanged,
 		ActionSystemRoleGranted, ActionSystemRoleRevoked:

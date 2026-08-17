@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-// limiter is a per-key token bucket. Keys are remote IPs, so a client that
-// spoofs X-Forwarded-For cannot mint extra buckets — remoteIP never reads
-// headers.
+// limiter is a per-key token bucket. Keys are remote IPs. remoteIP only reads
+// X-Forwarded-For from addresses listed in TRUSTED_PROXIES, so a client that
+// spoofs the header cannot mint extra buckets.
 type limiter struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket

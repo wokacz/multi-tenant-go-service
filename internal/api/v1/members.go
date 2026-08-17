@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
@@ -22,8 +24,8 @@ import (
 // checking that the account is actually in this organization.
 type MemberResponse struct {
 	ID       uuid.UUID             `json:"id" format:"uuid" doc:"Membership id, used to address this person here"`
-	UserID   uuid.UUID             `json:"user_id" format:"uuid" doc:"The account behind the membership"`
-	Name     string                `json:"name" doc:"Display name"`
+	UserID   *uuid.UUID            `json:"user_id,omitempty" format:"uuid" doc:"The account behind the membership. Absent while the invitation is outstanding, so listing members cannot tell a registered address from an unknown one."`
+	Name     string                `json:"name,omitempty" doc:"Display name. Absent until the invitation is accepted."`
 	Email    string                `json:"email" format:"email" doc:"Email address"`
 	Status   string                `json:"status" enum:"invited,active,suspended" doc:"Whether the membership grants anything"`
 	JoinedAt *time.Time            `json:"joined_at,omitempty" doc:"When the membership first became active"`
@@ -45,10 +47,22 @@ func newMemberResponse(m *orgs.Member) MemberResponse {
 		})
 	}
 
+	var userID *uuid.UUID
+	name := m.Name
+	if m.Status == models.MembershipInvited {
+		// Hide the account until they accept. The row is keyed by email so
+		// that listing members after an invite cannot tell a registered
+		// address from an unknown one.
+		name = ""
+	} else if m.UserID != uuid.Nil {
+		id := m.UserID
+		userID = &id
+	}
+
 	return MemberResponse{
 		ID:       m.ID,
-		UserID:   m.UserID,
-		Name:     m.Name,
+		UserID:   userID,
+		Name:     name,
 		Email:    m.Email,
 		Status:   string(m.Status),
 		JoinedAt: m.JoinedAt,
@@ -67,7 +81,7 @@ type ListMembersOutput struct {
 }
 
 type AddMemberRequest struct {
-	Email   string      `json:"email" format:"email" maxLength:"255" doc:"Address of an existing account"`
+	Email   string      `json:"email" format:"email" maxLength:"255" doc:"Address to invite. An existing account is not required."`
 	RoleIDs []uuid.UUID `json:"role_ids" doc:"Roles to grant. Every one must be a role the caller could grant themselves."`
 }
 
@@ -107,10 +121,12 @@ type SetMemberRolesInput struct {
 
 type memberHandlers struct {
 	orgs *orgs.Service
+	mail mail.Sender
+	log  *slog.Logger
 }
 
-func registerMembers(api huma.API, service *orgs.Service) {
-	h := &memberHandlers{orgs: service}
+func registerMembers(api huma.API, service *orgs.Service, mailer mail.Sender, log *slog.Logger) {
+	h := &memberHandlers{orgs: service, mail: mailer, log: log}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "list-members",
@@ -128,11 +144,13 @@ func registerMembers(api huma.API, service *orgs.Service) {
 		OperationID: "add-member",
 		Method:      http.MethodPost,
 		Path:        Prefix + "/orgs/{orgID}/members",
-		Summary:     "Add a member",
-		Description: "Puts an existing account into the organization with the given " +
-			"roles. Requires members.invite, and every role named must be one the " +
-			"caller could grant themselves — otherwise this endpoint would be a " +
-			"way to acquire permissions the caller does not have.",
+		Summary:     "Invite a member",
+		Description: "Stores an invitation for the address with the given roles. " +
+			"The account need not exist yet; unknown and known addresses produce " +
+			"the same response, so the call cannot be used to discover who is " +
+			"registered. Requires members.invite, and every role named must be " +
+			"one the caller could grant themselves — otherwise this endpoint " +
+			"would be a way to acquire permissions the caller does not have.",
 		Tags:          []string{"organizations"},
 		Security:      bearer(),
 		DefaultStatus: http.StatusCreated,
@@ -212,6 +230,18 @@ func (h *memberHandlers) add(ctx context.Context, in *AddMemberInput) (*MemberOu
 	member, err := h.orgs.AddMember(ctx, grant, in.Body.Email, in.Body.RoleIDs)
 	if err != nil {
 		return nil, problem.Error(ctx, err)
+	}
+
+	if h.mail != nil {
+		org, orgErr := h.orgs.Organization(ctx, grant.OrganizationID())
+		name := ""
+		if orgErr == nil {
+			name = org.Name
+		}
+
+		if err := h.mail.SendInvitation(ctx, member.Email, name); err != nil {
+			logger(h.log).ErrorContext(ctx, "invitation mail failed", "error", err)
+		}
 	}
 
 	return &MemberOutput{Body: newMemberResponse(member)}, nil

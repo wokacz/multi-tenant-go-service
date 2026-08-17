@@ -85,7 +85,7 @@ func run() error {
 		Mail:      mail.New(cfg, log),
 		Authz:     authzService,
 		Snapshots: authzService,
-		Orgs:      orgs.NewService(orgRepo, orgRepo, users, orgRepo),
+		Orgs:      orgs.NewService(orgRepo, orgRepo, orgRepo),
 		Audit:     audit.NewService(orgRepo, orgRepo),
 	}
 

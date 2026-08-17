@@ -41,7 +41,7 @@ func run() error {
 	// shell history on a production box; the flag is there for local use.
 	email := flag.String("email", os.Getenv("BOOTSTRAP_EMAIL"),
 		"address of an existing account to make owner of the default organization")
-	platform := flag.Bool("platform-admin", true,
+	platform := flag.Bool("platform-admin", false,
 		"also grant the installation-wide administrator role")
 	flag.Parse()
 
@@ -74,7 +74,7 @@ func run() error {
 
 	orgRepo := repositories.NewOrgs(db)
 	users := user.NewService(repositories.NewUser(db), []byte(cfg.AuthResetSecret))
-	service := orgs.NewService(orgRepo, orgRepo, users, orgRepo)
+	service := orgs.NewService(orgRepo, orgRepo, orgRepo)
 
 	// The account has to exist already. Creating one here would mean this
 	// command could set a password, and a tool that can mint credentials is a

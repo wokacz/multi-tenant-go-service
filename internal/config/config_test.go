@@ -8,6 +8,7 @@ import (
 )
 
 func TestAuthTokenTTLRejectsBareNumbers(t *testing.T) {
+	t.Setenv("ENV", "development")
 	t.Setenv("AUTH_TOKEN_TTL", "30")
 
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AUTH_TOKEN_TTL") {
@@ -16,6 +17,7 @@ func TestAuthTokenTTLRejectsBareNumbers(t *testing.T) {
 }
 
 func TestAuthTokenTTLReadsADuration(t *testing.T) {
+	t.Setenv("ENV", "development")
 	t.Setenv("AUTH_TOKEN_TTL", "45m")
 
 	cfg, err := Load()
@@ -136,6 +138,70 @@ func TestProductionRejectsShortResetSecret(t *testing.T) {
 
 	if errs := c.validate(); len(errs) == 0 {
 		t.Fatal("validate() accepted a short reset secret")
+	}
+}
+
+func TestLoadRequiresENV(t *testing.T) {
+	t.Setenv("ENV", "")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "ENV") {
+		t.Fatalf("Load() = %v, want an ENV error", err)
+	}
+}
+
+func TestDevelopmentSecretsAreRejectedOffLoopback(t *testing.T) {
+	c := &Config{
+		Env:                  EnvDevelopment,
+		APIName:              "Example",
+		APIHost:              "0.0.0.0",
+		APIPort:              8000,
+		AuthTokenSecret:      devAuthTokenSecret,
+		AuthResetSecret:      devAuthResetSecret,
+		AuthTokenTTL:         time.Hour,
+		RegisterPerMinute:    5,
+		LoginPerMinute:       5,
+		ResetPerMinute:       5,
+		MaxRequestBytes:      1 << 20,
+		PostgresPort:         5432,
+		PostgresDatabaseName: "notes",
+		PostgresSSLMode:      "disable",
+		PostgresPassword:     "postgres",
+		DBMaxOpenConns:       25,
+		DBMaxIdleConns:       25,
+	}
+
+	joined := errorsJoin(c.validate())
+	if !strings.Contains(joined, "AUTH_TOKEN_SECRET") {
+		t.Errorf("missing token secret error in %q", joined)
+	}
+
+	if !strings.Contains(joined, "AUTH_RESET_SECRET") {
+		t.Errorf("missing reset secret error in %q", joined)
+	}
+}
+
+func TestParseTrustedProxies(t *testing.T) {
+	got, err := parseTrustedProxies("127.0.0.1, 10.0.0.0/8")
+	if err != nil {
+		t.Fatalf("parseTrustedProxies() = %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+
+	if !got[0].Contains(net.ParseIP("127.0.0.1")) {
+		t.Errorf("first CIDR = %s, want 127.0.0.1/32", got[0].String())
+	}
+
+	if !got[1].Contains(net.ParseIP("10.1.2.3")) {
+		t.Errorf("second CIDR = %s, want 10.0.0.0/8", got[1].String())
+	}
+}
+
+func TestParseTrustedProxiesRejectsGarbage(t *testing.T) {
+	if _, err := parseTrustedProxies("not-an-ip"); err == nil {
+		t.Fatal("parseTrustedProxies() = nil, want an error")
 	}
 }
 

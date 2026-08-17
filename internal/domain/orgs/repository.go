@@ -45,10 +45,12 @@ var (
 
 	ErrInvalidName   = errors.New("orgs: name is empty or too long")
 	ErrInvalidStatus = errors.New("orgs: invalid membership status")
+	ErrInvalidEmail  = errors.New("orgs: email is empty")
 )
 
 // Membership is the view of one organization from one account's point of view.
 type Membership struct {
+	ID           uuid.UUID // the membership, used to accept or decline an invitation
 	Organization models.Organization
 	Status       models.MembershipStatus
 	RoleKeys     []string
@@ -113,10 +115,21 @@ type Repository interface {
 	// to another organization.
 	Member(ctx context.Context, orgID, memberID uuid.UUID) (*Member, error)
 
-	// AddMember creates a membership for an existing account and assigns the
-	// given roles, in one transaction. It returns ErrAlreadyMember when the
-	// account is already in the organization.
+	// AddMember creates an active membership for an existing account and
+	// assigns the given roles, in one transaction. It is the provisioning
+	// path — registration, bootstrap — not the invitation path. An outstanding
+	// invitation for the same address is claimed (activated and given these
+	// roles) rather than refused, so joining the default organization after
+	// an invite cannot leave the row invited. It returns ErrAlreadyMember
+	// when the account is already a live member.
 	AddMember(ctx context.Context, orgID, userID uuid.UUID, roleIDs []uuid.UUID, invitedBy uuid.UUID, at time.Time) (*Member, error)
+
+	// InviteMember records an outstanding invitation for the address. It does
+	// not look the address up in the account table: that lookup is what would
+	// tell the caller whether the person is registered anywhere in the
+	// installation. UserID stays nil until they accept. ErrAlreadyMember when
+	// this organization already has that email.
+	InviteMember(ctx context.Context, orgID uuid.UUID, email string, roleIDs []uuid.UUID, invitedBy uuid.UUID, at time.Time) (*Member, error)
 
 	// SetMemberStatus suspends or reinstates a membership.
 	SetMemberStatus(ctx context.Context, orgID, memberID uuid.UUID, status models.MembershipStatus, at time.Time) error
@@ -180,16 +193,24 @@ type Repository interface {
 // asterisks.
 type Directory interface {
 	// MembershipsForUser lists the live organizations the account belongs to,
-	// including invitations and suspensions, so the client can render them
-	// differently rather than have them silently disappear.
+	// including invitations (matched by the account's email while still
+	// outstanding) and suspensions, so the client can render them differently
+	// rather than have them silently disappear.
 	MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]Membership, error)
-}
 
-// Accounts is the slice of the user domain this package needs: turning the
-// address an administrator typed into the account it belongs to.
-//
-// Declared here rather than depending on *user.Service so that the dependency
-// is one method wide and a test can satisfy it without bcrypt.
-type Accounts interface {
-	ByEmail(ctx context.Context, email string) (*models.User, error)
+	// AcceptInvitation turns an outstanding invitation into an active
+	// membership for this account. The address on the row must match email;
+	// a mismatch is ErrNotFound, the same as a missing id, so a caller cannot
+	// probe invitations that are not theirs.
+	AcceptInvitation(ctx context.Context, memberID, userID uuid.UUID, email string, at time.Time) error
+
+	// DeclineInvitation withdraws an outstanding invitation addressed to
+	// email. A mismatch is ErrNotFound, for the same reason as AcceptInvitation.
+	DeclineInvitation(ctx context.Context, memberID uuid.UUID, email string) error
+
+	// AcceptInvitationsByEmail activates every outstanding invitation for the
+	// address. Registration uses it: proving they own the mailbox is the
+	// accept, so they land in the organizations they were invited to without a
+	// second round trip.
+	AcceptInvitationsByEmail(ctx context.Context, userID uuid.UUID, email string, at time.Time) error
 }

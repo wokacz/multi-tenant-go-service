@@ -25,12 +25,11 @@ import (
 type Service struct {
 	repo        Repository
 	dir         Directory
-	accounts    Accounts
 	provisioner Provisioner
 }
 
-func NewService(repo Repository, dir Directory, accounts Accounts, provisioner Provisioner) *Service {
-	return &Service{repo: repo, dir: dir, accounts: accounts, provisioner: provisioner}
+func NewService(repo Repository, dir Directory, provisioner Provisioner) *Service {
+	return &Service{repo: repo, dir: dir, provisioner: provisioner}
 }
 
 // Organization returns one organization.
@@ -80,32 +79,46 @@ func (s *Service) Member(ctx context.Context, grant *authz.Grant, memberID uuid.
 	return s.repo.Member(ctx, grant.OrganizationID(), memberID)
 }
 
-// AddMember puts an existing account into the organization with the given roles.
+// AddMember invites an address into the organization with the given roles.
 //
-// The address is resolved to an account here rather than an invitation being
-// stored, so there is no unaccepted-invitation lifecycle to get wrong. An
-// address that belongs to nobody is ErrNotFound: this path is behind
-// members.invite, so it is not an enumeration oracle an anonymous caller can
-// reach, and an administrator who cannot tell "wrong address" from "silently
-// did nothing" will simply type it again.
+// The address is stored as an outstanding invitation, not resolved to an
+// account. Looking it up would tell the caller whether the person is
+// registered anywhere in the installation, which is a cross-tenant fact an
+// organization administrator is not entitled to. Unknown and known addresses
+// therefore produce the same row and the same response; the invitee accepts
+// once they have an account.
 func (s *Service) AddMember(
 	ctx context.Context,
 	grant *authz.Grant,
 	email string,
 	roleIDs []uuid.UUID,
 ) (*Member, error) {
-	orgID := grant.OrganizationID()
-
-	account, err := s.accounts.ByEmail(ctx, normalizeEmail(email))
-	if err != nil {
-		return nil, err
+	email = normalizeEmail(email)
+	if email == "" {
+		return nil, ErrInvalidEmail
 	}
 
 	if err := s.ensureRolesAreGrantable(ctx, grant, roleIDs); err != nil {
 		return nil, err
 	}
 
-	return s.repo.AddMember(ctx, orgID, account.ID, roleIDs, grant.Actor(), time.Now().UTC())
+	return s.repo.InviteMember(ctx, grant.OrganizationID(), email, roleIDs, grant.Actor(), time.Now().UTC())
+}
+
+// AcceptInvitation is self-service: the caller's identity is the authorization.
+func (s *Service) AcceptInvitation(ctx context.Context, userID uuid.UUID, email string, memberID uuid.UUID) error {
+	return s.dir.AcceptInvitation(ctx, memberID, userID, normalizeEmail(email), time.Now().UTC())
+}
+
+// DeclineInvitation withdraws an invitation addressed to this account.
+func (s *Service) DeclineInvitation(ctx context.Context, email string, memberID uuid.UUID) error {
+	return s.dir.DeclineInvitation(ctx, memberID, normalizeEmail(email))
+}
+
+// AttachInvitations activates every outstanding invitation for a newly
+// registered address. Proving they own the mailbox is the accept.
+func (s *Service) AttachInvitations(ctx context.Context, userID uuid.UUID, email string) error {
+	return s.dir.AcceptInvitationsByEmail(ctx, userID, normalizeEmail(email), time.Now().UTC())
 }
 
 // SetMemberStatus suspends or reinstates somebody.
@@ -126,29 +139,18 @@ func (s *Service) SetMemberStatus(
 		return err
 	}
 
-	// Suspending removes their permissions, so it counts against the owners.
-	if !status.GrantsPermissions() {
-		if err := s.ensureNotTheLastOwner(ctx, orgID, member); err != nil {
-			return err
-		}
+	// An invitation is accepted by the invitee, not flipped to active by an
+	// administrator. PATCH would skip consent and, for an unknown address,
+	// have no account to attach.
+	if member.Status == models.MembershipInvited {
+		return ErrInvalidStatus
 	}
 
 	return s.repo.SetMemberStatus(ctx, orgID, memberID, status, time.Now().UTC())
 }
 
 func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID uuid.UUID) error {
-	orgID := grant.OrganizationID()
-
-	member, err := s.repo.Member(ctx, orgID, memberID)
-	if err != nil {
-		return err
-	}
-
-	if err := s.ensureNotTheLastOwner(ctx, orgID, member); err != nil {
-		return err
-	}
-
-	return s.repo.RemoveMember(ctx, orgID, memberID)
+	return s.repo.RemoveMember(ctx, grant.OrganizationID(), memberID)
 }
 
 // SetMemberRoles replaces somebody's roles.
@@ -164,21 +166,12 @@ func (s *Service) SetMemberRoles(
 ) (*Member, error) {
 	orgID := grant.OrganizationID()
 
-	member, err := s.repo.Member(ctx, orgID, memberID)
-	if err != nil {
+	if _, err := s.repo.Member(ctx, orgID, memberID); err != nil {
 		return nil, err
 	}
 
 	if err := s.ensureRolesAreGrantable(ctx, grant, roleIDs); err != nil {
 		return nil, err
-	}
-
-	// Only when the change actually takes the owner role away. Reordering the
-	// same set, or adding a role alongside it, is not a demotion.
-	if holdsOwner(member.Roles) && !slices.Contains(roleIDs, ownerRoleID(member.Roles)) {
-		if err := s.ensureNotTheLastOwner(ctx, orgID, member); err != nil {
-			return nil, err
-		}
 	}
 
 	if err := s.repo.ReplaceMemberRoles(ctx, orgID, memberID, roleIDs); err != nil {
@@ -330,39 +323,6 @@ func (s *Service) ensureRolesAreGrantable(ctx context.Context, grant *authz.Gran
 	return nil
 }
 
-// ensureNotTheLastOwner refuses a change that would leave nobody able to
-// administer the organization.
-func (s *Service) ensureNotTheLastOwner(ctx context.Context, orgID uuid.UUID, member *Member) error {
-	if !member.Status.GrantsPermissions() || !holdsOwner(member.Roles) {
-		return nil
-	}
-
-	owners, err := s.repo.OwnerCount(ctx, orgID)
-	if err != nil {
-		return err
-	}
-
-	if owners <= 1 {
-		return ErrLastOwner
-	}
-
-	return nil
-}
-
-func holdsOwner(roles []RoleSummary) bool {
-	return ownerRoleID(roles) != uuid.Nil
-}
-
-func ownerRoleID(roles []RoleSummary) uuid.UUID {
-	for _, role := range roles {
-		if role.Key == string(authz.RoleOwner) {
-			return role.ID
-		}
-	}
-
-	return uuid.Nil
-}
-
 func dedupe(permissions []authz.Permission) []authz.Permission {
 	out := make([]authz.Permission, 0, len(permissions))
 
@@ -377,7 +337,8 @@ func dedupe(permissions []authz.Permission) []authz.Permission {
 
 // normalizeEmail mirrors user.NormalizeEmail. It is repeated rather than
 // imported so this package does not depend on the user domain for one string
-// operation; the Accounts interface is the whole of that dependency.
+// operation. Looking the address up would re-open the registration oracle
+// AddMember exists to close.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }

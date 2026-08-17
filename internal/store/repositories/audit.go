@@ -183,14 +183,16 @@ func recordAboutMember(
 
 	var membership models.Membership
 
-	err := tx.Select("user_id").
+	err := tx.Select("user_id", "email").
 		First(&membership, "id = ? AND organization_id = ?", memberID, orgID).Error
 	if err != nil {
 		return fmt.Errorf("store: audit subject: %w", err)
 	}
 
-	subject := membership.UserID
-	event.SubjectID = &subject
+	event.SubjectID = membership.UserID
+	if event.SubjectID == nil && event.Detail == "" {
+		event.Detail = membership.Email
+	}
 
 	return record(ctx, tx, event)
 }

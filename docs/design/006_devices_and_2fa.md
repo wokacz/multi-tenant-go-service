@@ -75,8 +75,9 @@ konta). Każdy wpis niesie adres IP, user agent i urządzenie, o ile udało się
 nieuwierzytelnionych danych, którego nic w tym serwisie by nie sprzątało. Praktyczny skutek: pustej historii nie da się
 zapchać z zewnątrz.
 
-Adres IP to **realny peer TCP**, nigdy nagłówek. `X-Forwarded-For` może ustawić każdy. Za proxy trzeba podstawić
-middleware ufające wyłącznie znanym adresom proxy — `RealIP` z chi tego nie robi.
+Adres IP to **realny peer TCP**, chyba że ten peer siedzi w `TRUSTED_PROXIES`. `X-Forwarded-For` może ustawić każdy;
+lista CIDR jest jedynym miejscem, w którym wolno mu uwierzyć. chi `RealIP` tego nie robi — przepisuje `RemoteAddr` z
+nagłówka i oddaje klientowi sterowanie kluczem limitera.
 
 | Dane                        | Zachowanie                                                                                     |
 |-----------------------------|------------------------------------------------------------------------------------------------|

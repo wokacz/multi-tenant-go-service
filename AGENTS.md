@@ -198,7 +198,6 @@ Documented as absent in [design/007](docs/design/007_authorization.md). Do not
 "fix" them by inventing a design; ask first.
 
 - `role_translations` exists as a table but nothing reads or writes it — custom role names are single-language.
-- `MembershipInvited` exists as a status but nothing creates one; there is no invitation flow.
 - No endpoint changes `User.Locale` after registration.
 - No permission cache; permissions are resolved per request, deliberately.
 

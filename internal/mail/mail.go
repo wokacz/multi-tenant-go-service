@@ -1,6 +1,8 @@
-// Package mail delivers password-reset codes. Production talks to an SMTP
-// server. Development with SMTP unset writes the code to the process log so a
-// laptop can finish the flow without a mailer.
+// Package mail delivers password-reset codes, two-factor codes, and invitations.
+// Production talks to an SMTP server. Development with SMTP unset writes a
+// notice to the process log so a laptop can finish the flow without a mailer;
+// one-time codes themselves go to stderr only when a TTY is attached or
+// MAIL_LOG_CODES is set, so a log aggregator never sees them by accident.
 package mail
 
 import (
@@ -9,16 +11,18 @@ import (
 	"log/slog"
 	"net"
 	"net/smtp"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 )
 
-// Sender delivers the one-time codes this service emails.
+// Sender delivers the one-time codes and invitations this service emails.
 type Sender interface {
 	SendPasswordReset(ctx context.Context, to, code string) error
 	SendTwoFactorCode(ctx context.Context, to, code string) error
+	SendInvitation(ctx context.Context, to, orgName string) error
 }
 
 // New picks SMTP when a host is configured, and the development logger
@@ -29,23 +33,54 @@ func New(cfg *config.Config, log *slog.Logger) Sender {
 		return &smtpSender{cfg: cfg}
 	}
 
-	return &logSender{log: log}
+	return &logSender{log: log, codes: cfg.MailLogCodes || stderrIsTTY()}
+}
+
+func stderrIsTTY() bool {
+	info, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 type logSender struct {
-	log *slog.Logger
+	log   *slog.Logger
+	codes bool
 }
 
 func (s *logSender) SendPasswordReset(_ context.Context, to, code string) error {
-	s.log.Info("password reset code (SMTP is not configured)", "email", to, "code", code)
+	s.note("password reset", to, code)
 
 	return nil
 }
 
 func (s *logSender) SendTwoFactorCode(_ context.Context, to, code string) error {
-	s.log.Info("two-factor code (SMTP is not configured)", "email", to, "code", code)
+	s.note("two-factor", to, code)
 
 	return nil
+}
+
+func (s *logSender) SendInvitation(_ context.Context, to, orgName string) error {
+	s.log.Info("organization invitation (SMTP is not configured)",
+		"email", to, "organization", orgName)
+
+	return nil
+}
+
+// note writes the existence of a code to the structured log always, and the
+// code itself only to stderr when that is safe. slog is what aggregators
+// collect; a shared staging log that contained reset codes would be a way to
+// take over any account whose address an operator could guess.
+func (s *logSender) note(kind, to, code string) {
+	s.log.Info(kind+" code requested (SMTP is not configured)", "email", to)
+
+	if !s.codes {
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "%s code (SMTP is not configured) email=%s code=%s\n", kind, to, code)
 }
 
 type smtpSender struct {
@@ -64,12 +99,19 @@ func (s *smtpSender) SendTwoFactorCode(_ context.Context, to, code string) error
 		"It expires in 10 minutes. If you are not signing in right now, change your password.")
 }
 
+func (s *smtpSender) SendInvitation(_ context.Context, to, orgName string) error {
+	return s.send(to, "You have been invited to "+orgName,
+		"You have been invited to join "+orgName+".",
+		"Sign in, or register with this address, then accept the invitation.")
+}
+
 // send builds and posts one plain-text message.
 //
 // The header lines are assembled from configuration and from a subject this
 // package chooses — never from request input. Interpolating a caller-supplied
 // string into a header is how a newline in an address turns into an injected
-// Bcc, and the only variable part here is the code, which is six digits.
+// Bcc, and the only variable parts here are the code (six digits) and the
+// organization name (validated before it is stored).
 func (s *smtpSender) send(to, subject string, lines ...string) error {
 	from := s.cfg.SMTPFrom
 	body := strings.Join(append([]string{

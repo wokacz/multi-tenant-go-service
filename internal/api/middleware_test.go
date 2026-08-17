@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"testing"
 
@@ -162,6 +164,54 @@ func TestRateLimitAppliesToEveryCostlyRoute(t *testing.T) {
 			t.Fatalf("never rate limited after %d requests, last status %d", perMinute+1, last)
 		})
 	}
+}
+
+// TestRateLimitKeysOnForwardedIPOnlyFromTrustedProxies is why TRUSTED_PROXIES
+// exists. A spoofed X-Forwarded-For from an untrusted peer must share one
+// bucket; the same header from a listed proxy must not.
+func TestRateLimitKeysOnForwardedIPOnlyFromTrustedProxies(t *testing.T) {
+	_, cidr, err := net.ParseCIDR("127.0.0.1/32")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const perMinute = 2
+	body := `{"email":"ada@example.com","password":"twelve-chars"}`
+
+	t.Run("untrusted peer cannot mint buckets with X-Forwarded-For", func(t *testing.T) {
+		s, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+			cfg.LoginPerMinute = perMinute
+		})
+
+		var last int
+		for i := 0; i <= perMinute; i++ {
+			req := request(t, http.MethodPost, "/v1/sessions", body)
+			req.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i+1))
+			last = do(t, s.http.Handler, req).Code
+			if last == http.StatusTooManyRequests {
+				return
+			}
+		}
+
+		t.Fatalf("never rate limited, last status %d — spoofed X-Forwarded-For minted extra buckets", last)
+	})
+
+	t.Run("trusted proxy uses the forwarded client address", func(t *testing.T) {
+		s, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+			cfg.LoginPerMinute = perMinute
+			cfg.TrustedProxies = []net.IPNet{*cidr}
+		})
+
+		for i := 0; i < perMinute; i++ {
+			req := request(t, http.MethodPost, "/v1/sessions", body)
+			req.RemoteAddr = "127.0.0.1:1"
+			req.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i+1))
+			got := do(t, s.http.Handler, req).Code
+			if got == http.StatusTooManyRequests {
+				t.Fatalf("request %d from distinct forwarded IPs = 429, want the limiter to key per client", i+1)
+			}
+		}
+	})
 }
 
 // withDeviceToken satisfies the required header on /v1/sessions/verify so the

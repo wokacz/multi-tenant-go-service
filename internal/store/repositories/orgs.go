@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
@@ -45,6 +46,7 @@ func translateOrgError(op string, err error) error {
 		errors.Is(err, models.ErrRoleIsSystem),
 		errors.Is(err, orgs.ErrRoleProtected),
 		errors.Is(err, orgs.ErrAlreadyMember),
+		errors.Is(err, orgs.ErrLastOwner),
 		errors.Is(err, orgs.ErrNotFound):
 		return err
 	default:
@@ -123,7 +125,7 @@ func (r *Orgs) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 // memberRow is the flat shape the member queries scan into.
 type memberRow struct {
 	ID       uuid.UUID
-	UserID   uuid.UUID
+	UserID   *uuid.UUID
 	Name     string
 	Email    string
 	Status   models.MembershipStatus
@@ -135,10 +137,10 @@ func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID) ([]orgs.Member, err
 
 	err := r.db.WithContext(ctx).
 		Table("memberships AS m").
-		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
+		Select("m.id, m.user_id, COALESCE(u.name, '') AS name, COALESCE(u.email, m.email) AS email, m.status, m.joined_at").
+		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
 		Where("m.organization_id = ?", orgID).
-		Order("u.name ASC").
+		Order("COALESCE(u.name, m.email) ASC").
 		Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("store: members: %w", err)
@@ -152,8 +154,8 @@ func (r *Orgs) Member(ctx context.Context, orgID, memberID uuid.UUID) (*orgs.Mem
 
 	err := r.db.WithContext(ctx).
 		Table("memberships AS m").
-		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
+		Select("m.id, m.user_id, COALESCE(u.name, '') AS name, COALESCE(u.email, m.email) AS email, m.status, m.joined_at").
+		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
 		Where("m.organization_id = ? AND m.id = ?", orgID, memberID).
 		Scan(&rows).Error
 	if err != nil {
@@ -179,15 +181,19 @@ func (r *Orgs) Member(ctx context.Context, orgID, memberID uuid.UUID) (*orgs.Mem
 func (r *Orgs) attachRoles(ctx context.Context, rows []memberRow) ([]orgs.Member, error) {
 	out := make([]orgs.Member, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, orgs.Member{
+		member := orgs.Member{
 			ID:       row.ID,
-			UserID:   row.UserID,
 			Name:     row.Name,
 			Email:    row.Email,
 			Status:   row.Status,
 			JoinedAt: row.JoinedAt,
 			Roles:    []orgs.RoleSummary{},
-		})
+		}
+		if row.UserID != nil {
+			member.UserID = *row.UserID
+		}
+
+		out = append(out, member)
 	}
 
 	if len(out) == 0 {
@@ -244,9 +250,17 @@ func (r *Orgs) AddMember(
 	invitedBy uuid.UUID,
 	at time.Time,
 ) (*orgs.Member, error) {
+	var account models.User
+	if err := r.db.WithContext(ctx).Select("id", "email").
+		First(&account, "id = ?", userID).Error; err != nil {
+		return nil, translateOrgError("add member", err)
+	}
+
+	uid := userID
 	membership := &models.Membership{
 		OrganizationID: orgID,
-		UserID:         userID,
+		UserID:         &uid,
+		Email:          account.Email,
 		Status:         models.MembershipActive,
 	}
 
@@ -258,10 +272,80 @@ func (r *Orgs) AddMember(
 	membership.Activate(at)
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		action := models.ActionMemberInvited
+
+		// A unique violation aborts the Postgres transaction. The savepoint
+		// lets us recover and claim an outstanding invitation in the same
+		// transaction instead of returning 25P02 from the follow-up SELECT.
+		if err := tx.SavePoint("add_member").Error; err != nil {
+			return err
+		}
+
 		if err := tx.Create(membership).Error; err != nil {
-			// The unique index on (user_id, organization_id) is what decides,
-			// not a lookup first: two concurrent adds would both pass a check
-			// and one would still fail here.
+			if !errors.Is(err, gorm.ErrDuplicatedKey) {
+				return err
+			}
+
+			if err := tx.RollbackTo("add_member").Error; err != nil {
+				return err
+			}
+
+			claimed, claimErr := claimInvitation(tx, orgID, userID, account.Email, at)
+			if claimErr != nil {
+				return claimErr
+			}
+
+			membership = claimed
+			action = models.ActionMemberAccepted
+		}
+
+		if err := tx.Where("membership_id = ?", membership.ID).
+			Delete(&models.MembershipRole{}).Error; err != nil {
+			return err
+		}
+
+		if err := assignRoles(tx, orgID, membership.ID, roleIDs); err != nil {
+			return err
+		}
+
+		return record(ctx, tx, &models.AuthzEvent{
+			OrganizationID: &orgID,
+			SubjectID:      &userID,
+			Action:         action,
+		})
+	})
+	if err != nil {
+		return nil, translateOrgError("add member", err)
+	}
+
+	return r.Member(ctx, orgID, membership.ID)
+}
+
+func (r *Orgs) InviteMember(
+	ctx context.Context,
+	orgID uuid.UUID,
+	email string,
+	roleIDs []uuid.UUID,
+	invitedBy uuid.UUID,
+	at time.Time,
+) (*orgs.Member, error) {
+	membership := &models.Membership{
+		OrganizationID: orgID,
+		Email:          email,
+		Status:         models.MembershipInvited,
+	}
+
+	if !at.IsZero() {
+		membership.CreatedAt = at.UTC()
+	}
+
+	if invitedBy != uuid.Nil {
+		by := invitedBy
+		membership.InvitedBy = &by
+	}
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(membership).Error; err != nil {
 			if errors.Is(err, gorm.ErrDuplicatedKey) {
 				return orgs.ErrAlreadyMember
 			}
@@ -275,12 +359,12 @@ func (r *Orgs) AddMember(
 
 		return record(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
-			SubjectID:      &userID,
 			Action:         models.ActionMemberInvited,
+			Detail:         email,
 		})
 	})
 	if err != nil {
-		return nil, translateOrgError("add member", err)
+		return nil, translateOrgError("invite member", err)
 	}
 
 	return r.Member(ctx, orgID, membership.ID)
@@ -307,6 +391,10 @@ func (r *Orgs) SetMemberStatus(
 	}
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := refuseLastOwnerLoss(tx, orgID, memberID, !status.GrantsPermissions()); err != nil {
+			return err
+		}
+
 		res := tx.Session(&gorm.Session{SkipHooks: true}).
 			Model(&models.Membership{}).
 			Where("id = ? AND organization_id = ?", memberID, orgID).
@@ -331,6 +419,10 @@ func (r *Orgs) SetMemberStatus(
 
 func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := refuseLastOwnerLoss(tx, orgID, memberID, true); err != nil {
+			return err
+		}
+
 		// The subject is read before the row goes, or there is nothing left to
 		// attribute the entry to.
 		event := &models.AuthzEvent{OrganizationID: &orgID, Action: models.ActionMemberRemoved}
@@ -356,6 +448,15 @@ func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) erro
 
 func (r *Orgs) ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		losingOwner, err := replacingRolesDropsOwner(tx, orgID, memberID, roleIDs)
+		if err != nil {
+			return err
+		}
+
+		if err := refuseLastOwnerLoss(tx, orgID, memberID, losingOwner); err != nil {
+			return err
+		}
+
 		var count int64
 		if err := tx.Model(&models.Membership{}).
 			Where("id = ? AND organization_id = ?", memberID, orgID).
@@ -716,7 +817,8 @@ func (r *Orgs) MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]orgs
 		Table("memberships AS m").
 		Select("m.id AS membership_id, m.status, o.*").
 		Joins("JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL").
-		Where("m.user_id = ?", userID).
+		Where("m.user_id = ? OR (m.status = ? AND m.user_id IS NULL AND m.email = (SELECT email FROM users WHERE id = ? AND deleted_at IS NULL))",
+			userID, models.MembershipInvited, userID).
 		Order("o.name ASC").
 		Scan(&rows).Error
 	if err != nil {
@@ -756,6 +858,7 @@ func (r *Orgs) MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]orgs
 	out := make([]orgs.Membership, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, orgs.Membership{
+			ID:           row.MembershipID,
 			Organization: row.Organization,
 			Status:       row.Status,
 			RoleKeys:     keysByMembership[row.MembershipID],
@@ -912,4 +1015,221 @@ func (r *Orgs) MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*orgs
 	}
 
 	return &members[0], nil
+}
+
+func (r *Orgs) AcceptInvitation(
+	ctx context.Context,
+	memberID, userID uuid.UUID,
+	email string,
+	at time.Time,
+) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return acceptInvitationTx(ctx, tx, memberID, userID, email, at)
+	})
+
+	return translateOrgError("accept invitation", err)
+}
+
+func (r *Orgs) DeclineInvitation(ctx context.Context, memberID uuid.UUID, email string) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var membership models.Membership
+		if err := tx.First(&membership, "id = ? AND status = ? AND email = ?",
+			memberID, models.MembershipInvited, email).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return orgs.ErrNotFound
+			}
+
+			return err
+		}
+
+		if err := record(ctx, tx, &models.AuthzEvent{
+			OrganizationID: &membership.OrganizationID,
+			Action:         models.ActionMemberRemoved,
+			Detail:         email,
+		}); err != nil {
+			return err
+		}
+
+		return tx.Delete(&membership).Error
+	})
+
+	return translateOrgError("decline invitation", err)
+}
+
+func (r *Orgs) AcceptInvitationsByEmail(ctx context.Context, userID uuid.UUID, email string, at time.Time) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var invitations []models.Membership
+		if err := tx.Where("status = ? AND user_id IS NULL AND email = ?",
+			models.MembershipInvited, email).Find(&invitations).Error; err != nil {
+			return err
+		}
+
+		for i := range invitations {
+			if err := acceptInvitationTx(ctx, tx, invitations[i].ID, userID, email, at); err != nil {
+				if errors.Is(err, orgs.ErrAlreadyMember) {
+					continue
+				}
+
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return translateOrgError("accept invitations by email", err)
+}
+
+func acceptInvitationTx(
+	ctx context.Context,
+	tx *gorm.DB,
+	memberID, userID uuid.UUID,
+	email string,
+	at time.Time,
+) error {
+	var membership models.Membership
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&membership, "id = ? AND status = ? AND email = ?",
+			memberID, models.MembershipInvited, email).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return orgs.ErrNotFound
+		}
+
+		return err
+	}
+
+	uid := userID
+	membership.UserID = &uid
+	membership.Activate(at)
+
+	if err := tx.Save(&membership).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return orgs.ErrAlreadyMember
+		}
+
+		return err
+	}
+
+	return record(ctx, tx, &models.AuthzEvent{
+		OrganizationID: &membership.OrganizationID,
+		SubjectID:      &userID,
+		Action:         models.ActionMemberAccepted,
+	})
+}
+
+// claimInvitation activates an outstanding invitation for this address so a
+// provisioning AddMember (bootstrap, join-default) does not bounce off the
+// unique email index. A live membership for the same address is still
+// ErrAlreadyMember.
+func claimInvitation(
+	tx *gorm.DB,
+	orgID, userID uuid.UUID,
+	email string,
+	at time.Time,
+) (*models.Membership, error) {
+	var existing models.Membership
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("organization_id = ? AND email = ? AND status = ? AND user_id IS NULL",
+			orgID, email, models.MembershipInvited).
+		First(&existing).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, orgs.ErrAlreadyMember
+		}
+
+		return nil, err
+	}
+
+	uid := userID
+	existing.UserID = &uid
+	existing.Activate(at)
+
+	if err := tx.Save(&existing).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, orgs.ErrAlreadyMember
+		}
+
+		return nil, err
+	}
+
+	return &existing, nil
+}
+
+// refuseLastOwnerLoss serialises last-owner checks with the mutation that
+// would take the capability away. The organization row is locked so two
+// concurrent demotions cannot both observe owners > 1.
+func refuseLastOwnerLoss(tx *gorm.DB, orgID, memberID uuid.UUID, losingCapability bool) error {
+	if !losingCapability {
+		return nil
+	}
+
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&models.Organization{}, "id = ?", orgID).Error; err != nil {
+		return err
+	}
+
+	var holds int64
+	err := tx.Table("membership_roles AS mr").
+		Joins("JOIN memberships m ON m.id = mr.membership_id").
+		Joins("JOIN roles r ON r.id = mr.role_id").
+		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
+		Where("m.id = ? AND m.organization_id = ? AND m.status = ? AND r.key = ? AND m.user_id IS NOT NULL",
+			memberID, orgID, models.MembershipActive, string(authz.RoleOwner)).
+		Count(&holds).Error
+	if err != nil {
+		return err
+	}
+
+	if holds == 0 {
+		return nil
+	}
+
+	owners, err := ownerCountTx(tx, orgID)
+	if err != nil {
+		return err
+	}
+
+	if owners <= 1 {
+		return orgs.ErrLastOwner
+	}
+
+	return nil
+}
+
+func ownerCountTx(tx *gorm.DB, orgID uuid.UUID) (int, error) {
+	var total int64
+
+	err := tx.Table("membership_roles AS mr").
+		Joins("JOIN memberships m ON m.id = mr.membership_id").
+		Joins("JOIN roles r ON r.id = mr.role_id").
+		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
+		Where("m.organization_id = ? AND m.status = ? AND r.key = ?",
+			orgID, models.MembershipActive, string(authz.RoleOwner)).
+		Count(&total).Error
+	if err != nil {
+		return 0, err
+	}
+
+	return int(total), nil
+}
+
+func replacingRolesDropsOwner(tx *gorm.DB, orgID, memberID uuid.UUID, roleIDs []uuid.UUID) (bool, error) {
+	_ = memberID
+
+	var owner models.Role
+	if err := tx.Where("organization_id = ? AND key = ?", orgID, string(authz.RoleOwner)).
+		First(&owner).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	for _, id := range roleIDs {
+		if id == owner.ID {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }

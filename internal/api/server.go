@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -104,9 +105,8 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	// still logged as the 500 it turns into.
 	//
 	// chi's RealIP is deliberately absent: it rewrites RemoteAddr from
-	// X-Forwarded-For, which any client can set, so it would make the logged IP
-	// forgeable. Behind a proxy, replace it with one that only trusts headers
-	// from known proxy addresses — do not reach for RealIP.
+	// X-Forwarded-For, which any client can set. remoteIP reads that header
+	// only from addresses listed in TRUSTED_PROXIES.
 	router.Use(middleware.RequestID)
 	router.Use(middleware.CleanPath)
 	router.Use(s.securityHeaders)
@@ -310,7 +310,7 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 				"status", ww.Status(),
 				"bytes", ww.BytesWritten(),
 				"duration_ms", time.Since(start).Milliseconds(),
-				"remote_ip", remoteIP(r),
+				"remote_ip", s.remoteIP(r),
 			)
 		}()
 
@@ -318,16 +318,64 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 	})
 }
 
-// remoteIP is the peer address with the ephemeral port dropped — that port is
-// noise for correlating requests. This is the real TCP peer, never a header, so
-// behind a proxy it is the proxy's address rather than the client's.
-func remoteIP(r *http.Request) string {
+// remoteIP is the client address with the ephemeral port dropped.
+//
+// The TCP peer is always the starting point. X-Forwarded-For is read only when
+// that peer sits in TRUSTED_PROXIES, walking the header from the right and
+// taking the first hop that is not itself trusted. chi's RealIP is not used:
+// it rewrites RemoteAddr from a header any client can set.
+func (s *Server) remoteIP(r *http.Request) string {
+	peer := tcpPeer(r)
+	if !s.trustedProxy(peer) {
+		return peer
+	}
+
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded == "" {
+		return peer
+	}
+
+	parts := strings.Split(forwarded, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		hop := strings.TrimSpace(parts[i])
+		if hop == "" {
+			continue
+		}
+
+		if host, _, err := net.SplitHostPort(hop); err == nil {
+			hop = host
+		}
+
+		if !s.trustedProxy(hop) {
+			return hop
+		}
+	}
+
+	return peer
+}
+
+func tcpPeer(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 
 	return host
+}
+
+func (s *Server) trustedProxy(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil || s.cfg == nil {
+		return false
+	}
+
+	for i := range s.cfg.TrustedProxies {
+		if s.cfg.TrustedProxies[i].Contains(parsed) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // HealthOutput is the body of the health check.

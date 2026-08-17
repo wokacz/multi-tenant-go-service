@@ -78,7 +78,7 @@ func (s *Server) locale(next http.Handler) http.Handler {
 func (s *Server) clientInfo(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := reqctx.WithClient(r.Context(), reqctx.Client{
-			IP:        remoteIP(r),
+			IP:        s.remoteIP(r),
 			UserAgent: r.UserAgent(),
 		})
 
@@ -137,11 +137,10 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 			r.URL.Path == v1.Prefix+"/password-resets/confirm"):
 			lim = s.resetLimit
 
-		// Adding a member turns an arbitrary address into an account, so an
-		// organization administrator could otherwise ask "is this person
-		// registered here" as fast as they like. It shares the registration
-		// budget because it is the same question from the other side, and a
-		// fourth knob nobody tunes is worse than a shared one.
+		// Inviting a member emails an arbitrary address, so it shares the
+		// registration budget: both are a way to send mail to an address the
+		// caller named, and a fourth knob nobody tunes is worse than a shared
+		// one.
 		//
 		// Matched by shape rather than equality: the path carries an
 		// organization id, so there is no literal to compare against.
@@ -149,7 +148,7 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 			lim = s.registerLimit
 		}
 
-		if lim != nil && !lim.Allow(remoteIP(r)) {
+		if lim != nil && !lim.Allow(s.remoteIP(r)) {
 			problem.Write(w, r, http.StatusTooManyRequests, problem.CodeTooManyRequests)
 			return
 		}

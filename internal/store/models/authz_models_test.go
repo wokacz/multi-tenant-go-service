@@ -91,8 +91,25 @@ func TestMembershipBeforeSaveRejectsAnUnknownStatus(t *testing.T) {
 	}
 
 	m.Status = models.MembershipActive
+	m.Email = "ada@example.com"
+	id := uuid.Must(uuid.NewV7())
+	m.UserID = &id
 	if err := m.BeforeSave(nil); err != nil {
 		t.Errorf("BeforeSave() = %v, want nil", err)
+	}
+}
+
+func TestMembershipBeforeSaveRequiresAnEmail(t *testing.T) {
+	m := &models.Membership{Status: models.MembershipInvited}
+	if err := m.BeforeSave(nil); err == nil {
+		t.Error("BeforeSave() = nil, want an error for an empty email")
+	}
+}
+
+func TestMembershipBeforeSaveRequiresAnAccountWhenActive(t *testing.T) {
+	m := &models.Membership{Status: models.MembershipActive, Email: "ada@example.com"}
+	if err := m.BeforeSave(nil); err == nil {
+		t.Error("BeforeSave() = nil, want an error for an active membership with no account")
 	}
 }
 

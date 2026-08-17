@@ -8,8 +8,8 @@
 # source tree.
 #
 # The API can equally well run on the host with `task run`; the two are
-# interchangeable and share the same .env. The container overrides only the
-# four values that cannot mean the same thing in both places — see
+# interchangeable and share the same .env. The container overrides the
+# values that cannot mean the same thing in both places — see
 # x-api-environment.
 
 name: multi-tenant-go-service
@@ -29,6 +29,14 @@ x-api-environment: &api-environment
   # which host port .env publishes it on.
   POSTGRES_HOST: postgres
   POSTGRES_PORT: 5432
+  # The container binds 0.0.0.0, so the in-repo well-known secrets are
+  # refused even in development. These values are for this stack only; they
+  # must not match internal/config's dev-only constants.
+  AUTH_TOKEN_SECRET: compose-dev-auth-token-secret-32b!
+  AUTH_RESET_SECRET: compose-dev-auth-reset-secret-32b!
+  # stderr inside Compose is not a TTY, so without this the development
+  # mailer would log that a code was requested and never print the code.
+  MAIL_LOG_CODES: "1"
 
 services:
   postgres:

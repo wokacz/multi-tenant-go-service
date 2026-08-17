@@ -24,6 +24,12 @@ tasks:
       - task --list
     silent: true
 
+  install:
+    desc: Install dependencies
+    cmds:
+      - task tidy
+      - task web:install
+
   build:
     desc: Build the API binary into bin/
     cmds:
@@ -176,3 +182,23 @@ tasks:
     desc: Remove build and coverage artefacts
     cmds:
       - rm -rf bin coverage.out coverage.html loader/loader
+
+  web:install:
+    desc: Install the web client dependencies
+    cmds:
+      - cd clients/web && npm install
+
+  web:serve:
+    desc: Serve the Swagger UI for the OpenAPI document
+    cmds:
+      - cd clients/web && npm run start
+
+  web:build:
+    desc: Build the Swagger UI for the OpenAPI document
+    cmds:
+      - cd clients/web && npm run build
+
+  web:format:
+    desc: Format the web client code
+    cmds:
+      - cd clients/web && npm run format

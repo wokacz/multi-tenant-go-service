@@ -119,6 +119,11 @@ func (s MembershipStatus) GrantsPermissions() bool { return s == MembershipActiv
 rozsianym po kodzie — to właśnie takie porównania się rozjeżdżają, aż któreś zostanie zapisane jako
 `!= MembershipSuspended` i zaproszenie po cichu stanie się członkostwem.
 
+Zaproszenie trzyma tożsamość na kolumnie `email` i zostawia `user_id` puste, dopóki zaproszony nie przyjmie. Unikalność
+`(organization_id, email)` zamyka orakl rejestracji: zaproszenie nie musi najpierw szukać adresu w `users`. Indeks
+`(user_id, organization_id)` zostaje — dwa `NULL` w Postgresie się nie zderzają, więc wiele zaproszeń do jednej
+organizacji jest legalne.
+
 Wyjątkiem jest `AuthzAction`, która nie ma ograniczenia w bazie: lista rośnie z każdą operacją administracyjną, a
 `check` zamieniałby każde dopisanie w migrację. Tabela jest append-only i zapisywana z jednego miejsca, więc walidacja
 po stronie Go jest tym, co ją naprawdę pilnuje.
@@ -132,7 +137,7 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 | `login_events`                             | historia logowań                                              |
 | `password_resets`, `two_factor_challenges` | kody jednorazowe (HMAC, TTL, licznik prób)                    |
 | `organizations`                            | najemcy                                                       |
-| `memberships`                              | kto należy do której organizacji i w jakim stanie             |
+| `memberships`                              | kto należy do której organizacji i w jakim stanie; zaproszenie trzyma adres i puste `user_id` |
 | `roles`, `role_permissions`                | role organizacji i to, co nadają                              |
 | `membership_roles`                         | przypisania ról                                               |
 | `user_system_roles`                        | role platformowe, przypisywane kluczem                        |

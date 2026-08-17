@@ -323,3 +323,110 @@ func TestRemovingAMemberCascadesTheirRoleAssignments(t *testing.T) {
 		t.Errorf("assignments left behind = %d, want 0", remaining)
 	}
 }
+
+// TestInviteMemberDoesNotLookTheAddressUp is the storage half of closing the
+// registration oracle: an unknown email is stored as an outstanding invitation
+// rather than refused.
+func TestInviteMemberStoresAnUnknownAddress(t *testing.T) {
+	db := testDB(t)
+	repo := repositories.NewOrgs(db)
+	org := newOrganization(t, db)
+
+	member, err := repo.InviteMember(t.Context(), org.ID, "nobody@example.com", nil, uuid.Nil, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("InviteMember() = _, %v", err)
+	}
+
+	if member.Status != models.MembershipInvited {
+		t.Errorf("status = %q, want invited", member.Status)
+	}
+
+	if member.UserID != uuid.Nil {
+		t.Errorf("user_id = %v, want nil until accept", member.UserID)
+	}
+
+	if member.Email != "nobody@example.com" {
+		t.Errorf("email = %q", member.Email)
+	}
+}
+
+// TestAddMemberClaimsAnOutstandingInvitation is why provisioning does not
+// bounce off an invitation for the same address: bootstrap and joining the
+// default organization would otherwise see the unique email index as
+// "already a member" and leave the row invited.
+func TestAddMemberClaimsAnOutstandingInvitation(t *testing.T) {
+	db := testDB(t)
+	repo := repositories.NewOrgs(db)
+
+	u := newUser(t, repositories.NewUser(db))
+	org := newOrganization(t, db)
+	role := newRole(t, db, org.ID, string(authz.RoleMember), string(authz.PermMembersRead))
+
+	invited, err := repo.InviteMember(t.Context(), org.ID, u.Email, []uuid.UUID{role.ID}, uuid.Nil, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("InviteMember() = _, %v", err)
+	}
+
+	member, err := repo.AddMember(t.Context(), org.ID, u.ID, []uuid.UUID{role.ID}, uuid.Nil, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("AddMember() = _, %v, want the invitation claimed", err)
+	}
+
+	if member.ID != invited.ID {
+		t.Errorf("id = %v, want the invitation %v", member.ID, invited.ID)
+	}
+
+	if member.Status != models.MembershipActive {
+		t.Errorf("status = %q, want active", member.Status)
+	}
+
+	if member.UserID != u.ID {
+		t.Errorf("user_id = %v, want %v", member.UserID, u.ID)
+	}
+}
+
+// TestConcurrentDemotionsLeaveOneOwner is the TOCTOU the last-owner rule used
+// to have: two owners, two overlapping demotions, both observing owners > 1.
+// The organization row is locked inside the same transaction as the write, so
+// one of them must be refused and exactly one owner remains.
+func TestConcurrentDemotionsLeaveOneOwner(t *testing.T) {
+	db := testDB(t)
+	repo := repositories.NewOrgs(db)
+	users := repositories.NewUser(db)
+
+	a := newUser(t, users)
+	b := newUser(t, users)
+	org := newOrganization(t, db)
+
+	owner := newRole(t, db, org.ID, string(authz.RoleOwner), string(authz.PermOrganizationDelete))
+	member := newRole(t, db, org.ID, string(authz.RoleMember), string(authz.PermMembersRead))
+
+	first := newMembership(t, db, org.ID, a.ID, models.MembershipActive, owner.ID)
+	second := newMembership(t, db, org.ID, b.ID, models.MembershipActive, owner.ID)
+
+	errs := make(chan error, 2)
+	go func() {
+		errs <- repo.ReplaceMemberRoles(t.Context(), org.ID, first.ID, []uuid.UUID{member.ID})
+	}()
+	go func() {
+		errs <- repo.ReplaceMemberRoles(t.Context(), org.ID, second.ID, []uuid.UUID{member.ID})
+	}()
+
+	firstErr, secondErr := <-errs, <-errs
+	switch {
+	case firstErr == nil && errors.Is(secondErr, orgs.ErrLastOwner),
+		secondErr == nil && errors.Is(firstErr, orgs.ErrLastOwner):
+	default:
+		t.Fatalf("concurrent demotions = %v, %v, want one success and one ErrLastOwner",
+			firstErr, secondErr)
+	}
+
+	got, err := repo.OwnerCount(t.Context(), org.ID)
+	if err != nil {
+		t.Fatalf("OwnerCount() = _, %v", err)
+	}
+
+	if got != 1 {
+		t.Errorf("OwnerCount() = %d, want 1 — overlapping demotions left the organization without an owner", got)
+	}
+}

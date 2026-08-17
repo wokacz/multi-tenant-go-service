@@ -12,6 +12,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
 // orgPath builds a path under the fixture's organization.
@@ -363,24 +364,102 @@ func TestAMembershipFromAnotherOrganizationCannotBeTouched(t *testing.T) {
 		`{"status":"suspended"}`).expect(t, http.StatusNotFound)
 }
 
-// TestAddingAMemberUsesAnExistingAccount covers the happy path and the two
-// refusals around it.
-func TestAddingAMemberUsesAnExistingAccount(t *testing.T) {
+// TestInvitingAMemberDoesNotRevealWhetherTheAddressIsRegistered is the
+// enumeration guard for this path. Unknown and known addresses produce the
+// same 201 with status invited and no user_id, so an administrator cannot
+// ask "is this person registered here" of the whole installation.
+func TestInvitingAMemberDoesNotRevealWhetherTheAddressIsRegistered(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	outsider := registerOutsider(t, f)
 
-	t.Run("an address nobody has registered is 404", func(t *testing.T) {
-		body := fmt.Sprintf(`{"email":"nobody@example.com","role_ids":[%q]}`, viewer)
+	unknown := inviteBody(t, f, "nobody@example.com", viewer)
+	known := inviteBody(t, f, outsider, viewer)
 
-		f.call(t, http.MethodPost, f.orgPath("/members"), body).expect(t, http.StatusNotFound)
-	})
+	if unknown.Status != string(models.MembershipInvited) || known.Status != string(models.MembershipInvited) {
+		t.Errorf("status unknown=%q known=%q, want invited for both", unknown.Status, known.Status)
+	}
 
-	t.Run("an account already in the organization is 409", func(t *testing.T) {
-		body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, testEmail, viewer)
+	if unknown.UserID != nil || known.UserID != nil {
+		t.Errorf("user_id unknown=%v known=%v, want omitted so the two responses match",
+			unknown.UserID, known.UserID)
+	}
 
-		f.call(t, http.MethodPost, f.orgPath("/members"), body).expect(t, http.StatusConflict)
-	})
+	if unknown.Name != "" || known.Name != "" {
+		t.Errorf("name unknown=%q known=%q, want empty until accept", unknown.Name, known.Name)
+	}
+}
+
+func inviteBody(t *testing.T, f *authzFixture, email string, roleID uuid.UUID) memberDetail {
+	t.Helper()
+
+	body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, email, roleID)
+	var out memberDetail
+	f.call(t, http.MethodPost, f.orgPath("/members"), body).
+		expect(t, http.StatusCreated).decode(t, &out)
+
+	return out
+}
+
+type memberDetail struct {
+	ID     uuid.UUID  `json:"id"`
+	UserID *uuid.UUID `json:"user_id"`
+	Name   string     `json:"name"`
+	Email  string     `json:"email"`
+	Status string     `json:"status"`
+}
+
+func TestInvitingAnAddressAlreadyInTheOrganizationIsConflict(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, testEmail, viewer)
+
+	f.call(t, http.MethodPost, f.orgPath("/members"), body).expect(t, http.StatusConflict)
+}
+
+func TestInvitingAMemberSendsMail(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+
+	inviteBody(t, f, "new@example.com", viewer)
+
+	if f.mailer.inviteTo != "new@example.com" {
+		t.Errorf("invitation mail to = %q, want the invited address", f.mailer.inviteTo)
+	}
+
+	if f.mailer.inviteOrg != "Acme" {
+		t.Errorf("invitation mail org = %q, want Acme", f.mailer.inviteOrg)
+	}
+}
+
+func TestAFailedInvitationMailStillCreatesTheMembership(t *testing.T) {
+	s, repo := newTestAPIConfig(t, failingMailer{}, memory.NewUsers(), nil)
+
+	registerAda(t, s)
+	session := signInAda(t, s, "", http.StatusCreated)
+
+	orgID := repo.SeedOrganization("acme", "Acme")
+	owner := repo.SeedShippedRole(orgID, authz.RoleOwner)
+	repo.SeedMember(orgID, session.User.ID, models.MembershipActive, owner)
+	viewer := repo.SeedShippedRole(orgID, authz.RoleViewer)
+
+	body := fmt.Sprintf(`{"email":"nobody@example.com","role_ids":[%q]}`, viewer)
+	rec := do(t, s.http.Handler,
+		authed(t, http.MethodPost, "/v1/orgs/"+orgID.String()+"/members", body, session.Token, ""))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("invite with mail down = %d, want 201; body %s", rec.Code, rec.Body.Bytes())
+	}
+}
+
+func TestAnInvitationCannotBeActivatedByAnAdministrator(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	invited := inviteBody(t, f, "nobody@example.com", viewer)
+
+	f.call(t, http.MethodPatch, f.orgPath("/members/"+invited.ID.String()),
+		`{"status":"active"}`).expect(t, http.StatusUnprocessableEntity)
 }
 
 // TestListingMembersShowsRoles is the read path the settings screen is built on.

@@ -45,6 +45,7 @@ element, nie czytając wszystkiego od zera.
 | Co znaczy `code` w odpowiedzi błędnej?            | [design/008](design/008_errors_and_i18n.md)       |
 | Dlaczego licznik prób rusza się w SQL-u?          | [design/006](design/006_devices_and_2fa.md)       |
 | Skąd się bierze pierwszy administrator?           | [design/007](design/007_authorization.md)         |
+| Jak działają zaproszenia e-mail?                  | [design/007](design/007_authorization.md#zaproszenia) |
 | Dodałem trasę i dostaję 403 — dlaczego?           | [guides/002](guides/002_add_endpoint.md)          |
 | Zmieniłem model i CI protestuje                   | [guides/003](guides/003_models_and_migrations.md) |
 | Test przechodzi u mnie, a na CI nie               | [guides/007](guides/007_write_tests.md)           |

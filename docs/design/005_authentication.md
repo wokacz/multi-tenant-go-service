@@ -145,7 +145,9 @@ Nieznany adres, awaria bazy, awaria SMTP — zawsze `204`. Gdyby błąd zapisu z
 zarejestrowanych adresów**, czyli byłby dokładnie tym oraklem, który wspólna odpowiedź ma zamykać. Awarie trafiają do
 logu.
 
-W developmencie bez skonfigurowanego SMTP kod ląduje w logu procesu.
+W developmencie bez skonfigurowanego SMTP log procesu zapisuje, że kod **został poproszony**, nigdy samego kodu. Kod
+idzie na stderr tylko gdy stderr jest TTY albo `MAIL_LOG_CODES=1` — aggregator logów nie powinien zobaczyć go przez
+przypadek.
 
 ### Potwierdzenie unieważnia sesje
 

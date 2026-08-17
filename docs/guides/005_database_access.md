@@ -110,6 +110,12 @@ używają `PUT`, nie `PATCH`.
 Dwie równoczesne edycje w wariancie przyrostowym cicho zlewają się w zbiór, którego nie wybrał żaden z administratorów.
 W wariancie zastępującym ostatni wygrywa — w sposób, który da się wyjaśnić.
 
+## Ostatni właściciel zamyka się w transakcji
+
+Sprawdzenie „czy to ostatni właściciel" i mutacja, która odbiera tę zdolność, muszą iść **w jednej transakcji**, z
+`SELECT … FOR UPDATE` na wierszu organizacji. Dwa nakładające się zdegradowania oba widzą `owners > 1` i oba przechodzą,
+jeśli locka nie ma. `TestConcurrentDemotionsLeaveOneOwner` (Postgres) jest tym, co to pilnuje.
+
 ## Zawężenie idzie do `WHERE`
 
 ```go
@@ -133,10 +139,13 @@ filtrować `deleted_at` samo:
 ```go
 Table("memberships AS m").
 Joins("JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL").
-Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL")
+Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL")
 ```
 
-Pominięcie tego oznacza, że usunięte konto nadal ma uprawnienia.
+Lista członków musi być `LEFT JOIN` do `users`: zaproszenie nie ma `user_id`, a `INNER JOIN` wyciąłby je z listy.
+Zaproszenie i tak nic nie nadaje — `GrantsPermissions` wymaga statusu `active`.
+
+Pominięcie `deleted_at` na użytkowniku oznacza, że usunięte konto nadal ma uprawnienia.
 
 ## `LEFT JOIN` kontra `INNER JOIN`
 
@@ -164,6 +173,13 @@ for _, extra := range extras { ... }
 Tak działają `attachRoles`, `decorateRoles` i `MembershipsForUser`. Jedno złączenie zwracające iloczyn kartezjański też
 by zadziałało, ale wiersze i tak trzeba by składać w Go — a to jest kształt, który przy pierwszym dodanym polu zamienia
 się w N+1.
+
+## Naruszenie unikalności zrywa transakcję
+
+W Postgresie `unique_violation` ustawia transakcję w stan aborted. Kolejne polecenie na tym samym `tx` kończy się
+`25P02`, nawet jeśli Go obsłużył błąd. Żeby po kolizji insertu zrobić jeszcze `SELECT` (na przykład przejąć
+zaległe zaproszenie), potrzebny jest savepoint: `tx.SavePoint(...)` przed insertem i `tx.RollbackTo(...)` po
+`gorm.ErrDuplicatedKey`. `SavePoint` i `RollbackTo` zwracają `*gorm.DB` — błąd jest w `.Error`.
 
 ## Stronicowanie
 

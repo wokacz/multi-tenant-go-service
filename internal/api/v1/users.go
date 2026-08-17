@@ -146,6 +146,10 @@ func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*struct
 	// plain member is what makes an installation that never configures
 	// organizations behave like one that has no organizations at all.
 	if h.orgs != nil {
+		if err := h.orgs.AttachInvitations(ctx, created.ID, created.Email); err != nil {
+			return nil, problem.Error(ctx, err)
+		}
+
 		if err := h.orgs.JoinDefaultOrganization(ctx, created.ID); err != nil {
 			return nil, problem.Error(ctx, err)
 		}

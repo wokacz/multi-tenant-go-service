@@ -51,6 +51,7 @@ const (
 	CodeAlreadyMember       = "already_member"
 	CodeRecordProtected     = "record_protected"
 	CodeInvalidName         = "invalid_name"
+	CodeInvalidEmail        = "invalid_email"
 	CodeInvalidStatus       = "invalid_status"
 	CodeInvalidOrgID        = "invalid_organization_id"
 )

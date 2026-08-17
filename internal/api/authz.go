@@ -52,6 +52,8 @@ var selfServiceOperations = map[string]bool{
 	"revoke-device":         true,
 	"list-login-events":     true,
 	"list-my-organizations": true,
+	"accept-invitation":     true,
+	"decline-invitation":    true,
 
 	// The permission catalog describes what the product can do, not what any
 	// organization's data is. Gating it would leave a caller who may edit roles

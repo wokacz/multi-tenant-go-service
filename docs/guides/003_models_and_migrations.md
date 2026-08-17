@@ -137,7 +137,9 @@ task migrate
 ```
 
 Atlas porównuje DDL wynikający z modeli z katalogiem `migrations/` i dopisuje plik `NNNNNNNNNNNNNN_widgets.sql`.
-Migracji **nie pisze się ręcznie** — ręczna edycja unieważnia `atlas.sum`.
+Migracji **nie pisze się ręcznie** — ręczna edycja unieważnia `atlas.sum`. Wyjątek: `ADD COLUMN … NOT NULL` na tabeli,
+która już ma wiersze. Diff tego nie umie uzupełnić danymi; wtedy dopisuje się `UPDATE` z istniejącej kolumny i woła
+`atlas migrate hash`.
 
 Sprawdzenie przed pull requestem:
 

@@ -39,6 +39,7 @@ func newOrganizationResponse(o *models.Organization) OrganizationResponse {
 // status spelled out, so a client can show "you were suspended here" instead of
 // having the organization silently vanish from the list.
 type MembershipResponse struct {
+	ID           uuid.UUID            `json:"id" format:"uuid" doc:"Membership id, used to accept or decline an invitation"`
 	Organization OrganizationResponse `json:"organization"`
 	Status       string               `json:"status" enum:"invited,active,suspended" doc:"Where the caller stands in this organization"`
 	Roles        []string             `json:"roles" doc:"Keys of the roles the caller holds here"`
@@ -53,6 +54,7 @@ func newMembershipResponse(m *orgs.Membership) MembershipResponse {
 	}
 
 	return MembershipResponse{
+		ID:           m.ID,
 		Organization: newOrganizationResponse(&m.Organization),
 		Status:       string(m.Status),
 		Roles:        roles,

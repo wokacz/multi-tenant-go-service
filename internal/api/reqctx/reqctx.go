@@ -14,9 +14,9 @@ import "context"
 
 // Client is what the service knows about where a request came from.
 type Client struct {
-	// IP is the real TCP peer with its ephemeral port dropped, never a
-	// forwarded header — see remoteIP in internal/api. Behind a proxy it is
-	// the proxy's address.
+	// IP is the client address with its ephemeral port dropped. It is the TCP
+	// peer unless the peer is a trusted proxy, in which case it is the first
+	// untrusted hop of X-Forwarded-For — see remoteIP in internal/api.
 	IP string
 
 	// UserAgent is unvalidated client input. It is stored and shown back to

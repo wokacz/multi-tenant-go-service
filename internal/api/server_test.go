@@ -46,6 +46,8 @@ type capturingMailer struct {
 	to, code      string
 	twoFactorTo   string
 	twoFactorCode string
+	inviteTo      string
+	inviteOrg     string
 }
 
 func (c *capturingMailer) SendPasswordReset(_ context.Context, to, code string) error {
@@ -60,6 +62,12 @@ func (c *capturingMailer) SendTwoFactorCode(_ context.Context, to, code string) 
 	return nil
 }
 
+func (c *capturingMailer) SendInvitation(_ context.Context, to, orgName string) error {
+	c.inviteTo, c.inviteOrg = to, orgName
+
+	return nil
+}
+
 type failingMailer struct{}
 
 func (failingMailer) SendPasswordReset(context.Context, string, string) error {
@@ -67,6 +75,10 @@ func (failingMailer) SendPasswordReset(context.Context, string, string) error {
 }
 
 func (failingMailer) SendTwoFactorCode(context.Context, string, string) error {
+	return errSMTPDown
+}
+
+func (failingMailer) SendInvitation(context.Context, string, string) error {
 	return errSMTPDown
 }
 
@@ -151,7 +163,7 @@ func newTestAPIConfig(
 		Mail:      mailer,
 		Authz:     authzService,
 		Snapshots: authzService,
-		Orgs:      orgs.NewService(authzRepo, authzRepo, accounts, authzRepo),
+		Orgs:      orgs.NewService(authzRepo, authzRepo, authzRepo),
 		Audit:     audit.NewService(authzRepo, authzRepo),
 	})
 

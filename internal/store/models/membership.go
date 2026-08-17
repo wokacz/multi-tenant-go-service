@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,8 @@ type MembershipStatus string
 const (
 	// MembershipInvited has been asked to join and has not accepted. The row
 	// exists so the invitation can be listed and withdrawn; it confers nothing.
+	// UserID is nil until they accept, so listing invitations cannot tell a
+	// registered address from an unknown one.
 	MembershipInvited MembershipStatus = "invited"
 
 	MembershipActive MembershipStatus = "active"
@@ -46,11 +49,21 @@ func (s MembershipStatus) GrantsPermissions() bool {
 type Membership struct {
 	Model
 
-	UserID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_membership_user_org,priority:1"`
-	User   *User     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	// UserID is nil while the invitation is outstanding. Postgres unique
+	// indexes treat two NULLs as distinct, which is what lets several people
+	// be invited to one organization at once; uniqueness for that case is
+	// idx_membership_org_email.
+	UserID *uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_membership_user_org,priority:1"`
+	User   *User      `json:"-" gorm:"constraint:OnDelete:CASCADE"`
 
-	OrganizationID uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:idx_membership_user_org,priority:2"`
+	OrganizationID uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:idx_membership_user_org,priority:2;uniqueIndex:idx_membership_org_email,priority:1"`
 	Organization   *Organization `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+
+	// Email is the invitation's identity. It is denormalised onto the row so
+	// an outstanding invite can be unique per organization without first
+	// looking the address up in users — that lookup is the enumeration
+	// oracle this column exists to close.
+	Email string `gorm:"size:255;not null;uniqueIndex:idx_membership_org_email,priority:2"`
 
 	Status MembershipStatus `gorm:"size:20;not null;check:status IN ('invited','active','suspended')"`
 
@@ -62,11 +75,28 @@ type Membership struct {
 	Roles []MembershipRole `gorm:"constraint:OnDelete:CASCADE"`
 }
 
+// AccountID is the user behind this membership, or uuid.Nil while invited.
+func (m Membership) AccountID() uuid.UUID {
+	if m.UserID == nil {
+		return uuid.Nil
+	}
+
+	return *m.UserID
+}
+
 // BeforeSave rejects an unknown status in Go, so callers get a useful error
 // rather than a constraint violation from Postgres.
 func (m *Membership) BeforeSave(_ *gorm.DB) error {
 	if !m.Status.Valid() {
 		return fmt.Errorf("models: invalid membership status %q", m.Status)
+	}
+
+	if strings.TrimSpace(m.Email) == "" {
+		return fmt.Errorf("models: membership email is empty")
+	}
+
+	if m.Status.GrantsPermissions() && m.UserID == nil {
+		return fmt.Errorf("models: an active membership needs an account")
 	}
 
 	return nil

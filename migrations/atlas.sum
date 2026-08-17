@@ -1,7 +1,8 @@
-h1:fY/w4UrSVDEj2nd+ku76+O2gMZXqIHey6mK9kWT+Hlg=
+h1:vcKAPREFK0iFsDA5jHNI0JZVEcOfTGNKmkOujEbNWwU=
 20260814210810_init.sql h1:PVzh/66tuEBVNrGfDu8AWkjz+Z2CUir4cqzgyrD0Kwg=
 20260814222844_password_resets.sql h1:+rTdlH03i00H2t4ONLKMPcZ2lK5MK0M6G+Ciz/Oaawk=
 20260815073847_session_epoch.sql h1:0Kkunv7E2WRD4JtBRgimOgUzoTm4L7TYceRgnYxjjuo=
 20260815102216_devices_and_two_factor.sql h1:kYZj9b75U1drN8OggDqXKj1lIfrd12YvMytInxlHbLc=
 20260815173858_authz.sql h1:kg7H61sx7pAJjysh8Fm3pLxBgfUbsfc5RxYzG6lGN6U=
 20260816070643_user_suspension.sql h1:YuYft4Fi/xLZvk2t3rQ72KV4UQF9RdevlNCdMZK+gOw=
+20260817070917_membership_invitations.sql h1:Gv4IPZGSaSxyACZXuUscEoLw1iZXSxQkTK4ismoo+yY=
