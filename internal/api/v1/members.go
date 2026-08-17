@@ -221,30 +221,33 @@ func (h *memberHandlers) list(ctx context.Context, _ *ListMembersInput) (*ListMe
 	return out, nil
 }
 
-func (h *memberHandlers) add(ctx context.Context, in *AddMemberInput) (*MemberOutput, error) {
+func (h *memberHandlers) add(ctx context.Context, in *AddMemberInput) (*InvitationOutput, error) {
 	grant, err := grantFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	member, err := h.orgs.AddMember(ctx, grant, in.Body.Email, in.Body.RoleIDs)
+	invitation, token, err := h.orgs.Invite(ctx, grant, in.Body.Email, in.Body.RoleIDs)
 	if err != nil {
 		return nil, problem.Error(ctx, err)
 	}
 
+	// The token exists only here and in the message. It is deliberately absent
+	// from the response: an administrator who could read it back could accept on
+	// the invitee's behalf, which is the whole thing the token replaced.
 	if h.mail != nil {
-		org, orgErr := h.orgs.Organization(ctx, grant.OrganizationID())
-		name := ""
-		if orgErr == nil {
-			name = org.Name
-		}
-
-		if err := h.mail.SendInvitation(ctx, member.Email, name); err != nil {
+		if err := h.mail.SendInvitation(ctx, invitation.Email,
+			invitation.Organization.Name, token, invitation.ExpiresAt); err != nil {
 			logger(h.log).ErrorContext(ctx, "invitation mail failed", "error", err)
 		}
 	}
 
-	return &MemberOutput{Body: newMemberResponse(member)}, nil
+	return &InvitationOutput{Body: InvitationResponse{
+		Organization: newOrganizationResponse(&invitation.Organization),
+		Email:        invitation.Email,
+		Roles:        invitation.RoleKeys,
+		ExpiresAt:    invitation.ExpiresAt,
+	}}, nil
 }
 
 func (h *memberHandlers) setStatus(ctx context.Context, in *UpdateMemberStatusInput) (*MemberOutput, error) {

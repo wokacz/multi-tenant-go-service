@@ -45,7 +45,19 @@ var (
 
 	ErrInvalidName   = errors.New("orgs: name is empty or too long")
 	ErrInvalidStatus = errors.New("orgs: invalid membership status")
-	ErrInvalidEmail  = errors.New("orgs: email is empty")
+
+	// ErrInvitationExpired is separate from ErrNotFound because the holder of the
+	// token can act on it: ask whoever invited them to send another. A 404 would
+	// send them looking for a mistake they did not make.
+	ErrInvitationExpired = errors.New("orgs: the invitation has expired")
+
+	// ErrInvitationAddressMismatch is the refusal when the token is good but the
+	// account accepting it has a different address. Revealing that the invitation
+	// exists is fine — the caller is holding its token, which is already proof
+	// they received it — and a bare 404 would leave them with nothing to say to
+	// the person who invited them.
+	ErrInvitationAddressMismatch = errors.New("orgs: the invitation was issued to a different address")
+	ErrInvalidEmail              = errors.New("orgs: email is empty")
 )
 
 // Membership is the view of one organization from one account's point of view.
@@ -53,6 +65,21 @@ type Membership struct {
 	ID           uuid.UUID // the membership, used to accept or decline an invitation
 	Organization models.Organization
 	Status       models.MembershipStatus
+	RoleKeys     []string
+}
+
+// Invitation is an outstanding offer of membership.
+//
+// The token is absent on purpose. It exists once, in the message that was sent;
+// this type is what anything reading invitations back out of storage sees, and a
+// token that can be read back is a token that can be used by whoever can read the
+// table.
+type Invitation struct {
+	ID           uuid.UUID
+	Organization models.Organization
+	Email        string
+	InvitedBy    *uuid.UUID
+	ExpiresAt    time.Time
 	RoleKeys     []string
 }
 
@@ -173,12 +200,19 @@ type Repository interface {
 	// It returns ErrAlreadyMember when the account is already a live member.
 	AddMember(ctx context.Context, orgID, userID uuid.UUID, roleIDs []uuid.UUID, invitedBy uuid.UUID, at time.Time) (*Member, error)
 
-	// InviteMember records an outstanding invitation for the address. It does
-	// not look the address up in the account table: that lookup is what would
-	// tell the caller whether the person is registered anywhere in the
-	// installation. UserID stays nil until they accept. ErrAlreadyMember when
-	// this organization already has that email.
-	InviteMember(ctx context.Context, orgID uuid.UUID, email string, roleIDs []uuid.UUID, invitedBy uuid.UUID, at time.Time) (*Member, error)
+	// InviteMember records an invitation for the address and stores the hash of
+	// its token.
+	//
+	// It does not look the address up in the account table: that lookup is what
+	// would tell the caller whether the person is registered anywhere in the
+	// installation. Unknown and known addresses produce the same row and the same
+	// response.
+	//
+	// ErrAlreadyMember covers both "this organization already has an outstanding
+	// invitation for that address" and "that address is already a member" — one
+	// answer, because the caller may act on either the same way and telling them
+	// apart is not worth a second code.
+	InviteMember(ctx context.Context, orgID uuid.UUID, email, tokenHash string, roleIDs []uuid.UUID, invitedBy uuid.UUID, expiresAt, at time.Time) (*Invitation, error)
 
 	// SetMemberStatus suspends or reinstates a membership. guard is called inside
 	// the transaction, with the organization row locked.
@@ -255,20 +289,34 @@ type Repository interface {
 // asterisks.
 type Directory interface {
 	// MembershipsForUser lists the live organizations the account belongs to,
-	// including invitations (matched by the account's email while still
-	// outstanding) and suspensions, so the client can render them differently
-	// rather than have them silently disappear.
+	// including suspensions, so the client can render those differently rather
+	// than have them silently disappear. Invitations are not memberships and are
+	// listed by InvitationsForEmail.
 	MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]Membership, error)
 
-	// AcceptInvitation turns an outstanding invitation into an active
-	// membership for this account. The address on the row must match email;
-	// a mismatch is ErrNotFound, the same as a missing id, so a caller cannot
-	// probe invitations that are not theirs.
-	AcceptInvitation(ctx context.Context, memberID, userID uuid.UUID, email string, at time.Time) error
+	// InvitationByToken finds a pending invitation by the hash of its token, or
+	// ErrNotFound. An expired or already-accepted one is not found either: the
+	// caller holding the token learns only that it no longer works, which is all
+	// they can act on.
+	InvitationByToken(ctx context.Context, tokenHash string, now time.Time) (*Invitation, error)
 
-	// DeclineInvitation withdraws an outstanding invitation addressed to
-	// email. A mismatch is ErrNotFound, for the same reason as AcceptInvitation.
-	DeclineInvitation(ctx context.Context, memberID uuid.UUID, email string) error
+	// AcceptInvitation spends the invitation and creates the active membership it
+	// promised, in one transaction.
+	//
+	// The roles come from the invitation, never from the caller: whoever accepts
+	// must not get to choose what they are accepting. It returns ErrAlreadyMember
+	// when the account is already in that organization.
+	AcceptInvitation(ctx context.Context, invitationID, userID uuid.UUID, at time.Time) error
+
+	// DeclineInvitation removes a pending invitation. Holding the token is the
+	// authorization: the person who can read the mailbox is the person entitled to
+	// refuse.
+	DeclineInvitation(ctx context.Context, invitationID uuid.UUID) error
+
+	// InvitationsForEmail lists the pending invitations addressed to one account,
+	// so a client can show "you have been invited to X" without the token. Taking
+	// one up still needs the token from the message.
+	InvitationsForEmail(ctx context.Context, email string, now time.Time) ([]Invitation, error)
 }
 
 // There is deliberately no AcceptInvitationsByEmail here.

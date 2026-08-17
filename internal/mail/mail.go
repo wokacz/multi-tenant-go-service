@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 )
@@ -23,7 +24,7 @@ type Sender interface {
 	SendPasswordReset(ctx context.Context, to, code string) error
 	SendTwoFactorCode(ctx context.Context, to, code string) error
 	SendEmailChange(ctx context.Context, to, code string) error
-	SendInvitation(ctx context.Context, to, orgName string) error
+	SendInvitation(ctx context.Context, to, orgName, token string, expiresAt time.Time) error
 }
 
 // New picks SMTP when a host is configured, and the development logger
@@ -69,9 +70,13 @@ func (s *logSender) SendEmailChange(_ context.Context, to, code string) error {
 	return nil
 }
 
-func (s *logSender) SendInvitation(_ context.Context, to, orgName string) error {
+func (s *logSender) SendInvitation(_ context.Context, to, orgName, token string, expiresAt time.Time) error {
 	s.log.Info("organization invitation (SMTP is not configured)",
-		"email", to, "organization", orgName)
+		"email", to, "organization", orgName, "expires_at", expiresAt)
+
+	// The token follows the same rule as the one-time codes: never to the
+	// structured log, and to stderr only where that was declared safe.
+	s.note("invitation", to, token)
 
 	return nil
 }
@@ -114,10 +119,15 @@ func (s *smtpSender) SendEmailChange(_ context.Context, to, code string) error {
 		"It expires in 15 minutes. If you did not ask to change your address, ignore this message.")
 }
 
-func (s *smtpSender) SendInvitation(_ context.Context, to, orgName string) error {
+// SendInvitation states the address the offer was issued to, because accepting
+// requires the account to have that address and somebody reading the message in a
+// forwarded mailbox otherwise has no way to know why it was refused.
+func (s *smtpSender) SendInvitation(_ context.Context, to, orgName, token string, expiresAt time.Time) error {
 	return s.send(to, "You have been invited to "+orgName,
 		"You have been invited to join "+orgName+".",
-		"Sign in, or register with this address, then accept the invitation.")
+		"Sign in, or register with "+to+" — the invitation can only be accepted by an "+
+			"account with that address — then accept it with this token: "+token+
+			"\r\n\r\nIt expires on "+expiresAt.Format(time.RFC1123)+".")
 }
 
 // send builds and posts one plain-text message.

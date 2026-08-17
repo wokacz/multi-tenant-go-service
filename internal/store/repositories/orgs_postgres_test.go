@@ -249,7 +249,8 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 	// An invitation has no account at all, and still has to be listed. That is
 	// why the join stays a left one rather than becoming an inner one.
 	invited, err := repo.InviteMember(t.Context(), org.ID,
-		"invited@example.com", []uuid.UUID{role.ID}, live.ID, time.Now().UTC())
+		"invited@example.com", orgs.HashInvitationToken("a-token"),
+		[]uuid.UUID{role.ID}, live.ID, time.Now().UTC().Add(orgs.InvitationTTL), time.Now().UTC())
 	if err != nil {
 		t.Fatalf("InviteMember() = _, %v", err)
 	}
@@ -519,56 +520,37 @@ func TestInviteMemberStoresAnUnknownAddress(t *testing.T) {
 	repo := repositories.NewOrgs(db)
 	org := newOrganization(t, db)
 
-	member, err := repo.InviteMember(t.Context(), org.ID, "nobody@example.com", nil, uuid.Nil, time.Now().UTC())
+	now := time.Now().UTC()
+
+	invitation, err := repo.InviteMember(t.Context(), org.ID, "nobody@example.com",
+		orgs.HashInvitationToken("a-token"), nil, uuid.Nil, now.Add(orgs.InvitationTTL), now)
 	if err != nil {
 		t.Fatalf("InviteMember() = _, %v", err)
 	}
 
-	if member.Status != models.MembershipInvited {
-		t.Errorf("status = %q, want invited", member.Status)
+	if invitation.Email != "nobody@example.com" {
+		t.Errorf("email = %q", invitation.Email)
 	}
 
-	if member.UserID != uuid.Nil {
-		t.Errorf("user_id = %v, want nil until accept", member.UserID)
-	}
-
-	if member.Email != "nobody@example.com" {
-		t.Errorf("email = %q", member.Email)
-	}
-}
-
-// TestAddMemberClaimsAnOutstandingInvitation is why provisioning does not
-// bounce off an invitation for the same address: bootstrap and joining the
-// default organization would otherwise see the unique email index as
-// "already a member" and leave the row invited.
-func TestAddMemberClaimsAnOutstandingInvitation(t *testing.T) {
-	db := testDB(t)
-	repo := repositories.NewOrgs(db)
-
-	u := newUser(t, repositories.NewUser(db))
-	org := newOrganization(t, db)
-	role := newRole(t, db, org.ID, string(authz.RoleMember), string(authz.PermMembersRead))
-
-	invited, err := repo.InviteMember(t.Context(), org.ID, u.Email, []uuid.UUID{role.ID}, uuid.Nil, time.Now().UTC())
+	// No membership was created: an invitation is an offer, and the address it was
+	// sent to is not evidence that anybody holds it.
+	members, err := repo.Members(t.Context(), org.ID)
 	if err != nil {
-		t.Fatalf("InviteMember() = _, %v", err)
+		t.Fatalf("Members() = _, %v", err)
 	}
 
-	member, err := repo.AddMember(t.Context(), org.ID, u.ID, []uuid.UUID{role.ID}, uuid.Nil, time.Now().UTC())
+	if len(members) != 0 {
+		t.Errorf("Members() = %+v, want none — inviting is not joining", members)
+	}
+
+	// And it is reachable by the token that was mailed, not by the address.
+	found, err := repo.InvitationByToken(t.Context(), orgs.HashInvitationToken("a-token"), now)
 	if err != nil {
-		t.Fatalf("AddMember() = _, %v, want the invitation claimed", err)
+		t.Fatalf("InvitationByToken() = _, %v", err)
 	}
 
-	if member.ID != invited.ID {
-		t.Errorf("id = %v, want the invitation %v", member.ID, invited.ID)
-	}
-
-	if member.Status != models.MembershipActive {
-		t.Errorf("status = %q, want active", member.Status)
-	}
-
-	if member.UserID != u.ID {
-		t.Errorf("user_id = %v, want %v", member.UserID, u.ID)
+	if found.ID != invitation.ID {
+		t.Errorf("InvitationByToken() found %v, want %v", found.ID, invitation.ID)
 	}
 }
 

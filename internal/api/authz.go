@@ -52,6 +52,7 @@ var selfServiceOperations = map[string]bool{
 	"revoke-device":         true,
 	"list-login-events":     true,
 	"list-my-organizations": true,
+	"list-my-invitations":   true,
 	"accept-invitation":     true,
 	"begin-email-change":    true,
 	"confirm-email-change":  true,

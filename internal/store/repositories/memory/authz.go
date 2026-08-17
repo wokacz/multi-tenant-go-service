@@ -49,6 +49,8 @@ type Authz struct {
 	memberRoles  map[uuid.UUID][]uuid.UUID
 	systemRoles  map[uuid.UUID][]string
 	deletedUsers map[uuid.UUID]bool
+	invitations  map[uuid.UUID]*models.Invitation
+	inviteRoles  map[uuid.UUID][]uuid.UUID
 
 	// events is append-only, the way the table is. Writes go through
 	// recordLocked so the "no actor, no row" rule is copied exactly rather than
@@ -78,6 +80,8 @@ func NewAuthz(users *Users) *Authz {
 		memberRoles:  map[uuid.UUID][]uuid.UUID{},
 		systemRoles:  map[uuid.UUID][]string{},
 		deletedUsers: map[uuid.UUID]bool{},
+		invitations:  map[uuid.UUID]*models.Invitation{},
+		inviteRoles:  map[uuid.UUID][]uuid.UUID{},
 	}
 }
 
@@ -498,52 +502,6 @@ func (m *Authz) AddMember(
 
 	m.recordLocked(ctx, models.AuthzEvent{
 		OrganizationID: &orgID, SubjectID: &userID, Action: models.ActionMemberJoined,
-	})
-
-	member := m.memberLocked(membership)
-
-	return &member, nil
-}
-
-func (m *Authz) InviteMember(
-	ctx context.Context,
-	orgID uuid.UUID,
-	email string,
-	roleIDs []uuid.UUID,
-	invitedBy uuid.UUID,
-	at time.Time,
-) (*orgs.Member, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, membership := range m.memberships {
-		if membership.OrganizationID == orgID && membership.Email == email {
-			return nil, orgs.ErrAlreadyMember
-		}
-	}
-
-	if err := m.rolesBelongLocked(orgID, roleIDs); err != nil {
-		return nil, err
-	}
-
-	id := uuid.Must(uuid.NewV7())
-	membership := &models.Membership{
-		Model:          models.Model{ID: id, CreatedAt: at.UTC()},
-		Email:          email,
-		OrganizationID: orgID,
-		Status:         models.MembershipInvited,
-	}
-
-	if invitedBy != uuid.Nil {
-		by := invitedBy
-		membership.InvitedBy = &by
-	}
-
-	m.memberships[id] = membership
-	m.memberRoles[id] = uniqueIDs(roleIDs)
-
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, Action: models.ActionMemberInvited, Detail: email,
 	})
 
 	member := m.memberLocked(membership)
@@ -1244,74 +1202,6 @@ func (m *Authz) SeedSystemRole(userID uuid.UUID, key string) {
 	if !slices.Contains(m.systemRoles[userID], key) {
 		m.systemRoles[userID] = append(m.systemRoles[userID], key)
 	}
-}
-
-func (m *Authz) AcceptInvitation(
-	ctx context.Context,
-	memberID, userID uuid.UUID,
-	email string,
-	at time.Time,
-) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	return m.acceptInvitationLocked(ctx, memberID, userID, email, at)
-}
-
-func (m *Authz) DeclineInvitation(ctx context.Context, memberID uuid.UUID, email string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	membership, ok := m.memberships[memberID]
-	if !ok || membership.Status != models.MembershipInvited || membership.Email != email {
-		return orgs.ErrNotFound
-	}
-
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &membership.OrganizationID,
-		Action:         models.ActionMemberRemoved,
-		Detail:         email,
-	})
-
-	delete(m.memberships, memberID)
-	delete(m.memberRoles, memberID)
-
-	return nil
-}
-
-func (m *Authz) acceptInvitationLocked(
-	ctx context.Context,
-	memberID, userID uuid.UUID,
-	email string,
-	at time.Time,
-) error {
-	membership, ok := m.memberships[memberID]
-	if !ok || membership.Status != models.MembershipInvited || membership.Email != email {
-		return orgs.ErrNotFound
-	}
-
-	// A deleted organization keeps its invitations, and accepting into one would
-	// produce an active membership that every read then filters out.
-	if org, ok := m.orgs[membership.OrganizationID]; !ok || org.IsDeleted() {
-		return orgs.ErrNotFound
-	}
-
-	for _, existing := range m.memberships {
-		if existing.ID != memberID && sameAccount(existing, userID) && existing.OrganizationID == membership.OrganizationID {
-			return orgs.ErrAlreadyMember
-		}
-	}
-
-	membership.UserID = ptrID(userID)
-	membership.Activate(at)
-
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &membership.OrganizationID,
-		SubjectID:      &userID,
-		Action:         models.ActionMemberAccepted,
-	})
-
-	return nil
 }
 
 // applyOwnerGuardLocked hands the domain the same facts Postgres reads inside its

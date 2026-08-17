@@ -29,6 +29,8 @@
   "error.invalid_email_code": "nieprawidłowy kod potwierdzający",
   "error.same_email": "to już jest twój adres",
   "error.email_taken": "ten adres jest już używany",
+  "error.invitation_expired": "to zaproszenie wygasło",
+  "error.invitation_address_mismatch": "to zaproszenie wystawiono na inny adres",
   "error.role_protected": "ta rola jest częścią produktu i nie może być zmieniana",
   "error.last_owner": "organizacja zostałaby bez właściciela",
   "error.role_in_use": "rola jest wciąż przypisana członkom",

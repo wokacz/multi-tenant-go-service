@@ -390,6 +390,57 @@ components:
       required:
         - status
       type: object
+    InvitationResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/InvitationResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Address the invitation was issued to
+          format: email
+          type: string
+        expires_at:
+          description: After this it can no longer be accepted
+          format: date-time
+          type: string
+        organization:
+          $ref: "#/components/schemas/OrganizationResponse"
+        roles:
+          description: Role keys it will grant once accepted
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - organization
+        - email
+        - roles
+        - expires_at
+      type: object
+    InvitationTokenRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/InvitationTokenRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        token:
+          description: Token from the invitation message
+          maxLength: 128
+          minLength: 16
+          type: string
+      required:
+        - token
+      type: object
     ListAuditOutputBody:
       additionalProperties: false
       properties:
@@ -465,6 +516,25 @@ components:
             - "null"
       required:
         - members
+      type: object
+    ListMyInvitationsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListMyInvitationsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        invitations:
+          items:
+            $ref: "#/components/schemas/InvitationResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - invitations
       type: object
     ListMyOrganizationsOutputBody:
       additionalProperties: false
@@ -1433,22 +1503,17 @@ paths:
       summary: Confirm the account's new address
       tags:
         - auth
-  /v1/me/invitations/{invitationID}:
-    delete:
-      description: "Withdraws an outstanding invitation addressed to this account. Self-service: an invitation for another address is indistinguishable from a missing one."
-      operationId: decline-invitation
-      parameters:
-        - description: Membership id of the outstanding invitation
-          in: path
-          name: invitationID
-          required: true
-          schema:
-            description: Membership id of the outstanding invitation
-            format: uuid
-            type: string
+  /v1/me/invitations:
+    get:
+      description: What has been offered to the caller's address, without the tokens. Accepting still needs the token from the message — this is here so somebody who deleted the mail can see that an offer is open and ask for it again.
+      operationId: list-my-invitations
       responses:
-        "204":
-          description: No Content
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMyInvitationsOutputBody"
+          description: OK
         "401":
           content:
             application/problem+json:
@@ -1461,12 +1526,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Document"
           description: Not Found
-        "422":
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Document"
-          description: Unprocessable Entity
         "500":
           content:
             application/problem+json:
@@ -1475,22 +1534,19 @@ paths:
           description: Internal Server Error
       security:
         - bearer: []
-      summary: Decline an invitation
+      summary: List invitations addressed to this account
       tags:
         - users
-  /v1/me/invitations/{invitationID}/accept:
+  /v1/me/invitations/accept:
     post:
-      description: "Turns an outstanding invitation addressed to this account into an active membership. Self-service: no permission is required, and an invitation for another address is indistinguishable from a missing one."
+      description: "Takes up an offer using the token from the message, creating an active membership with the roles the invitation carries. The roles come from the invitation, never from this request. The address it was issued to must match the caller's account: 409 says the token is good but was meant for somebody else, and 410 that it has expired."
       operationId: accept-invitation
-      parameters:
-        - description: Membership id of the outstanding invitation
-          in: path
-          name: invitationID
-          required: true
-          schema:
-            description: Membership id of the outstanding invitation
-            format: uuid
-            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationTokenRequest"
+        required: true
       responses:
         "204":
           description: No Content
@@ -1512,6 +1568,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Document"
           description: Conflict
+        "410":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Gone
         "422":
           content:
             application/problem+json:
@@ -1527,6 +1589,54 @@ paths:
       security:
         - bearer: []
       summary: Accept an invitation
+      tags:
+        - users
+  /v1/me/invitations/decline:
+    post:
+      description: "Removes the offer. Holding the token is the authorization: whoever can read the mailbox is entitled to refuse on its behalf."
+      operationId: decline-invitation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationTokenRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "410":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Gone
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Decline an invitation
       tags:
         - users
   /v1/me/login-events:
@@ -2023,7 +2133,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MemberResponse"
+                $ref: "#/components/schemas/InvitationResponse"
           description: Created
         "401":
           content:

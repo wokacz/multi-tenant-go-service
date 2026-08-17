@@ -172,6 +172,8 @@ Szczegóły warte zapamiętania:
 | nadanie uprawnienia, którego się nie ma               | 403    | `privilege_escalation` |
 | uprawnienie z drugiego zakresu w roli                  | 422    | `wrong_scope`          |
 | zmiana dotyczy kogoś wyżej w hierarchii               | 403    | `insufficient_rank`    |
+| zaproszenie wygasło                                   | 410    | `invitation_expired`   |
+| zaproszenie na inny adres                             | 409    | `invitation_address_mismatch` |
 | edycja roli systemowej                                | 403    | `role_protected`       |
 | ostatni właściciel                                    | 409    | `last_owner`           |
 | rola wciąż przypisana                                 | 409    | `role_in_use`          |
@@ -267,57 +269,58 @@ niewidoczny — ale nie trzeba go dokładać później, gdy się okaże potrzebn
 
 ## Zaproszenia
 
-`POST /v1/orgs/{orgID}/members` **nie szuka adresu w tabeli kont**. Zapisuje członkostwo `status=invited` z pustym
-`user_id` i adresem na wierszu. Znany i nieznany adres dają ten sam `201` i ten sam kształt odpowiedzi (`user_id` oraz
-`name` są nieobecne), więc administrator nie może pytać całej instalacji „czy ta osoba ma tu konto".
+Zaproszenie ma **własną tabelę** i **własny sekret**. Wcześniej było wierszem `memberships` ze `status='invited'`, pustym
+`user_id` i adresem na wierszu — czyli tożsamością zaproszenia był **adres**, a adres nie jest sekretem. Kto pierwszy
+zarejestrował zaproszony adres, dziedziczył ofertę razem z rolami w organizacji, do której nigdy nie należał. Token
+przenosi dowód z „twierdzę, że to mój adres" na „umiem przeczytać tę skrzynkę".
 
-Szukanie adresu byłoby oraklem rejestracji: fakt, że ktoś ma konto, jest faktem **międzyorganizacyjnym**, a
-administrator organizacji nie jest do niego uprawniony. Unikalność `(organization_id, email)` odmawia ponownego
-zaproszenia **w tej** organizacji — to już jest fakt, który widać na liście członków.
+| Kolumna      | Po co                                                              |
+|--------------|--------------------------------------------------------------------|
+| `email`      | dokąd wysłano; unikalna w organizacji, wciąż porównywana przy przyjęciu |
+| `token_hash` | jedyna kopia tokenu po tej stronie                                 |
+| `expires_at` | oferta bez wygaśnięcia to poświadczenie leżące bezterminowo w skrzynce |
+| `accepted_at`| wydane; wiersz zostaje, żeby historia „komu co oferowano" przeżyła członkostwo |
 
-Ścieżka provisioningu (`AddMember` w repozytorium: bootstrap, dołączenie do `default`) nadal tworzy od razu `active` z
-`user_id`, bo tam konto już istnieje i nie ma czego ukrywać.
+`invitation_roles` odbija `membership_roles`: role muszą przejść od oferty do członkostwa **bez ponownego wyboru** —
+przyjmujący nie może decydować, co przyjmuje.
 
-Po zapisie handler wysyła mail. Awaria SMTP ląduje w logu; HTTP i tak kończy się `201` — inaczej administrator, który
-nie odróżni „adres już w organizacji" od „poczta nie wyszła", wpisałby go ponownie i dostał `409`.
+**Hash to zwykłe `SHA-256`, bez pepperu**, i to celowa różnica wobec kodów sześciocyfrowych. Tamte mają mało entropii
+i potrzebują sekretu, żeby zgadywanie offline było drogie. Tu są 32 losowe bajty — nie ma czego zgadywać, a klucz byłby
+tylko kolejnym sekretem do zgubienia. Odciski urządzeń są hashowane tak samo i z tego samego powodu.
 
-Zaproszony przyjmuje albo odrzuca **sam**, bo zgoda nie może być zastąpiona przez `PATCH` administratora:
+`POST /v1/orgs/{orgID}/members` **nie szuka adresu w tabeli kont**. Znany i nieznany adres dają ten sam `201` i ten sam
+kształt odpowiedzi. Szukanie byłoby oraklem rejestracji: fakt, że ktoś ma konto, jest faktem **międzyorganizacyjnym**,
+a administrator organizacji nie jest do niego uprawniony. `ErrAlreadyMember` obsługuje jednocześnie „już jest członkiem"
+i „już ma zaproszenie" — wołający reaguje na jedno i drugie tak samo.
 
-| Operacja   | Ścieżka                                         | Kategoria     |
-|------------|-------------------------------------------------|---------------|
-| przyjęcie  | `POST /v1/me/invitations/{invitationID}/accept` | samoobsługowa |
-| odrzucenie | `DELETE /v1/me/invitations/{invitationID}`      | samoobsługowa |
+**Odpowiedź nie zawiera tokenu.** Administrator, który mógłby go odczytać, mógłby przyjąć zaproszenie za zaproszonego —
+czyli dokładnie to, co token miał zlikwidować. Token istnieje w tym procesie w jednym momencie i idzie do maila.
 
-Ścieżka jest pod `/v1/me`, nie pod `{orgID}`: zaproszony często nie ma jeszcze członkostwa, które middleware mogłoby
-zautoryzować, a cudze zaproszenie jest nieodróżnialne od brakującego (`404`).
+### Przyjęcie: dwa warunki, dwa różne pytania
 
-### Rejestracja nie jest przyjęciem
+| Operacja   | Ścieżka                             | Kategoria     |
+|------------|-------------------------------------|---------------|
+| lista      | `GET /v1/me/invitations`            | samoobsługowa |
+| przyjęcie  | `POST /v1/me/invitations/accept`    | samoobsługowa |
+| odrzucenie | `POST /v1/me/invitations/decline`   | samoobsługowa |
 
-Rejestracja **nie aktywuje** zaległych zaproszeń na podany adres. Robiła to wcześniej — nowe konto lądowało od razu we
-wszystkich organizacjach, do których zaproszono ten adres — i to była dziura, nie wygoda: **adres konta nie jest
-weryfikowany** (patrz [Czego tu nie ma](#czego-tu-nie-ma)), więc rejestracja nie dowodzi niczego o skrzynce. Kto
-pierwszy zarejestrował zaproszony adres, dziedziczył zaproszenie razem z rolami w cudzej organizacji — a prawowity
-adresat nie mógł się już zarejestrować, bo adres był zajęty, i widział `204` jak przy sukcesie.
+Token jedzie w **ciele**, nie w ścieżce: token w URL-u ląduje w logach dostępu, w historii przeglądarki i w nagłówku
+`Referer` tego, co strona załaduje dalej. Kody resetu hasła są przyjmowane w ciele z tego samego powodu.
 
-Zaproszenie przyjmuje wyłącznie zaproszony, przez `POST /v1/me/invitations/{invitationID}/accept`.
+1. **Token** dowodzi, że wołający dostał wiadomość. To on zastąpił „kto pierwszy zarejestruje ten adres".
+2. **Adres konta musi się zgadzać** z adresem oferty — węższa reguła wybrana w D4. Trzyma ofertę skierowaną na osobę,
+   dla której była, a nie na tego, komu wiadomość przekazano.
 
-Z tego wynika drugi, mniej oczywisty warunek. Rejestracja dołącza jeszcze do organizacji `default`, a ta ścieżka idzie
-przez `AddMember`, który przy kolizji na unikacie `(organization_id, email)` **przejmuje** zaproszenie: aktywuje
-członkostwo i podmienia nadane role na `member`. Samo usunięcie automatycznego przyjęcia zostawiłoby więc dziurę otwartą
-dla organizacji `default`, i to z cichą degradacją ról. Dlatego `JoinDefaultOrganization` najpierw sprawdza, czy konto
-ma już jakikolwiek wiersz w `default` — w tym zaproszenie adresowane na jego adres — i wtedy nie robi nic.
+Adres jest czytany z **konta**, nie z żądania. Z ciała pozwoliłby wskazać cudzy adres, z tokenu usunąłby drugi warunek
+w całości.
 
-Konsekwencja, którą trzeba znać: konto zaproszone do `default` po rejestracji **nie ma żadnego aktywnego członkostwa**,
-dopóki nie przyjmie zaproszenia. To jest poprawne — samoobsługa (`/v1/me/*`) działa bez członkostwa, a alternatywą jest
-odebranie zaproszonemu tego, co mu zaoferowano.
+Statusy odmowy są rozróżnione, bo wołający **trzyma token** — istnienie zaproszenia nie jest przed nim tajemnicą, a goły
+`404` nie dałby mu nic, co mógłby powiedzieć osobie zapraszającej:
 
-Przejmowanie zaproszenia w `AddMember` **zostaje**, bo obsługuje ścieżkę operatora działającego poza API (bootstrap,
-wskazanie pierwszego właściciela): bez niego konto, które ktoś zdążył zaprosić, nie dałoby się promować, a zaproszenia
-nie ma jak wycofać, dopóki nikt nie ma uprawnienia w tej organizacji.
-
-Zostaje wąskie okno: zaproszenie utworzone **pomiędzy** sprawdzeniem a wstawieniem wiersza nadal zostanie przejęte.
-Skutkiem jest degradacja ról, nie eskalacja, i zamknie się dopiero wtedy, gdy zaproszenia dostaną własną tabelę i
-przestaną dzielić unikat z członkostwami.
+| Sytuacja                | Status | `code`                        |
+|-------------------------|--------|-------------------------------|
+| token nieznany          | 404    | `not_found`                   |
+| oferta wygasła          | 410    | `invitation_expired`          |
 
 ## Reguły transakcyjne: gdzie mieszka decyzja
 

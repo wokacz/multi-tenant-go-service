@@ -166,6 +166,18 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, orgs.ErrLastOwner):
 		return newDocument(locale, http.StatusConflict, CodeLastOwner)
 
+	// 410 rather than 404: the token was real, it simply ran out. The holder can
+	// act on that — ask for another invitation — and a 404 would send them looking
+	// for a mistake they did not make.
+	case errors.Is(err, orgs.ErrInvitationExpired):
+		return newDocument(locale, http.StatusGone, CodeInvitationExpired)
+
+	// 409, and it names the reason. The caller is holding the token, so the
+	// invitation's existence is not a secret from them, and a bare 404 would leave
+	// them with nothing to tell whoever invited them.
+	case errors.Is(err, orgs.ErrInvitationAddressMismatch):
+		return newDocument(locale, http.StatusConflict, CodeInvitationMismatch)
+
 	case errors.Is(err, orgs.ErrRoleInUse):
 		return newDocument(locale, http.StatusConflict, CodeRoleInUse)
 

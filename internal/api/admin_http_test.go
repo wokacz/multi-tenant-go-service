@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -541,29 +542,40 @@ func TestInvitingAMemberDoesNotRevealWhetherTheAddressIsRegistered(t *testing.T)
 	unknown := inviteBody(t, f, "nobody@example.com", viewer)
 	known := inviteBody(t, f, outsider, viewer)
 
-	if unknown.Status != string(models.MembershipInvited) || known.Status != string(models.MembershipInvited) {
-		t.Errorf("status unknown=%q known=%q, want invited for both", unknown.Status, known.Status)
+	// Same shape, and nothing in it depends on whether an account exists: the
+	// invitation carries the address it was sent to and the roles it will grant,
+	// both of which the caller supplied.
+	if unknown.Email != "nobody@example.com" || known.Email != outsider {
+		t.Errorf("emails = %q / %q, want the addresses that were invited", unknown.Email, known.Email)
 	}
 
-	if unknown.UserID != nil || known.UserID != nil {
-		t.Errorf("user_id unknown=%v known=%v, want omitted so the two responses match",
-			unknown.UserID, known.UserID)
+	if !slices.Equal(unknown.Roles, known.Roles) {
+		t.Errorf("roles unknown=%v known=%v, want identical", unknown.Roles, known.Roles)
 	}
 
-	if unknown.Name != "" || known.Name != "" {
-		t.Errorf("name unknown=%q known=%q, want empty until accept", unknown.Name, known.Name)
+	if unknown.ExpiresAt.IsZero() || known.ExpiresAt.IsZero() {
+		t.Error("an invitation with no expiry is a credential that never goes stale")
 	}
 }
 
-func inviteBody(t *testing.T, f *authzFixture, email string, roleID uuid.UUID) memberDetail {
+func inviteBody(t *testing.T, f *authzFixture, email string, roleID uuid.UUID) invitationDetail {
 	t.Helper()
 
 	body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, email, roleID)
-	var out memberDetail
+
+	var out invitationDetail
 	f.call(t, http.MethodPost, f.orgPath("/members"), body).
 		expect(t, http.StatusCreated).decode(t, &out)
 
 	return out
+}
+
+// invitationDetail is the invite response. There is deliberately no token field to
+// decode: the response does not carry one.
+type invitationDetail struct {
+	Email     string    `json:"email"`
+	Roles     []string  `json:"roles"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type memberDetail struct {
@@ -617,13 +629,29 @@ func TestAFailedInvitationMailStillCreatesTheMembership(t *testing.T) {
 	}
 }
 
-func TestAnInvitationCannotBeActivatedByAnAdministrator(t *testing.T) {
+// TestAnInvitationIsNotAMembership is what the invitation table bought.
+//
+// The consent rule used to need enforcing: an invitation was a membership row with
+// status='invited', so an administrator could PATCH it to active and skip the
+// invitee entirely, and there was a check for exactly that. Now there is no row to
+// PATCH — an invitation has no membership id and does not appear among the members
+// — so the rule is structural rather than remembered.
+func TestAnInvitationIsNotAMembership(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
 	invited := inviteBody(t, f, "nobody@example.com", viewer)
 
-	f.call(t, http.MethodPatch, f.orgPath("/members/"+invited.ID.String()),
-		`{"status":"active"}`).expect(t, http.StatusUnprocessableEntity)
+	var list struct {
+		Members []memberDetail `json:"members"`
+	}
+	f.call(t, http.MethodGet, f.orgPath("/members"), "").
+		expect(t, http.StatusOK).decode(t, &list)
+
+	for _, member := range list.Members {
+		if member.Email == invited.Email {
+			t.Errorf("the invitation appears in the members list as %+v", member)
+		}
+	}
 }
 
 // TestListingMembersShowsRoles is the read path the settings screen is built on.

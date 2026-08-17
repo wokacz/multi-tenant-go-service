@@ -36,6 +36,8 @@ func run() error {
 		&models.TwoFactorChallenge{},
 		&models.Organization{},
 		&models.Membership{},
+		&models.Invitation{},
+		&models.InvitationRole{},
 		&models.Role{},
 		&models.RolePermission{},
 		&models.MembershipRole{},

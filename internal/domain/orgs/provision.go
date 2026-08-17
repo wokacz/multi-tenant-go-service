@@ -93,22 +93,21 @@ func (s *Service) EnsureDefaultOrganization(ctx context.Context) (*models.Organi
 // of authorization, and an installation that wants more gives it out
 // explicitly.
 //
-// An outstanding invitation to the default organization stops it. AddMember
-// would collide with that invitation on (organization_id, email) and the
-// repository would claim it — activating a membership nobody accepted and
-// replacing the roles it was issued with by "member". Registering is not an
-// accept: the address on a fresh account is not verified, so it proves nothing
-// about the mailbox. Such an account therefore has no active membership at all
-// until it accepts through /v1/me/invitations, which is correct — self-service
-// works without one, and the alternative silently downgrades what the invitee
-// was offered.
-func (s *Service) JoinDefaultOrganization(ctx context.Context, userID uuid.UUID) error {
+// A pending invitation to the default organization stops it, and the reason is no
+// longer a unique-index collision — invitations live in their own table now.
+// Joining as "member" first would make the invitation unacceptable: accepting
+// creates the membership it promised, and an account that is already a member gets
+// ErrAlreadyMember, so the roles that were actually offered could never be taken
+// up. The invitee ends up with no membership until they accept, which is correct:
+// self-service works without one, and the alternative is to silently hand them
+// less than they were offered.
+func (s *Service) JoinDefaultOrganization(ctx context.Context, userID uuid.UUID, email string) error {
 	org, err := s.EnsureDefaultOrganization(ctx)
 	if err != nil {
 		return err
 	}
 
-	waiting, err := s.hasRowIn(ctx, userID, org.ID)
+	waiting, err := s.hasRowIn(ctx, userID, email, org.ID)
 	if err != nil {
 		return err
 	}
@@ -130,19 +129,20 @@ func (s *Service) JoinDefaultOrganization(ctx context.Context, userID uuid.UUID)
 	return err
 }
 
-// hasRowIn reports whether the account already has any row in the organization:
-// an active membership, a suspension, or an invitation addressed to it.
+// hasRowIn reports whether the account already has a membership in the
+// organization, or a pending invitation to it.
 //
-// It goes through the directory rather than the scoped repository because an
-// invited row carries no user id — MemberByUser cannot see it, and matching the
-// address is exactly what MembershipsForUser already does.
+// The two are looked up separately because they are separate things now: a
+// membership belongs to an account, an invitation to an address. An invitation
+// counts here for the reason described above — joining first would make it
+// impossible to accept.
 //
-// It is a read before a write, so there is a window: an invitation created
-// between this check and AddMember's insert is still claimed. The outcome is a
-// downgrade rather than an escalation, and the window closes for good when
-// invitations move to their own table and stop sharing the uniqueness
-// constraint with memberships.
-func (s *Service) hasRowIn(ctx context.Context, userID, orgID uuid.UUID) (bool, error) {
+// It is still a read before a write, so an invitation issued between this check
+// and the insert is missed and the invitee joins as a plain member. That leaves an
+// invitation they cannot accept until somebody withdraws it, which is a nuisance
+// rather than a privilege problem, and closing it would mean holding a lock across
+// two tables on the registration path.
+func (s *Service) hasRowIn(ctx context.Context, userID uuid.UUID, email string, orgID uuid.UUID) (bool, error) {
 	memberships, err := s.dir.MembershipsForUser(ctx, userID)
 	if err != nil {
 		return false, err
@@ -150,6 +150,17 @@ func (s *Service) hasRowIn(ctx context.Context, userID, orgID uuid.UUID) (bool, 
 
 	for i := range memberships {
 		if memberships[i].Organization.ID == orgID {
+			return true, nil
+		}
+	}
+
+	invitations, err := s.dir.InvitationsForEmail(ctx, normalizeEmail(email), time.Now().UTC())
+	if err != nil {
+		return false, err
+	}
+
+	for i := range invitations {
+		if invitations[i].Organization.ID == orgID {
 			return true, nil
 		}
 	}

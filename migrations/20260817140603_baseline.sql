@@ -97,27 +97,6 @@ CREATE TABLE "email_changes" (
 CREATE INDEX "idx_email_changes_expires_at" ON "email_changes" ("expires_at");
 -- Create index "idx_email_changes_user_id" to table: "email_changes"
 CREATE INDEX "idx_email_changes_user_id" ON "email_changes" ("user_id");
--- Create "login_events" table
-CREATE TABLE "login_events" (
-  "id" uuid NOT NULL,
-  "created_at" timestamptz NULL,
-  "updated_at" timestamptz NULL,
-  "user_id" uuid NOT NULL,
-  "device_id" uuid NULL,
-  "ip" inet NOT NULL,
-  "user_agent" character varying(512) NULL,
-  "outcome" character varying(20) NOT NULL,
-  "country" character varying(2) NULL,
-  PRIMARY KEY ("id"),
-  CONSTRAINT "fk_users_login_events" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "chk_login_events_outcome" CHECK ((outcome)::text = ANY ((ARRAY['success'::character varying, 'bad_password'::character varying, 'mfa_failed'::character varying, 'locked'::character varying])::text[]))
-);
--- Create index "idx_login_device_time" to table: "login_events"
-CREATE INDEX "idx_login_device_time" ON "login_events" ("device_id", "created_at");
--- Create index "idx_login_events_ip" to table: "login_events"
-CREATE INDEX "idx_login_events_ip" ON "login_events" ("ip");
--- Create index "idx_login_user_time" to table: "login_events"
-CREATE INDEX "idx_login_user_time" ON "login_events" ("user_id", "created_at");
 -- Create "organizations" table
 CREATE TABLE "organizations" (
   "id" uuid NOT NULL,
@@ -148,6 +127,60 @@ CREATE TABLE "roles" (
 );
 -- Create index "idx_role_org_key" to table: "roles"
 CREATE UNIQUE INDEX "idx_role_org_key" ON "roles" ("organization_id", "key");
+-- Create "invitations" table
+CREATE TABLE "invitations" (
+  "id" uuid NOT NULL,
+  "created_at" timestamptz NULL,
+  "updated_at" timestamptz NULL,
+  "organization_id" uuid NOT NULL,
+  "email" character varying(255) NOT NULL,
+  "token_hash" character varying(64) NOT NULL,
+  "invited_by" uuid NULL,
+  "expires_at" timestamptz NOT NULL,
+  "accepted_at" timestamptz NULL,
+  PRIMARY KEY ("id"),
+  CONSTRAINT "fk_invitations_organization" FOREIGN KEY ("organization_id") REFERENCES "organizations" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+);
+-- Create index "idx_invitation_org_email" to table: "invitations"
+CREATE UNIQUE INDEX "idx_invitation_org_email" ON "invitations" ("organization_id", "email");
+-- Create index "idx_invitations_expires_at" to table: "invitations"
+CREATE INDEX "idx_invitations_expires_at" ON "invitations" ("expires_at");
+-- Create index "idx_invitations_token_hash" to table: "invitations"
+CREATE UNIQUE INDEX "idx_invitations_token_hash" ON "invitations" ("token_hash");
+-- Create "invitation_roles" table
+CREATE TABLE "invitation_roles" (
+  "id" uuid NOT NULL,
+  "created_at" timestamptz NULL,
+  "updated_at" timestamptz NULL,
+  "invitation_id" uuid NOT NULL,
+  "role_id" uuid NOT NULL,
+  PRIMARY KEY ("id"),
+  CONSTRAINT "fk_invitation_roles_role" FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "fk_invitations_roles" FOREIGN KEY ("invitation_id") REFERENCES "invitations" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+);
+-- Create index "idx_invitation_role" to table: "invitation_roles"
+CREATE UNIQUE INDEX "idx_invitation_role" ON "invitation_roles" ("invitation_id", "role_id");
+-- Create "login_events" table
+CREATE TABLE "login_events" (
+  "id" uuid NOT NULL,
+  "created_at" timestamptz NULL,
+  "updated_at" timestamptz NULL,
+  "user_id" uuid NOT NULL,
+  "device_id" uuid NULL,
+  "ip" inet NOT NULL,
+  "user_agent" character varying(512) NULL,
+  "outcome" character varying(20) NOT NULL,
+  "country" character varying(2) NULL,
+  PRIMARY KEY ("id"),
+  CONSTRAINT "fk_users_login_events" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "chk_login_events_outcome" CHECK ((outcome)::text = ANY ((ARRAY['success'::character varying, 'bad_password'::character varying, 'mfa_failed'::character varying, 'locked'::character varying])::text[]))
+);
+-- Create index "idx_login_device_time" to table: "login_events"
+CREATE INDEX "idx_login_device_time" ON "login_events" ("device_id", "created_at");
+-- Create index "idx_login_events_ip" to table: "login_events"
+CREATE INDEX "idx_login_events_ip" ON "login_events" ("ip");
+-- Create index "idx_login_user_time" to table: "login_events"
+CREATE INDEX "idx_login_user_time" ON "login_events" ("user_id", "created_at");
 -- Create "memberships" table
 CREATE TABLE "memberships" (
   "id" uuid NOT NULL,

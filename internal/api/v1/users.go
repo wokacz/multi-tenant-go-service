@@ -173,7 +173,7 @@ func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*struct
 	// first the roles it was invited with, in somebody else's organization. The
 	// invitee accepts through POST /v1/me/invitations/{id}/accept.
 	if h.orgs != nil {
-		if err := h.orgs.JoinDefaultOrganization(joinCtx(ctx, created.ID), created.ID); err != nil {
+		if err := h.orgs.JoinDefaultOrganization(joinCtx(ctx, created.ID), created.ID, created.Email); err != nil {
 			return nil, problem.Error(ctx, err)
 		}
 	}

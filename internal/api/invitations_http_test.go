@@ -5,63 +5,129 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
-// TestAcceptingAnInvitationJoinsTheOrganization is the invitee's half of the
-// flow. Until they accept, the membership confers nothing; afterwards they
-// hold the roles they were invited with.
+// acceptToken posts a token to the accept endpoint and returns the raw result, so
+// each test can say what it expects.
+func acceptToken(t *testing.T, s *Server, token, bearer string) *httpResult {
+	t.Helper()
+
+	body := fmt.Sprintf(`{"token":%q}`, token)
+	rec := do(t, s.http.Handler, authed(t, http.MethodPost, "/v1/me/invitations/accept", body, bearer, ""))
+
+	return &httpResult{code: rec.Code, body: rec.Body.Bytes()}
+}
+
+func declineToken(t *testing.T, s *Server, token, bearer string) *httpResult {
+	t.Helper()
+
+	body := fmt.Sprintf(`{"token":%q}`, token)
+	rec := do(t, s.http.Handler, authed(t, http.MethodPost, "/v1/me/invitations/decline", body, bearer, ""))
+
+	return &httpResult{code: rec.Code, body: rec.Body.Bytes()}
+}
+
+// TestAcceptingAnInvitationJoinsTheOrganization is the invitee's half of the flow.
+//
+// The token is what proves they received the offer, and the roles come from the
+// invitation rather than from the request — somebody accepting must not get to
+// choose what they are accepting.
 func TestAcceptingAnInvitationJoinsTheOrganization(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
 	outsider := registerOutsider(t, f)
 
-	invited := inviteBody(t, f, outsider, viewer)
+	inviteBody(t, f, outsider, viewer)
+
+	// The token exists only in the message.
+	token := f.mailer.inviteToken
+	if token == "" {
+		t.Fatal("no token was mailed")
+	}
 
 	bobToken := signIn(t, f.server, outsider, "twelve-chars")
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodPost, "/v1/me/invitations/"+invited.ID.String()+"/accept", "", bobToken, ""))
-	if rec.Code != http.StatusNoContent && rec.Code != http.StatusOK {
-		t.Fatalf("accept = %d; body %s", rec.Code, rec.Body.Bytes())
-	}
-
-	org := do(t, f.server.http.Handler,
+	// Before accepting, the organization is not theirs.
+	before := do(t, f.server.http.Handler,
 		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", bobToken, ""))
-	if org.Code != http.StatusOK {
-		t.Fatalf("get org after accept = %d, want 200; body %s", org.Code, org.Body.Bytes())
+	if before.Code != http.StatusNotFound {
+		t.Fatalf("get org before accepting = %d, want 404", before.Code)
 	}
 
-	var list struct {
-		Members []memberDetail `json:"members"`
-	}
-	f.call(t, http.MethodGet, f.orgPath("/members"), "").
-		expect(t, http.StatusOK).decode(t, &list)
+	acceptToken(t, f.server, token, bobToken).expect(t, http.StatusNoContent)
 
-	found := false
-	for _, member := range list.Members {
-		if member.Email != outsider {
-			continue
-		}
-
-		found = true
-		if member.Status != string(models.MembershipActive) {
-			t.Errorf("status = %q, want active", member.Status)
-		}
-
-		if member.UserID == nil {
-			t.Error("user_id is omitted after accept")
-		}
+	after := do(t, f.server.http.Handler,
+		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", bobToken, ""))
+	if after.Code != http.StatusOK {
+		t.Fatalf("get org after accepting = %d, want 200; body %s", after.Code, after.Body.Bytes())
 	}
 
-	if !found {
-		t.Fatal("accepted member is missing from the list")
+	// The membership carries the invited role, and the invitation is spent.
+	entry := membershipIn(t, f, bobToken, "acme")
+	if !slices.Equal(entry.Roles, []string{string(authz.RoleViewer)}) {
+		t.Errorf("roles = %v, want [viewer] — the roles come from the invitation", entry.Roles)
 	}
+
+	acceptToken(t, f.server, token, bobToken).expect(t, http.StatusNotFound)
+}
+
+// TestAnInvitationCannotBeAcceptedByAnotherAccount is D4: the token proves the
+// mailbox, the address says whose mailbox was meant.
+//
+// It is a 409 naming the reason rather than a 404. The caller is holding the token,
+// so the invitation's existence is not a secret from them, and a bare "not found"
+// would leave them with nothing to tell whoever invited them.
+func TestAnInvitationCannotBeAcceptedByAnotherAccount(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+
+	// Issued to an address nobody holds, then presented by Ada.
+	inviteBody(t, f, "somebody.else@example.com", viewer)
+
+	res := acceptToken(t, f.server, f.mailer.inviteToken, f.token).expect(t, http.StatusConflict)
+
+	var doc problemBody
+	res.decode(t, &doc)
+
+	if doc.Code != "invitation_address_mismatch" {
+		t.Errorf("code = %q, want invitation_address_mismatch", doc.Code)
+	}
+}
+
+// TestAnExpiredInvitationIsGone separates "ran out" from "never existed".
+//
+// The holder of the token can act on an expiry — ask for another invitation — and a
+// 404 would send them looking for a mistake they did not make.
+func TestAnExpiredInvitationIsGone(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	outsider := registerOutsider(t, f)
+
+	const token = "an-expired-invitation-token"
+	f.repo.SeedInvitation(f.orgID, outsider, token, time.Now().UTC().Add(-time.Hour), viewer)
+
+	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+
+	res := acceptToken(t, f.server, token, bobToken).expect(t, http.StatusGone)
+
+	var doc problemBody
+	res.decode(t, &doc)
+
+	if doc.Code != "invitation_expired" {
+		t.Errorf("code = %q, want invitation_expired", doc.Code)
+	}
+
+	// A token that was never issued is a plain 404: there is nothing to act on.
+	acceptToken(t, f.server, "no-such-token-at-all", bobToken).expect(t, http.StatusNotFound)
 }
 
 func TestDecliningAnInvitationWithdrawsIt(t *testing.T) {
@@ -69,36 +135,80 @@ func TestDecliningAnInvitationWithdrawsIt(t *testing.T) {
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
 	outsider := registerOutsider(t, f)
 
-	invited := inviteBody(t, f, outsider, viewer)
+	inviteBody(t, f, outsider, viewer)
 	bobToken := signIn(t, f.server, outsider, "twelve-chars")
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodDelete, "/v1/me/invitations/"+invited.ID.String(), "", bobToken, ""))
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("decline = %d; body %s", rec.Code, rec.Body.Bytes())
-	}
+	declineToken(t, f.server, f.mailer.inviteToken, bobToken).expect(t, http.StatusNoContent)
+
+	// Gone for good: the same token cannot then be accepted.
+	acceptToken(t, f.server, f.mailer.inviteToken, bobToken).expect(t, http.StatusNotFound)
 
 	org := do(t, f.server.http.Handler,
 		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", bobToken, ""))
 	if org.Code != http.StatusNotFound {
-		t.Fatalf("get org after decline = %d, want 404", org.Code)
+		t.Fatalf("get org after declining = %d, want 404", org.Code)
 	}
 }
 
-// TestRegisteringDoesNotAcceptAnInvitation closes the hole where signing up
-// *was* the accept.
+// TestMyInvitationsCarriesNoToken keeps the list from becoming a second way to
+// accept.
 //
-// The address on a new account is never verified, so registering proves nothing
-// about the mailbox. Accepting on its behalf handed whoever registered an
-// invited address first the roles it carried, in an organization they had never
-// been part of — and the real invitee could no longer register at all, because
-// the address was taken.
+// It exists so an offer is visible somewhere in the product — somebody who deleted
+// the message can see one is open and ask again — but reading it must not be enough
+// to take it up, or storing a hash instead of the token would have bought nothing.
+func TestMyInvitationsCarriesNoToken(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	outsider := registerOutsider(t, f)
+
+	inviteBody(t, f, outsider, viewer)
+	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+
+	rec := do(t, f.server.http.Handler,
+		authed(t, http.MethodGet, "/v1/me/invitations", "", bobToken, ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list = %d, want 200; body %s", rec.Code, rec.Body.Bytes())
+	}
+
+	if strings.Contains(rec.Body.String(), f.mailer.inviteToken) {
+		t.Error("the listing contains the token")
+	}
+
+	var out struct {
+		Invitations []struct {
+			Organization struct {
+				Slug string `json:"slug"`
+			} `json:"organization"`
+			Email string   `json:"email"`
+			Roles []string `json:"roles"`
+		} `json:"invitations"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if len(out.Invitations) != 1 || out.Invitations[0].Organization.Slug != "acme" {
+		t.Fatalf("invitations = %+v, want the one offer to acme", out.Invitations)
+	}
+
+	if !slices.Equal(out.Invitations[0].Roles, []string{string(authz.RoleViewer)}) {
+		t.Errorf("roles = %v, want [viewer]", out.Invitations[0].Roles)
+	}
+}
+
+// TestRegisteringDoesNotAcceptAnInvitation is C1, now closed by the model rather
+// than by a rule.
+//
+// The address used to be the invitation's identity, so whoever registered it first
+// inherited the offer and its roles. Registering now proves nothing about the
+// mailbox and there is nothing to inherit: the offer is reachable only through the
+// token that was mailed.
 func TestRegisteringDoesNotAcceptAnInvitation(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
 
 	const pending = "pending@example.com"
-	invitation := inviteBody(t, f, pending, viewer)
+	inviteBody(t, f, pending, viewer)
 
 	registerAccount(t, f, pending)
 	token := signIn(t, f.server, pending, "twelve-chars")
@@ -110,17 +220,8 @@ func TestRegisteringDoesNotAcceptAnInvitation(t *testing.T) {
 			org.Code, org.Body.Bytes())
 	}
 
-	// Refusing must not cost the invitee anything: the invitation is untouched,
-	// so they can still take it up themselves.
-	if entry := membershipIn(t, f, token, "acme"); entry.Status != string(models.MembershipInvited) {
-		t.Errorf("status after registering = %q, want invited", entry.Status)
-	}
-
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodPost, "/v1/me/invitations/"+invitation.ID.String()+"/accept", "", token, ""))
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("accept = %d; body %s", rec.Code, rec.Body.Bytes())
-	}
+	// And it costs the invitee nothing: the token still works.
+	acceptToken(t, f.server, f.mailer.inviteToken, token).expect(t, http.StatusNoContent)
 
 	org = do(t, f.server.http.Handler,
 		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", token, ""))
@@ -129,19 +230,17 @@ func TestRegisteringDoesNotAcceptAnInvitation(t *testing.T) {
 	}
 }
 
-// TestRegisteringDoesNotClaimAnInvitationToTheDefaultOrganization covers the
-// interleaving that makes removing the automatic accept insufficient on its own.
+// TestAnInvitationToTheDefaultOrganizationSurvivesRegistration is the interleaving
+// that used to silently downgrade an offer.
 //
-// Registration also joins the default organization, and that goes through
-// AddMember, which collides with an outstanding invitation on
-// (organization_id, email) and *claims* it — activating a membership nobody
-// accepted and replacing the roles it was issued with by "member". So the
-// invitation would still be accepted here, and quietly downgraded on the way.
-func TestRegisteringDoesNotClaimAnInvitationToTheDefaultOrganization(t *testing.T) {
+// Registration joins the default organization, and accepting creates the membership
+// the invitation promised — so joining first would make the offer impossible to
+// take up, and the invitee would end up with "member" instead of what they were
+// actually offered. Registration therefore leaves the default organization alone
+// while an invitation to it is open.
+func TestAnInvitationToTheDefaultOrganizationSurvivesRegistration(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
-	// Registering Ada created the default organization together with the shipped
-	// roles, so both of these are already there.
 	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), models.DefaultOrganizationSlug)
 	if err != nil {
 		t.Fatalf("default organization: %v", err)
@@ -152,79 +251,57 @@ func TestRegisteringDoesNotClaimAnInvitationToTheDefaultOrganization(t *testing.
 		t.Fatalf("admin role: %v", err)
 	}
 
-	// Ada joined the default organization as a plain member, and inviting needs
-	// members.invite.
 	promoteInDefaultOrganization(t, f, defaultOrg.ID)
 
 	const pending = "pending@example.com"
 	body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, pending, admin.ID)
-
-	var invitation memberDetail
 	f.call(t, http.MethodPost, "/v1/orgs/"+defaultOrg.ID.String()+"/members", body).
-		expect(t, http.StatusCreated).decode(t, &invitation)
+		expect(t, http.StatusCreated)
 
 	registerAccount(t, f, pending)
 	token := signIn(t, f.server, pending, "twelve-chars")
 
+	// No membership yet, so the offer is still takeable.
+	acceptToken(t, f.server, f.mailer.inviteToken, token).expect(t, http.StatusNoContent)
+
 	entry := membershipIn(t, f, token, models.DefaultOrganizationSlug)
-	if entry.Status != string(models.MembershipInvited) {
-		t.Errorf("status after registering = %q, want invited", entry.Status)
-	}
-
-	if !slices.Equal(entry.Roles, []string{string(authz.RoleAdmin)}) {
-		t.Errorf("roles after registering = %v, want [admin] — claiming the invitation replaces them with member",
-			entry.Roles)
-	}
-
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodPost, "/v1/me/invitations/"+invitation.ID.String()+"/accept", "", token, ""))
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("accept = %d; body %s", rec.Code, rec.Body.Bytes())
-	}
-
-	entry = membershipIn(t, f, token, models.DefaultOrganizationSlug)
 	if entry.Status != string(models.MembershipActive) {
-		t.Errorf("status after accepting = %q, want active", entry.Status)
+		t.Errorf("status = %q, want active", entry.Status)
 	}
 
 	if !slices.Equal(entry.Roles, []string{string(authz.RoleAdmin)}) {
-		t.Errorf("roles after accepting = %v, want [admin]", entry.Roles)
+		t.Errorf("roles = %v, want [admin] — joining first would have made this member", entry.Roles)
 	}
 }
 
-// TestAnInvitationToADeletedOrganizationCannotBeAccepted stops a row that would
-// immediately start lying.
+// TestTheInvitationMailNamesTheAddress is what makes the address rule survivable.
 //
-// Deleting an organization does not remove its invitations. Accepting one produced
-// an active membership in an organization that no longer exists — harmless while
-// every read joins to organizations and filters it out, and wrong the moment
-// something counts memberships without that join.
-func TestAnInvitationToADeletedOrganizationCannotBeAccepted(t *testing.T) {
+// Accepting needs an account with the address the offer was issued to, so somebody
+// reading the message in a forwarded mailbox has to be told which address that is,
+// or the refusal is unexplainable.
+func TestTheInvitationMailNamesTheAddress(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
-	outsider := registerOutsider(t, f)
 
-	invited := inviteBody(t, f, outsider, viewer)
-	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+	const invitee = "pat@example.com"
+	inviteBody(t, f, invitee, viewer)
 
-	f.repo.SeedSoftDeletedOrganization(f.orgID)
-
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodPost, "/v1/me/invitations/"+invited.ID.String()+"/accept", "", bobToken, ""))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("accept into a deleted organization = %d, want 404; body %s", rec.Code, rec.Body.Bytes())
+	if f.mailer.inviteTo != invitee {
+		t.Errorf("mail went to %q, want %q", f.mailer.inviteTo, invitee)
 	}
-}
 
-func TestAForeignInvitationIsNotFound(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
-	invited := inviteBody(t, f, "stranger@example.com", viewer)
+	if f.mailer.inviteExpires.IsZero() {
+		t.Error("the mail carries no expiry, so the invitee cannot tell how long they have")
+	}
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodPost, "/v1/me/invitations/"+invited.ID.String()+"/accept", "", f.token, ""))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("accept someone else's invitation = %d, want 404", rec.Code)
+	if f.mailer.inviteExpires.Before(time.Now().UTC()) {
+		t.Errorf("expiry %v is already past", f.mailer.inviteExpires)
+	}
+
+	// The default is long enough to survive a holiday and short enough that a
+	// forwarded mailbox does not stay dangerous for ever.
+	if got := time.Until(f.mailer.inviteExpires); got > orgs.InvitationTTL+time.Minute {
+		t.Errorf("expiry is %v away, want no more than %v", got, orgs.InvitationTTL)
 	}
 }
 
@@ -264,9 +341,7 @@ func promoteInDefaultOrganization(t *testing.T, f *authzFixture, defaultOrgID uu
 	t.Fatal("the account that registered is not in the default organization")
 }
 
-// myOrganization is one entry of /v1/me/organizations — the only view an invitee
-// has of an organization before they accept, and therefore the only place a test
-// can see an invitation's status and roles without a permission in it.
+// myOrganization is one entry of /v1/me/organizations.
 type myOrganization struct {
 	ID           uuid.UUID `json:"id"`
 	Organization struct {

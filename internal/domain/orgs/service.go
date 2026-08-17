@@ -80,42 +80,6 @@ func (s *Service) Member(ctx context.Context, grant *authz.Grant, memberID uuid.
 	return s.repo.Member(ctx, grant.OrganizationID(), memberID)
 }
 
-// AddMember invites an address into the organization with the given roles.
-//
-// The address is stored as an outstanding invitation, not resolved to an
-// account. Looking it up would tell the caller whether the person is
-// registered anywhere in the installation, which is a cross-tenant fact an
-// organization administrator is not entitled to. Unknown and known addresses
-// therefore produce the same row and the same response; the invitee accepts
-// once they have an account.
-func (s *Service) AddMember(
-	ctx context.Context,
-	grant *authz.Grant,
-	email string,
-	roleIDs []uuid.UUID,
-) (*Member, error) {
-	email = normalizeEmail(email)
-	if email == "" {
-		return nil, ErrInvalidEmail
-	}
-
-	if err := s.ensureRolesAreGrantable(ctx, grant, roleIDs); err != nil {
-		return nil, err
-	}
-
-	return s.repo.InviteMember(ctx, grant.OrganizationID(), email, roleIDs, grant.Actor(), time.Now().UTC())
-}
-
-// AcceptInvitation is self-service: the caller's identity is the authorization.
-func (s *Service) AcceptInvitation(ctx context.Context, userID uuid.UUID, email string, memberID uuid.UUID) error {
-	return s.dir.AcceptInvitation(ctx, memberID, userID, normalizeEmail(email), time.Now().UTC())
-}
-
-// DeclineInvitation withdraws an invitation addressed to this account.
-func (s *Service) DeclineInvitation(ctx context.Context, email string, memberID uuid.UUID) error {
-	return s.dir.DeclineInvitation(ctx, memberID, normalizeEmail(email))
-}
-
 // SetMemberStatus suspends or reinstates somebody.
 func (s *Service) SetMemberStatus(
 	ctx context.Context,

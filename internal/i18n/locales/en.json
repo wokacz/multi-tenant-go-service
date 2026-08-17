@@ -29,6 +29,8 @@
   "error.invalid_email_code": "invalid confirmation code",
   "error.same_email": "this is already your address",
   "error.email_taken": "that address is already in use",
+  "error.invitation_expired": "this invitation has expired",
+  "error.invitation_address_mismatch": "this invitation was issued to a different address",
   "error.role_protected": "this role ships with the product and cannot be changed",
   "error.last_owner": "the organization would be left without an owner",
   "error.role_in_use": "the role is still assigned to members",

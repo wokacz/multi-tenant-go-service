@@ -48,6 +48,8 @@ type capturingMailer struct {
 	twoFactorCode   string
 	inviteTo        string
 	inviteOrg       string
+	inviteToken     string
+	inviteExpires   time.Time
 	emailChangeTo   string
 	emailChangeCode string
 }
@@ -70,8 +72,8 @@ func (c *capturingMailer) SendEmailChange(_ context.Context, to, code string) er
 	return nil
 }
 
-func (c *capturingMailer) SendInvitation(_ context.Context, to, orgName string) error {
-	c.inviteTo, c.inviteOrg = to, orgName
+func (c *capturingMailer) SendInvitation(_ context.Context, to, orgName, token string, expiresAt time.Time) error {
+	c.inviteTo, c.inviteOrg, c.inviteToken, c.inviteExpires = to, orgName, token, expiresAt
 
 	return nil
 }
@@ -90,7 +92,7 @@ func (failingMailer) SendEmailChange(context.Context, string, string) error {
 	return errors.New("smtp is down")
 }
 
-func (failingMailer) SendInvitation(context.Context, string, string) error {
+func (failingMailer) SendInvitation(context.Context, string, string, string, time.Time) error {
 	return errSMTPDown
 }
 
