@@ -48,6 +48,7 @@ func Register(api huma.API, deps Deps) {
 	registerSessions(api, deps)
 	registerPasswordResets(api, deps.Users, deps.Mail, deps.Log)
 	registerTwoFactor(api, deps.Users)
+	registerEmailChange(api, deps.Users, deps.Mail, deps.Log)
 	registerDevices(api, deps.Users)
 	registerOrganizations(api, deps.Orgs)
 	registerInvitations(api, deps.Orgs, deps.Users)

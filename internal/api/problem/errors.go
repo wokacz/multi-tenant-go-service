@@ -137,6 +137,24 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, authz.ErrInsufficientRank):
 		return newDocument(locale, http.StatusForbidden, CodeInsufficientRank)
 
+	// 401, like the reset code it mirrors: the caller is holding something that
+	// was supposed to prove a fact and it does not.
+	case errors.Is(err, user.ErrInvalidEmailCode):
+		return newDocument(locale, http.StatusUnauthorized, CodeInvalidEmailCode)
+
+	case errors.Is(err, user.ErrSameEmail):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeSameEmail)
+
+	// Only reachable from confirming an address change. Registration intercepts
+	// ErrEmailTaken in the handler and answers 204, so that path cannot be used to
+	// probe which addresses exist; here the caller has already read a code out of
+	// the mailbox, so the answer costs nothing that was not already theirs.
+	case errors.Is(err, user.ErrEmailTaken):
+		return newDocument(locale, http.StatusConflict, CodeEmailTaken)
+
+	case errors.Is(err, user.ErrEmailInvalid):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidEmail)
+
 	// 403 rather than 422: the request is well formed and the role exists, the
 	// caller simply may not edit this one, and no rewording of the body would
 	// make it succeed.

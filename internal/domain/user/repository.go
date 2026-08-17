@@ -28,6 +28,18 @@ var (
 	ErrUnauthorized       = errors.New("user: unauthorized")
 	ErrPasswordMismatch   = errors.New("user: passwords do not match")
 	ErrInvalidResetCode   = errors.New("user: invalid reset code")
+	// ErrInvalidEmailCode covers a wrong code, an expired one, a spent one and
+	// no outstanding change at all — the same reason the reset code has one
+	// error for all of them.
+	ErrInvalidEmailCode = errors.New("user: invalid email confirmation code")
+	// ErrEmailInvalid is an address that is empty or malformed. huma rejects
+	// those at the edge, but the rule belongs where the change is made too:
+	// nothing guarantees an HTTP request is the only caller.
+	ErrEmailInvalid = errors.New("user: email is empty or malformed")
+	// ErrSameEmail refuses a change to the address the account already has.
+	// Sending a code to prove what is already proved is only a way to send
+	// mail.
+	ErrSameEmail = errors.New("user: the new address is the current one")
 	// ErrDeviceRevoked is deliberately distinguishable from bad credentials:
 	// it is only ever returned after the password has already been proved, so
 	// it discloses nothing to an anonymous caller and telling the account
@@ -115,6 +127,26 @@ type Repository interface {
 	// the code used — all in one transaction, so a crash cannot leave a
 	// consumed code with the old password still in force.
 	ConsumePasswordReset(ctx context.Context, reset *models.PasswordReset, passwordHash string) error
+
+	// ReplaceEmailChange drops any unused change for the user and stores the new
+	// one, so asking again supersedes rather than accumulating codes that all
+	// still work.
+	ReplaceEmailChange(ctx context.Context, change *models.EmailChange) error
+
+	// ActiveEmailChange is the unused, unexpired change for userID, or
+	// ErrNotFound.
+	ActiveEmailChange(ctx context.Context, userID uuid.UUID, now time.Time) (*models.EmailChange, error)
+
+	// FailEmailChange records one wrong guess and spends the code once the cap is
+	// reached, in one conditional UPDATE. Same reasoning as FailPasswordReset: a
+	// read-modify-write would let concurrent guesses share an attempt.
+	FailEmailChange(ctx context.Context, changeID uuid.UUID, maxAttempts int, now time.Time) error
+
+	// ConsumeEmailChange writes the new address and marks the code spent in one
+	// transaction. It returns ErrEmailTaken when the address was claimed in the
+	// meantime — by then the caller has proved they can read that mailbox, which
+	// is why this is the one place the answer is given.
+	ConsumeEmailChange(ctx context.Context, change *models.EmailChange, email string) error
 
 	// DeviceByFingerprint returns the caller's device with that fingerprint, or
 	// ErrNotFound. It is scoped by user, so one account's device token can

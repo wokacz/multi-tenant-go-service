@@ -87,6 +87,7 @@ to unieważnianie **bez listy odwołań**, której trzeba by pilnować i czyści
 | Zawieszenie konta    | padają wszystkie sesje, a nowe logowanie jest odrzucane |
 | Odwołanie urządzenia | padają sesje **tego urządzenia**                        |
 | Wygaśnięcie          | pada pojedynczy token po `AUTH_TOKEN_TTL`               |
+| Zmiana adresu        | **nic** — patrz [niżej](#zmiana-adresu-wymaga-dowodu-z-nowej-skrzynki) |
 
 Nie ma osobnego „wylogowania". `DELETE /v1/me/devices/{id}` na własnym urządzeniu robi dokładnie to i działa
 natychmiast.
@@ -153,3 +154,26 @@ przypadek.
 
 `ConsumePasswordReset` w **jednej transakcji** zapisuje nowy hash, zwiększa
 `session_epoch` i oznacza kod jako spalony. Awaria w połowie nie może zostawić spalonego kodu przy starym haśle.
+
+## Zmiana adresu wymaga dowodu z nowej skrzynki
+
+`POST /v1/me/email` → kod na **nowy** adres. `POST /v1/me/email/verify` → adres zostaje zastosowany.
+
+Konto nie rusza się, dopóki kod nie wróci. Adres jest tym, na co idzie reset hasła, więc zastosowanie go na samo żądanie
+zamieniłoby tę operację w sposób przejęcia konta pożyczonym tokenem. Wymagane jest też **aktualne hasło** — z tego samego
+powodu, dla którego wymaga go przełącznik drugiego składnika: token, który wyciekł z przeglądarki, nie może wystarczyć do
+przekierowania miejsca, z którego konto się odzyskuje.
+
+**Czy nowy adres jest już zajęty — nie jest ujawniane przy żądaniu.** Uwierzytelniony wołający mógłby inaczej przejść
+listę adresów po jednym żądaniu, czyli odtworzyć oracle, który rejestracja zamyka. Odpowiedź jest, ale dopiero przy
+potwierdzeniu (`409 email_taken`) — a wtedy wołający przeczytał już kod z tej skrzynki, więc dowiedział się czegoś, co
+i tak było w jego zasięgu. To jedyne miejsce, w którym `ErrEmailTaken` wychodzi na zewnątrz; rejestracja przechwytuje go
+w handlerze i odpowiada `204`.
+
+**Epoka sesji nie jest podbijana.** Hasło się nie zmieniło, więc istniejące sesje nie są mniej uprawnione niż chwilę
+wcześniej, a wylogowanie wszystkich urządzeń przy zmianie profilu jest zaskoczeniem bez zysku. Tę operację chroni hasło
+na wejściu i kod z nowej skrzynki na wyjściu.
+
+Kod jest sześciocyfrowy, żyje 15 minut i ma limit 5 prób — tak jak reset. Hash jest liczony z **osobnym `purpose`**
+(`email-change`), więc kodu resetu nie da się wydać jako kodu potwierdzającego ani odwrotnie.
+

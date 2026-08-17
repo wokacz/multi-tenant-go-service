@@ -32,6 +32,7 @@ func run() error {
 		&models.Device{},
 		&models.LoginEvent{},
 		&models.PasswordReset{},
+		&models.EmailChange{},
 		&models.TwoFactorChallenge{},
 		&models.Organization{},
 		&models.Membership{},

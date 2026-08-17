@@ -65,6 +65,9 @@ zawartości.
 | `authz.ErrPrivilegeEscalation`                                                             | 403    | `privilege_escalation`                          |
 | `orgs.ErrRoleProtected`                                                                    | 403    | `role_protected`                                |
 | `authz.ErrInsufficientRank`                                                                 | 403    | `insufficient_rank`                             |
+| `user.ErrInvalidEmailCode`                                                                  | 401    | `invalid_email_code`                            |
+| `user.ErrEmailTaken`                                                                        | 409    | `email_taken` (tylko przy zmianie adresu)       |
+| `user.ErrSameEmail`, `ErrEmailInvalid`                                                      | 422    | `same_email`, `invalid_email`                   |
 | `authz.ErrUnknownPermission`, `ErrWrongScope`                                               | 422    | `unknown_permission`, `wrong_scope`             |
 | `orgs.ErrLastOwner`, `ErrRoleInUse`, `ErrRoleKeyTaken`, `ErrAlreadyMember`, `ErrSlugTaken` | 409    | odpowiedni kod                                  |
 | `models.ErrProtected`                                                                      | 409    | `record_protected`                              |

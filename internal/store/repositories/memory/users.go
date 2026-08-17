@@ -33,6 +33,7 @@ type Users struct {
 	users      map[uuid.UUID]*models.User
 	byEmail    map[string]uuid.UUID
 	resets     map[uuid.UUID]*models.PasswordReset
+	emailChg   map[uuid.UUID]*models.EmailChange
 	devices    map[uuid.UUID]*models.Device
 	challenges map[uuid.UUID]*models.TwoFactorChallenge
 	events     []models.LoginEvent
@@ -46,6 +47,7 @@ func NewUsers() *Users {
 		users:      map[uuid.UUID]*models.User{},
 		byEmail:    map[string]uuid.UUID{},
 		resets:     map[uuid.UUID]*models.PasswordReset{},
+		emailChg:   map[uuid.UUID]*models.EmailChange{},
 		devices:    map[uuid.UUID]*models.Device{},
 		challenges: map[uuid.UUID]*models.TwoFactorChallenge{},
 	}
@@ -235,6 +237,90 @@ func (m *Users) ConsumePasswordReset(_ context.Context, reset *models.PasswordRe
 	if stored, ok := m.resets[reset.ID]; ok {
 		stored.ConsumedAt = reset.ConsumedAt
 		stored.Attempts = reset.Attempts
+	}
+
+	return nil
+}
+
+// The four email-change methods mirror the reset ones exactly, including the
+// attempt counter moving under the mutex rather than being read and written back.
+
+func (m *Users) ReplaceEmailChange(_ context.Context, change *models.EmailChange) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for id, existing := range m.emailChg {
+		if existing.UserID == change.UserID && existing.ConsumedAt == nil {
+			delete(m.emailChg, id)
+		}
+	}
+
+	if change.ID == uuid.Nil {
+		change.ID = uuid.Must(uuid.NewV7())
+	}
+
+	stored := *change
+	m.emailChg[change.ID] = &stored
+
+	return nil
+}
+
+func (m *Users) ActiveEmailChange(_ context.Context, userID uuid.UUID, now time.Time) (*models.EmailChange, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, change := range m.emailChg {
+		if change.UserID == userID && change.ConsumedAt == nil && change.ExpiresAt.After(now) {
+			copied := *change
+
+			return &copied, nil
+		}
+	}
+
+	return nil, user.ErrNotFound
+}
+
+func (m *Users) FailEmailChange(_ context.Context, changeID uuid.UUID, maxAttempts int, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	change, ok := m.emailChg[changeID]
+	if !ok || change.ConsumedAt != nil {
+		return nil
+	}
+
+	change.Attempts++
+	if change.Attempts >= maxAttempts {
+		spent := now
+		change.ConsumedAt = &spent
+	}
+
+	return nil
+}
+
+func (m *Users) ConsumeEmailChange(_ context.Context, change *models.EmailChange, email string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[change.UserID]
+	if !ok {
+		return user.ErrNotFound
+	}
+
+	// byEmail is this fake's unique index, so the answer about a taken address
+	// comes from the same place Postgres gets it: the constraint, not a lookup the
+	// caller could have made earlier.
+	if owner, taken := m.byEmail[email]; taken && owner != u.ID {
+		return user.ErrEmailTaken
+	}
+
+	delete(m.byEmail, u.Email)
+	u.Email = email
+	m.byEmail[email] = u.ID
+
+	if stored, ok := m.emailChg[change.ID]; ok {
+		stored.ConsumedAt = change.ConsumedAt
+		stored.Attempts = change.Attempts
 	}
 
 	return nil

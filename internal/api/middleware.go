@@ -258,6 +258,13 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 		// organization id, so there is no literal to compare against.
 		case r.Method == http.MethodPost && isMembersPath(r.URL.Path):
 			lim = s.registerLimit
+
+		// Asking to change an address emails one the caller named, which is the
+		// same shape of abuse and shares the same budget. The confirmation step
+		// does not: it emails nobody, and its guessing is already bounded by the
+		// per-code attempt cap.
+		case r.Method == http.MethodPost && r.URL.Path == v1.Prefix+"/me/email":
+			lim = s.registerLimit
 		}
 
 		if lim != nil && !lim.Allow(s.remoteIP(r)) {

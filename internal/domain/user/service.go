@@ -396,8 +396,9 @@ func (s *Service) CompletePasswordReset(ctx context.Context, email, code, passwo
 // value whether the code was emailed to reset a password or to finish a
 // sign-in, and one could be spent as the other.
 const (
-	purposeReset     = "password-reset"
-	purposeTwoFactor = "two-factor"
+	purposeReset       = "password-reset"
+	purposeTwoFactor   = "two-factor"
+	purposeEmailChange = "email-change"
 )
 
 func (s *Service) hashResetCode(userID uuid.UUID, code string) string {

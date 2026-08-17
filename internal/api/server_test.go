@@ -43,11 +43,13 @@ func (okPinger) Ping(context.Context) error { return nil }
 // field would let a test assert on "the last code" and pass while the wrong
 // flow delivered it.
 type capturingMailer struct {
-	to, code      string
-	twoFactorTo   string
-	twoFactorCode string
-	inviteTo      string
-	inviteOrg     string
+	to, code        string
+	twoFactorTo     string
+	twoFactorCode   string
+	inviteTo        string
+	inviteOrg       string
+	emailChangeTo   string
+	emailChangeCode string
 }
 
 func (c *capturingMailer) SendPasswordReset(_ context.Context, to, code string) error {
@@ -58,6 +60,12 @@ func (c *capturingMailer) SendPasswordReset(_ context.Context, to, code string) 
 
 func (c *capturingMailer) SendTwoFactorCode(_ context.Context, to, code string) error {
 	c.twoFactorTo, c.twoFactorCode = to, code
+
+	return nil
+}
+
+func (c *capturingMailer) SendEmailChange(_ context.Context, to, code string) error {
+	c.emailChangeTo, c.emailChangeCode = to, code
 
 	return nil
 }
@@ -76,6 +84,10 @@ func (failingMailer) SendPasswordReset(context.Context, string, string) error {
 
 func (failingMailer) SendTwoFactorCode(context.Context, string, string) error {
 	return errSMTPDown
+}
+
+func (failingMailer) SendEmailChange(context.Context, string, string) error {
+	return errors.New("smtp is down")
 }
 
 func (failingMailer) SendInvitation(context.Context, string, string) error {

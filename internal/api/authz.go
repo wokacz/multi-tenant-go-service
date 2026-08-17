@@ -53,6 +53,8 @@ var selfServiceOperations = map[string]bool{
 	"list-login-events":     true,
 	"list-my-organizations": true,
 	"accept-invitation":     true,
+	"begin-email-change":    true,
+	"confirm-email-change":  true,
 	"decline-invitation":    true,
 
 	// The permission catalog describes what the product can do, not what any

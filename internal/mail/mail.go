@@ -22,6 +22,7 @@ import (
 type Sender interface {
 	SendPasswordReset(ctx context.Context, to, code string) error
 	SendTwoFactorCode(ctx context.Context, to, code string) error
+	SendEmailChange(ctx context.Context, to, code string) error
 	SendInvitation(ctx context.Context, to, orgName string) error
 }
 
@@ -62,6 +63,12 @@ func (s *logSender) SendTwoFactorCode(_ context.Context, to, code string) error 
 	return nil
 }
 
+func (s *logSender) SendEmailChange(_ context.Context, to, code string) error {
+	s.note("email change", to, code)
+
+	return nil
+}
+
 func (s *logSender) SendInvitation(_ context.Context, to, orgName string) error {
 	s.log.Info("organization invitation (SMTP is not configured)",
 		"email", to, "organization", orgName)
@@ -97,6 +104,14 @@ func (s *smtpSender) SendTwoFactorCode(_ context.Context, to, code string) error
 	return s.send(to, "Your sign-in code",
 		"Your sign-in code is "+code+".",
 		"It expires in 10 minutes. If you are not signing in right now, change your password.")
+}
+
+// SendEmailChange goes to the *new* address, which is the point: the code proves
+// somebody reads that mailbox before the account starts using it.
+func (s *smtpSender) SendEmailChange(_ context.Context, to, code string) error {
+	return s.send(to, "Confirm your new email address",
+		"Your confirmation code is "+code+".",
+		"It expires in 15 minutes. If you did not ask to change your address, ignore this message.")
 }
 
 func (s *smtpSender) SendInvitation(_ context.Context, to, orgName string) error {
