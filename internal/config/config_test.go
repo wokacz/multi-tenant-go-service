@@ -2,6 +2,7 @@ package config
 
 import (
 	"net"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -202,6 +203,57 @@ func TestParseTrustedProxies(t *testing.T) {
 func TestParseTrustedProxiesRejectsGarbage(t *testing.T) {
 	if _, err := parseTrustedProxies("not-an-ip"); err == nil {
 		t.Fatal("parseTrustedProxies() = nil, want an error")
+	}
+}
+
+func TestParseAllowedOrigins(t *testing.T) {
+	got, err := parseAllowedOrigins("https://app.example.com, http://localhost:4200, https://APP.Example.COM:8443")
+	if err != nil {
+		t.Fatalf("parseAllowedOrigins() = _, %v", err)
+	}
+
+	// Lower-cased, because a browser sends the scheme and host that way and the
+	// comparison is exact.
+	want := []string{"https://app.example.com", "http://localhost:4200", "https://app.example.com:8443"}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseAllowedOrigins() = %v, want %v", got, want)
+	}
+}
+
+// TestParseAllowedOriginsRejectsAnythingThatWouldNeverMatch is the point of
+// validating here at all. An origin with a path or a bare host produces an
+// allowlist that silently matches nothing, which is the worst way for a security
+// setting to fail: it looks configured.
+func TestParseAllowedOriginsRejectsAnythingThatWouldNeverMatch(t *testing.T) {
+	for _, value := range []string{
+		"*",
+		"https://app.example.com/",
+		"https://app.example.com/app",
+		"app.example.com",
+		"ftp://app.example.com",
+		"https://",
+	} {
+		if _, err := parseAllowedOrigins(value); err == nil {
+			t.Errorf("parseAllowedOrigins(%q) = _, nil; want an error", value)
+		}
+	}
+}
+
+func TestProductionRejectsAPlaintextOrigin(t *testing.T) {
+	c := productionConfig()
+	c.CORSAllowedOrigins = []string{"http://app.example.com"}
+
+	if errs := c.validate(); len(errs) == 0 {
+		t.Error("validate() accepted an http:// origin in production")
+	}
+
+	// Loopback stays allowed, for the same reason TLS is optional there.
+	c.CORSAllowedOrigins = []string{"http://localhost:4200", "https://app.example.com"}
+
+	for _, err := range c.validate() {
+		if strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS") {
+			t.Errorf("validate() refused a loopback origin in production: %v", err)
+		}
 	}
 }
 

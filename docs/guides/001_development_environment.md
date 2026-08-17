@@ -218,6 +218,7 @@ Najważniejsze zmienne (pełna lista z komentarzami w `.env.example`):
 | `AUTH_TOKEN_TTL`                    | `1h`                 | format czasu Go; gołe `30` jest odrzucane                      |
 | `AUTH_RESET_SECRET`                 | wartość dev          | **osobny** sekret od tokenowego; ta sama zasada co tokenowy    |
 | `TRUSTED_PROXIES`                   | puste                | CIDR, którym wolno ufać `X-Forwarded-For`; puste = nigdy       |
+| `CORS_ALLOWED_ORIGINS`              | puste                | originy przeglądarkowe, np. `http://localhost:4200`; puste = brak CORS |
 | `POSTGRES_*`                        | localhost / postgres | produkcja wymaga SSL i mocnego hasła                           |
 | `REGISTER_/LOGIN_/RESET_PER_MINUTE` | `5`                  | `0` wyłącza limiter (tylko testy)                              |
 | `SMTP_HOST`                         | puste                | bez niego kody nie idą mailem (tylko development)              |

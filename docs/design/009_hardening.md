@@ -41,8 +41,8 @@ Zaproszenie członka dzieli kubełek z rejestracją, bo oba wysyłają pocztę n
 
 Klucz to adres klienta. Domyślnie jest to realny peer TCP. `X-Forwarded-For` jest czytany **tylko** wtedy, gdy ten peer
 siedzi w `TRUSTED_PROXIES` (lista CIDR), idąc od prawej i biorąc pierwszy skok, który sam nie jest zaufany. chi `RealIP`
-nie jest używane: przepisuje `RemoteAddr` z nagłówka, który może ustawić każdy. Pusta lista — i to jest domyślne —
-nigdy nie ufa nagłówkowi, więc podszywanie się pod `X-Forwarded-For` nie tworzy nowych kubełków.
+nie jest używane: przepisuje `RemoteAddr` z nagłówka, który może ustawić każdy. Pusta lista — i to jest domyślne — nigdy
+nie ufa nagłówkowi, więc podszywanie się pod `X-Forwarded-For` nie tworzy nowych kubełków.
 
 Mapa kubełków jest czyszczona z wpisów, które zdążyły się w pełni odnowić, więc skan po wielu adresach jej nie
 rozdmucha.
@@ -100,6 +100,47 @@ Strict-Transport-Security: …        (tylko gdy proces sam obsługuje TLS)
 Vary: Accept-Language
 Content-Language: …
 ```
+
+## CORS
+
+`CORS_ALLOWED_ORIGINS` wymienia originy przeglądarkowe, które mogą **czytać** odpowiedzi. Pusta lista — i to jest
+domyślne — nie odpowiada na żadne żądanie cross-origin. Nagłówek jest tym, co nadaje dostęp, więc jego brak jest odmową,
+a wdrożenie bez klienta przeglądarkowego nie musi niczego wyłączać.
+
+Wpis to dokładny origin `scheme://host[:port]`, bez ścieżki i bez ukośnika na końcu. Nie ma `*` ani dopasowywania
+wzorców — z tego samego powodu, dla którego nie ma wildcardów w uprawnieniach: wzorzec wystarczy raz źle napisać i nikt
+tego nie zauważy. Wpis, którego przeglądarka nigdy nie dopasuje (ścieżka, sam host, wielkie litery), jest odrzucany przy
+starcie, bo najgorszy tryb awarii ustawienia bezpieczeństwa to takie, które *wygląda* na skonfigurowane.
+
+**`Access-Control-Allow-Credentials` nie jest ustawiane nigdy.** W całym serwisie nie ma ciasteczka: autoryzacja to token
+Bearer, który klient trzyma sam. Nie ma więc poświadczeń ambientnych, o których dołączenie trzeba by przeglądarkę
+prosić — i nie ma pary „`*` plus credentials", która jest klasycznym błędem w tym miejscu.
+
+| Nagłówek                        | Wartość                                                                       |
+|---------------------------------|-------------------------------------------------------------------------------|
+| `Access-Control-Allow-Origin`   | dopasowany origin, nigdy `*`                                                  |
+| `Access-Control-Allow-Headers`  | `Authorization`, `Content-Type`, `Accept-Language`, `If-None-Match`, `X-Device-Token` |
+| `Access-Control-Expose-Headers` | `ETag`, `Retry-After`, `WWW-Authenticate`                                     |
+| `Access-Control-Allow-Methods`  | `GET, POST, PATCH, PUT, DELETE, OPTIONS`                                      |
+| `Access-Control-Max-Age`        | `600`                                                                         |
+| `Vary`                          | `Origin` — zawsze, gdy lista jest niepusta                                    |
+
+Eksponowane są tylko nagłówki spoza listy bezpiecznej CORS-a, dlatego nie ma tam `Content-Language`. Każdy z trzech jest
+nośny dla klienta: `ETag` napędza żądanie warunkowe na migawce uprawnień, `Retry-After` mówi, ile czekać po `429`, a
+`WWW-Authenticate` odróżnia „brak tokenu" od „token odrzucony".
+
+`Access-Control-Allow-Headers` musi zawierać każdy nagłówek deklarowany przez operacje.
+`TestCORSAllowsEveryHeaderTheAPIDeclares` przechodzi po dokumencie OpenAPI i przewraca build, gdy się rozejdą — ta
+pomyłka jest niewidoczna wszędzie poza przeglądarką, która blokuje żądanie przed wysłaniem, więc serwer nie loguje
+niczego.
+
+Origin spoza listy **nie jest odrzucany** po stronie serwera. Odpowiedź po prostu nie dostaje nagłówka, który pozwoliłby
+stronie ją przeczytać. Egzekwuje to przeglądarka; odmowa serwerowa psułaby klientów nieprzeglądarkowych, które wysyłają
+`Origin`, i nie zmieniałaby nic dla atakującego, bo `curl` i tak ignoruje ten nagłówek.
+
+Preflight jest obsługiwany **przed** limiterem i przed negocjacją języka: pyta o niego przeglądarka, nie wołający, więc
+nie powinien kosztować nic z budżetu trasy, o którą pyta. Dziś każdy przypadek w `rateLimit` jest bramkowany na `POST`,
+więc i tak by nie kosztował — kolejność sprawia, że limiter nie musi o tym pamiętać.
 
 `MAX_REQUEST_BYTES` (domyślnie 1 MiB) ogranicza ciało żądania.
 `ReadHeaderTimeout` to jedyny timeout będący kontrolą bezpieczeństwa, a nie udogodnieniem — bez niego klient trzyma

@@ -107,11 +107,15 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	// chi's RealIP is deliberately absent: it rewrites RemoteAddr from
 	// X-Forwarded-For, which any client can set. remoteIP reads that header
 	// only from addresses listed in TRUSTED_PROXIES.
+	// cors sits inside the logger, so a preflight a browser client got wrong still
+	// shows up, and outside the rate limiter, so answering one costs nothing that
+	// belongs to the route it is asking about.
 	router.Use(middleware.RequestID)
 	router.Use(middleware.CleanPath)
 	router.Use(s.securityHeaders)
 	router.Use(s.maxBytes)
 	router.Use(s.requestLogger)
+	router.Use(s.cors)
 	router.Use(s.locale)
 	router.Use(s.clientInfo)
 	router.Use(s.rateLimit)

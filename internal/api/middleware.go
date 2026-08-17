@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,117 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// corsAllowedHeaders are the request headers a browser client may send.
+//
+// Authorization and Content-Type are here because nothing works without them.
+// The rest mirror the header parameters the operations actually declare, and
+// TestCORSAllowsEveryHeaderTheAPIDeclares walks the OpenAPI document to prove the
+// two lists have not drifted — adding a header parameter and forgetting this line
+// fails silently in a browser and nowhere else.
+var corsAllowedHeaders = []string{
+	"Authorization",
+	"Content-Type",
+	"Accept-Language",
+	"If-None-Match",
+	"X-Device-Token",
+}
+
+// corsExposedHeaders are the response headers a browser client may read.
+//
+// Only headers outside the CORS safelist need naming: Cache-Control,
+// Content-Language, Content-Length, Content-Type, Expires, Last-Modified and
+// Pragma are readable without being listed, which is why Content-Language is
+// absent despite being set on every response.
+//
+// Each of these is load-bearing for a client. ETag drives the conditional
+// request on the permission snapshot, Retry-After tells it how long to wait after
+// a 429, and WWW-Authenticate is how it tells "no token" apart from "token
+// rejected".
+var corsExposedHeaders = []string{
+	"ETag",
+	"Retry-After",
+	"WWW-Authenticate",
+}
+
+// corsAllowedMethods is written out rather than echoed back from
+// Access-Control-Request-Method, so the answer describes this API instead of
+// agreeing with whatever was asked.
+const corsAllowedMethods = "GET, POST, PATCH, PUT, DELETE, OPTIONS"
+
+// corsMaxAge caps how long a browser may reuse one preflight. Ten minutes keeps
+// the round trips down while still letting a changed allowlist take effect
+// without anyone clearing a cache.
+const corsMaxAge = "600"
+
+// cors answers cross-origin requests from the origins in CORS_ALLOWED_ORIGINS.
+//
+// It sits before locale, clientInfo and the rate limiter, so a preflight is
+// answered without any of the work the real request does. A preflight is asked by
+// the browser rather than by the caller, and charging it to a budget would let a
+// browser client rate-limit itself just by loading. Every case in rateLimit is
+// gated on POST today, so that would not happen as things stand — the ordering is
+// what keeps it from becoming something the limiter has to remember.
+//
+// A request from an origin that is not on the list is not refused here: it is
+// answered without the header that would let the page read the response. The
+// browser is what enforces this, and refusing server-side would only break
+// non-browser callers that happen to send an Origin, while changing nothing for
+// an attacker — curl ignores the header either way.
+func (s *Server) cors(next http.Handler) http.Handler {
+	origins := s.cfg.CORSAllowedOrigins
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Nothing configured: the API has no browser client, and no response
+		// varies by origin, so not even Vary is warranted.
+		if len(origins) == 0 {
+			next.ServeHTTP(w, r)
+
+			return
+		}
+
+		// Vary regardless of whether this origin matched. Without it a shared
+		// cache could hand a response granted to one origin to another, or cache
+		// the ungranted version and serve it to an allowed one.
+		w.Header().Add("Vary", "Origin")
+
+		origin := r.Header.Get("Origin")
+		allowed := origin != "" && slices.Contains(origins, strings.ToLower(origin))
+
+		if allowed {
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", origin)
+			h.Set("Access-Control-Expose-Headers", strings.Join(corsExposedHeaders, ", "))
+		}
+
+		// A preflight is answered here and never routed. Letting it fall through
+		// would reach chi's MethodNotAllowed, because no operation registers
+		// OPTIONS.
+		if isCORSPreflight(r) {
+			if allowed {
+				h := w.Header()
+				h.Set("Access-Control-Allow-Methods", corsAllowedMethods)
+				h.Set("Access-Control-Allow-Headers", strings.Join(corsAllowedHeaders, ", "))
+				h.Set("Access-Control-Max-Age", corsMaxAge)
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isCORSPreflight identifies the browser's permission question. All three parts
+// are required: an OPTIONS without them is an ordinary request for a route that
+// does not exist.
+func isCORSPreflight(r *http.Request) bool {
+	return r.Method == http.MethodOptions &&
+		r.Header.Get("Origin") != "" &&
+		r.Header.Get("Access-Control-Request-Method") != ""
 }
 
 func (s *Server) maxBytes(next http.Handler) http.Handler {

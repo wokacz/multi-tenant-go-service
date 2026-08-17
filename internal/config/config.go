@@ -122,6 +122,17 @@ type Config struct {
 	// address cannot mint extra buckets.
 	TrustedProxies []net.IPNet
 
+	// CORSAllowedOrigins are the browser origins allowed to read responses from
+	// this API. Empty — the default — answers no cross-origin request, which is
+	// the right setting for a deployment with no browser client: the header is
+	// what grants access, so a missing one is a refusal the browser enforces.
+	//
+	// Entries are exact origins, scheme://host[:port]. There is no pattern
+	// matching and no "*": a wildcard would let any page a user visits call this
+	// API with a token it has got hold of, and a pattern is a thing to get subtly
+	// wrong once and never notice.
+	CORSAllowedOrigins []string
+
 	// MailLogCodes writes one-time codes to stderr when SMTP is unset. It is
 	// for a laptop with a TTY; shared logs must not receive them. Production
 	// never reaches that path — SMTP_HOST is required there.
@@ -211,6 +222,13 @@ func Load() (*Config, error) {
 		errs = append(errs, err)
 	} else {
 		cfg.TrustedProxies = proxies
+	}
+
+	origins, err := parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.CORSAllowedOrigins = origins
 	}
 
 	// Well-known secrets are a laptop convenience, and only there. Filling
@@ -327,6 +345,16 @@ func (c *Config) validate() []error {
 		errs = append(errs, errors.New("config: POSTGRES_PASSWORD is too weak for production"))
 	}
 
+	// An http:// origin in production means the token travels to a page fetched
+	// over plaintext, so anything on the path can serve JavaScript that reads this
+	// API. Loopback stays allowed for the same reason TLS is optional there.
+	for _, origin := range c.CORSAllowedOrigins {
+		if c.Env.IsProduction() && strings.HasPrefix(origin, "http://") && !originIsLoopback(origin) {
+			errs = append(errs, fmt.Errorf(
+				"config: CORS_ALLOWED_ORIGINS entry %q must use https in production", origin))
+		}
+	}
+
 	if c.Env.IsProduction() && c.SMTPHost == "" {
 		errs = append(errs, errors.New("config: SMTP_HOST is required in production so password-reset codes can be delivered"))
 	}
@@ -406,6 +434,70 @@ func (c *Config) DSN() string {
 	}
 
 	return u.String()
+}
+
+// parseAllowedOrigins reads CORS_ALLOWED_ORIGINS into exact origins.
+//
+// An origin is scheme://host[:port] and nothing more — no path, no trailing
+// slash — because that is the form a browser puts in Origin and the match is a
+// string comparison. Accepting "https://app.example.com/" would build an
+// allowlist that can never match anything, which is the worst way for a security
+// setting to fail: it looks configured.
+func parseAllowedOrigins(value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		if part == "*" {
+			return nil, errors.New(
+				`config: CORS_ALLOWED_ORIGINS must not be "*"; name the origins that may read this API`)
+		}
+
+		u, err := url.Parse(part)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return nil, fmt.Errorf(
+				"config: CORS_ALLOWED_ORIGINS contains %q, which is not an origin like https://app.example.com", part)
+		}
+
+		if u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			return nil, fmt.Errorf(
+				"config: CORS_ALLOWED_ORIGINS entry %q must be scheme://host[:port] with nothing after the host", part)
+		}
+
+		// Lowercased because a browser sends the scheme and host in lower case
+		// and the comparison is exact. Without this, "https://APP.example.com" in
+		// the configuration would silently never match.
+		out = append(out, strings.ToLower(u.Scheme)+"://"+strings.ToLower(u.Host))
+	}
+
+	return out, nil
+}
+
+// originIsLoopback reports whether the origin's host is this machine. It is what
+// lets a laptop keep http:// origins while production requires https.
+func originIsLoopback(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 func parseTrustedProxies(value string) ([]net.IPNet, error) {
