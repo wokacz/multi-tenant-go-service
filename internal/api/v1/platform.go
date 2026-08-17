@@ -191,6 +191,28 @@ func registerPlatform(api huma.API, service *orgs.Service, users *user.Service) 
 		DefaultStatus: http.StatusNoContent,
 		Errors:        append(platformErrors(), http.StatusNotFound, http.StatusConflict),
 	}, h.deleteUser)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "appoint-organization-owner",
+		Method:      http.MethodPost,
+		Path:        Prefix + "/platform/organizations/{id}/owners",
+		Summary:     "Appoint an organization's owner",
+		Description: "Makes an account the owner of any organization, without the caller " +
+			"joining it. Requires platform.organizations.owners.assign.\n\n" +
+			"This is the other half of creating an organization. Creating one " +
+			"deliberately leaves it empty, and adding a member needs a permission " +
+			"inside it — which a platform administrator does not have — so without " +
+			"this an organization made here had nobody in it and no way to get " +
+			"anybody. It is also the way back from an organization that lost its " +
+			"last owner.\n\n" +
+			"It does not grant the installation-wide role: owning one organization " +
+			"and administering the installation are separate authorizations with " +
+			"separate endpoints.",
+		Tags:          []string{"platform"},
+		Security:      bearer(),
+		DefaultStatus: http.StatusNoContent,
+		Errors:        platformErrors(),
+	}, h.appointOwner)
 }
 
 func newPlatformOrganizationResponse(o *models.Organization) PlatformOrganizationResponse {
@@ -290,6 +312,24 @@ func (h *platformHandlers) deleteUser(ctx context.Context, in *PlatformUserPathI
 	}
 
 	if err := h.users.Delete(ctx, in.ID); err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return nil, nil
+}
+
+// AppointOwnerRequest names the account to put in charge.
+type AppointOwnerRequest struct {
+	UserID uuid.UUID `json:"user_id" format:"uuid" doc:"Account to make owner"`
+}
+
+type AppointOwnerInput struct {
+	ID   uuid.UUID `path:"id" format:"uuid" doc:"Organization id"`
+	Body AppointOwnerRequest
+}
+
+func (h *platformHandlers) appointOwner(ctx context.Context, in *AppointOwnerInput) (*struct{}, error) {
+	if err := h.orgs.AppointOwner(ctx, in.ID, in.Body.UserID); err != nil {
 		return nil, problem.Error(ctx, err)
 	}
 

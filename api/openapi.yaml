@@ -26,6 +26,23 @@ components:
         - email
         - role_ids
       type: object
+    AppointOwnerRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/AppointOwnerRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        user_id:
+          description: Account to make owner
+          format: uuid
+          type: string
+      required:
+        - user_id
+      type: object
     AuditEventResponse:
       additionalProperties: false
       properties:
@@ -3380,6 +3397,62 @@ paths:
       security:
         - bearer: []
       summary: Delete any organization
+      tags:
+        - platform
+  /v1/platform/organizations/{id}/owners:
+    post:
+      description: |-
+        Makes an account the owner of any organization, without the caller joining it. Requires platform.organizations.owners.assign.
+
+        This is the other half of creating an organization. Creating one deliberately leaves it empty, and adding a member needs a permission inside it — which a platform administrator does not have — so without this an organization made here had nobody in it and no way to get anybody. It is also the way back from an organization that lost its last owner.
+
+        It does not grant the installation-wide role: owning one organization and administering the installation are separate authorizations with separate endpoints.
+      operationId: appoint-organization-owner
+      parameters:
+        - description: Organization id
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Organization id
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointOwnerRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Appoint an organization's owner
       tags:
         - platform
   /v1/platform/system-roles:

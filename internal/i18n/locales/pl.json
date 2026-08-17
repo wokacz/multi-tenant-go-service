@@ -74,6 +74,8 @@
   "permission.platform.organizations.create.description": "Założenie nowej organizacji.",
   "permission.platform.organizations.delete.name": "Usuwanie dowolnej organizacji",
   "permission.platform.organizations.delete.description": "Usunięcie dowolnej organizacji w instalacji.",
+  "permission.platform.organizations.owners.assign.name": "Wskazanie właściciela organizacji",
+  "permission.platform.organizations.owners.assign.description": "Uczynienie konta właścicielem dowolnej organizacji, bez wchodzenia do niej.",
   "permission.platform.users.read.name": "Podgląd wszystkich kont",
   "permission.platform.users.read.description": "Wgląd we wszystkie konta w instalacji.",
   "permission.platform.users.suspend.name": "Zawieszanie kont",

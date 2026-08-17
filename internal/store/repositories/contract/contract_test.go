@@ -801,3 +801,22 @@ func countHolders(t *testing.T, b *backend, userID uuid.UUID) int {
 
 	return count
 }
+
+// TestAddMemberRefusesAnUnknownAccount is a divergence found while wiring the
+// platform's "appoint an owner" endpoint, which takes an account id straight from
+// the request.
+//
+// Postgres has a foreign key and refuses; the fake had nothing to check against and
+// happily created a membership for an account that does not exist. Either way the
+// caller deserves a not-found rather than a 500 from an untranslated driver error.
+func TestAddMemberRefusesAnUnknownAccount(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+
+		_, err := b.repo.AddMember(t.Context(), orgID, uuid.Must(uuid.NewV7()),
+			nil, uuid.Nil, time.Now().UTC())
+		if !errors.Is(err, orgs.ErrNotFound) {
+			t.Errorf("AddMember() for an account that does not exist = %v, want ErrNotFound", err)
+		}
+	})
+}

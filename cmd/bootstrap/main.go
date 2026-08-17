@@ -26,6 +26,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
@@ -40,9 +41,15 @@ func run() error {
 	// The address comes from the environment by default so the value is not in
 	// shell history on a production box; the flag is there for local use.
 	email := flag.String("email", os.Getenv("BOOTSTRAP_EMAIL"),
-		"address of an existing account to make owner of the default organization")
+		"address of an existing account to make owner (see -org)")
 	platform := flag.Bool("platform-admin", false,
 		"also grant the installation-wide administrator role")
+	// Which organization. It used to be the default one and only the default one,
+	// so an organization created through the platform API could not be given an
+	// owner from here either. The API can do it now; this stays for the case where
+	// there is nobody to call the API with yet.
+	slug := flag.String("org", models.DefaultOrganizationSlug,
+		"slug of the organization to make them owner of")
 	flag.Parse()
 
 	if *email == "" {
@@ -88,7 +95,7 @@ func run() error {
 		return err
 	}
 
-	org, err := service.EnsureDefaultOrganization(ctx)
+	org, err := targetOrganization(ctx, service, orgRepo, *slug)
 	if err != nil {
 		return err
 	}
@@ -104,4 +111,32 @@ func run() error {
 	)
 
 	return nil
+}
+
+// targetOrganization resolves the -org slug.
+//
+// The default one is created if it is missing, because on a fresh installation this
+// command may well be the first thing that runs. Any other slug has to exist
+// already: creating one from a typo and promoting somebody into it would be worse
+// than refusing.
+func targetOrganization(
+	ctx context.Context,
+	service *orgs.Service,
+	provisioner orgs.Provisioner,
+	slug string,
+) (*models.Organization, error) {
+	if slug == models.DefaultOrganizationSlug {
+		return service.EnsureDefaultOrganization(ctx)
+	}
+
+	org, err := provisioner.OrganizationBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, orgs.ErrNotFound) {
+			return nil, fmt.Errorf("no organization with slug %s; create it first", slug)
+		}
+
+		return nil, err
+	}
+
+	return org, nil
 }

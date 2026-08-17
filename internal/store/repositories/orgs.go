@@ -281,6 +281,14 @@ func (r *Orgs) AddMember(
 				return orgs.ErrAlreadyMember
 			}
 
+			// The foreign key is what decides whether the account exists. Left
+			// untranslated it arrives as an opaque 500, and this path takes an
+			// account id straight from a request — the platform endpoint that
+			// appoints an owner.
+			if errors.Is(err, gorm.ErrForeignKeyViolated) {
+				return orgs.ErrNotFound
+			}
+
 			return err
 		}
 

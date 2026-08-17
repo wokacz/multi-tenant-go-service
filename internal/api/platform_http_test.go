@@ -29,6 +29,11 @@ func platformProbes(orgID, userID uuid.UUID) map[string]probe {
 		},
 		"delete-platform-user": {http.MethodDelete, "/v1/platform/users/" + userID.String(), ""},
 
+		"appoint-organization-owner": {
+			http.MethodPost, "/v1/platform/organizations/" + orgID.String() + "/owners",
+			`{"user_id":"` + userID.String() + `"}`,
+		},
+
 		"list-system-roles": {http.MethodGet, "/v1/platform/system-roles", ""},
 		"grant-system-role": {
 			http.MethodPost, "/v1/platform/system-roles",

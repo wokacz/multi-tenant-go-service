@@ -47,6 +47,17 @@ Rozdział jest szczelny w obie strony i pokryty testami:
 - administrator platformy **nie ma** automatycznego wstępu do żadnej organizacji — dostaje 403 we własnej i 404 w
   cudzej.
 
+Ta druga zasada wymaga drugiej połowy, której długo nie było. `create-platform-organization` celowo nie dodaje twórcy
+(patrz `CreateOrganization`), a dodanie członka wymaga uprawnienia **wewnątrz** organizacji — którego administrator
+platformy nie ma. Organizacja utworzona przez API nie miała więc nikogo i **nie dało się nikogo do niej dodać**; jedynym
+wyjściem był SQL. `POST /v1/platform/organizations/{id}/owners` za `platform.organizations.owners.assign` jest tym
+brakującym krokiem, i zarazem drogą powrotną z organizacji, która straciła ostatniego właściciela.
+
+Wskazanie właściciela **nie nadaje roli instalacji**. Posiadanie jednej organizacji i administrowanie instalacją to
+osobne autoryzacje z osobnymi endpointami — patrz [Role instalacji przez API](#role-instalacji-przez-api). Polecenie
+bootstrap robi jedno i drugie, bo przerwanie koła wymaga obu, i przyjmuje teraz `-org`, więc nie jest już przywiązane do
+organizacji `default`.
+
 Parametr ścieżki w `/v1/platform/organizations/{id}` nazywa się `id`, nie
 `orgID`. Middleware czyta `{orgID}` po to, żeby ustalić organizację, **w której**
 autoryzuje; tutaj organizacja jest przedmiotem operacji, nie zakresem uprawnienia, a ta sama nazwa sugerowałaby, że to

@@ -438,6 +438,15 @@ func (m *Authz) AddMember(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// The account has to exist. Postgres gets this from the foreign key; here it
+	// takes a lookup, and without one the fake would create a membership for
+	// somebody who is not there — which is what it used to do.
+	if m.users != nil {
+		if _, err := m.users.ByID(ctx, userID); err != nil {
+			return nil, orgs.ErrNotFound
+		}
+	}
+
 	// No invitation to claim any more. This used to walk the memberships looking
 	// for an invited row with a matching address and activate it, because an
 	// invitation was a membership and the unique index would otherwise refuse the

@@ -63,6 +63,15 @@ const (
 	PermPlatformOrganizationsCreate Permission = "platform.organizations.create"
 	PermPlatformOrganizationsDelete Permission = "platform.organizations.delete"
 
+	// PermPlatformOwnersAssign appoints the first owner of an organization.
+	//
+	// Four segments, which the naming scheme allows and members.roles.assign
+	// already uses: platform prefix, resource, subresource, action. It is a
+	// subresource rather than a new prefix because it really is a thing about an
+	// organization — creating one and saying who runs it are two halves of the same
+	// job, and the second is the half that was missing.
+	PermPlatformOwnersAssign Permission = "platform.organizations.owners.assign"
+
 	PermPlatformUsersRead    Permission = "platform.users.read"
 	PermPlatformUsersSuspend Permission = "platform.users.suspend"
 	PermPlatformUsersDelete  Permission = "platform.users.delete"
@@ -118,6 +127,7 @@ var catalog = []Definition{
 	{PermPlatformOrganizationsRead, ScopeSystem, "platform.organizations"},
 	{PermPlatformOrganizationsCreate, ScopeSystem, "platform.organizations"},
 	{PermPlatformOrganizationsDelete, ScopeSystem, "platform.organizations"},
+	{PermPlatformOwnersAssign, ScopeSystem, "platform.organizations"},
 
 	{PermPlatformUsersRead, ScopeSystem, "platform.users"},
 	{PermPlatformUsersSuspend, ScopeSystem, "platform.users"},

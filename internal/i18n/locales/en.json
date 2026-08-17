@@ -74,6 +74,8 @@
   "permission.platform.organizations.create.description": "Set up a new organization.",
   "permission.platform.organizations.delete.name": "Delete any organization",
   "permission.platform.organizations.delete.description": "Remove any organization in the installation.",
+  "permission.platform.organizations.owners.assign.name": "Appoint an organization's owner",
+  "permission.platform.organizations.owners.assign.description": "Make an account the owner of any organization, without joining it.",
   "permission.platform.users.read.name": "View all accounts",
   "permission.platform.users.read.description": "See every account in the installation.",
   "permission.platform.users.suspend.name": "Suspend accounts",

@@ -242,6 +242,45 @@ func (s *Service) DeleteOrganizationByID(ctx context.Context, orgID uuid.UUID) e
 // permission nobody holds yet. It deliberately does not run on "the first
 // account to register" — with open registration that is a race anybody can win.
 func (s *Service) PromoteToOwner(ctx context.Context, orgID, userID uuid.UUID, alsoPlatformAdmin bool) error {
+	if err := s.grantOwnership(ctx, orgID, userID); err != nil {
+		return err
+	}
+
+	if !alsoPlatformAdmin {
+		return nil
+	}
+
+	return s.provisioner.GrantSystemRole(ctx, userID, authz.RolePlatformAdmin, uuid.Nil)
+}
+
+// AppointOwner is the same act from inside the API, authorized at system scope.
+//
+// It is the half of "create an organization" that was missing. CreateOrganization
+// deliberately does not add the creator, so an organization made through the
+// platform endpoint had nobody in it — and nobody could be added, because adding a
+// member needs a permission inside that organization and a platform administrator
+// has none there. The only way out was SQL.
+//
+// It does not grant the platform role. Being an owner of one organization and
+// administering the installation are separate authorizations, and since H3 they have
+// separate endpoints; the bootstrap command still does both because breaking the
+// circle needs both.
+// It takes no grant, like every other system-scoped method here: the grant carries
+// the organization a decision was made in, and at system scope there is none. The
+// actor for the audit entry travels on the context.
+func (s *Service) AppointOwner(ctx context.Context, orgID, userID uuid.UUID) error {
+	// The organization has to be live. Its roles outlive a soft delete — roles are
+	// not soft-deleted — so without this an owner could be appointed to an
+	// organization that no longer exists.
+	if _, err := s.repo.Organization(ctx, orgID); err != nil {
+		return err
+	}
+
+	return s.grantOwnership(ctx, orgID, userID)
+}
+
+// grantOwnership makes the account an owner, whether or not it is already a member.
+func (s *Service) grantOwnership(ctx context.Context, orgID, userID uuid.UUID) error {
 	owner, err := s.repo.RoleByKey(ctx, orgID, string(authz.RoleOwner))
 	if err != nil {
 		return err
@@ -251,22 +290,14 @@ func (s *Service) PromoteToOwner(ctx context.Context, orgID, userID uuid.UUID, a
 	switch {
 	case err == nil:
 		// The new set is exactly the owner role, so nothing can be losing it.
-		if err := s.repo.ReplaceMemberRoles(ctx, orgID, member.ID,
-			[]uuid.UUID{owner.ID}, RefuseLastOwnerLoss(false)); err != nil {
-			return err
-		}
+		return s.repo.ReplaceMemberRoles(ctx, orgID, member.ID,
+			[]uuid.UUID{owner.ID}, RefuseLastOwnerLoss(false))
 	case errors.Is(err, ErrNotFound):
-		if _, err := s.repo.AddMember(ctx, orgID, userID,
-			[]uuid.UUID{owner.ID}, uuid.Nil, time.Now().UTC()); err != nil {
-			return err
-		}
+		_, err := s.repo.AddMember(ctx, orgID, userID,
+			[]uuid.UUID{owner.ID}, uuid.Nil, time.Now().UTC())
+
+		return err
 	default:
 		return err
 	}
-
-	if !alsoPlatformAdmin {
-		return nil
-	}
-
-	return s.provisioner.GrantSystemRole(ctx, userID, authz.RolePlatformAdmin, uuid.Nil)
 }

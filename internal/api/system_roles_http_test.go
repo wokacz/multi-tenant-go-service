@@ -42,28 +42,7 @@ func TestGrantingAnInstallationRoleIsRecorded(t *testing.T) {
 	f := newAuthzFixture(t)
 	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
 
-	target := registerOutsider(t, f)
-
-	var account struct {
-		Users []struct {
-			ID    uuid.UUID `json:"id"`
-			Email string    `json:"email"`
-		} `json:"users"`
-	}
-	f.call(t, http.MethodGet, "/v1/platform/users", "").
-		expect(t, http.StatusOK).decode(t, &account)
-
-	var targetID uuid.UUID
-
-	for _, u := range account.Users {
-		if u.Email == target {
-			targetID = u.ID
-		}
-	}
-
-	if targetID == uuid.Nil {
-		t.Fatalf("the second account is missing from the platform listing: %+v", account.Users)
-	}
+	targetID := accountIDByEmail(t, f, registerOutsider(t, f))
 
 	body := fmt.Sprintf(`{"user_id":%q,"role_key":%q}`, targetID, authz.RolePlatformAdmin)
 	f.call(t, http.MethodPost, "/v1/platform/system-roles", body).expect(t, http.StatusNoContent)
