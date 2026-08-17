@@ -319,8 +319,45 @@ Zostaje wąskie okno: zaproszenie utworzone **pomiędzy** sprawdzeniem a wstawie
 Skutkiem jest degradacja ról, nie eskalacja, i zamknie się dopiero wtedy, gdy zaproszenia dostaną własną tabelę i
 przestaną dzielić unikat z członkostwami.
 
+## Reguły transakcyjne: gdzie mieszka decyzja
+
 Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu organizacji.
 Dwa nakładające się zdegradowania nie mogą oba zobaczyć `owners > 1` i oba przejść.
+
+Sama reguła jest jednak **kodem domenowym**, nie SQL-em. Mieszkała w zapytaniu i w ręcznie pisanej kopii w fake'u —
+i tak właśnie doszło do rozjechania się obu: jedna liczyła członkostwo z usuniętym kontem jako właściciela, druga nie,
+a wiersz stawał się nieusuwalny. Dziś jest jedno sformułowanie, w Go:
+
+```go
+orgs.RefuseLastOwnerLoss(losing bool) OwnerGuard
+orgs.RefuseRoleInUse() RoleGuard
+```
+
+Repozytorium przyjmuje **strażnika** i woła go wewnątrz transakcji, po zablokowaniu wiersza organizacji, przekazując
+policzone fakty (`OwnerState{Owners, SubjectHoldsOwner}` albo liczbę posiadaczy roli). Rozkład jest taki:
+
+| Co | Gdzie |
+|-------------------------------------|-------------------------|
+| decyzja („czy odmówić")            | domena (`orgs`)         |
+| transakcja, blokada, zliczenie      | repozytorium            |
+
+Świadomie **nie** wprowadzono osobnego interfejsu `orgs.Tx` z metodami mutującymi. Przeniósłby do domeny także zapisy,
+czyli zduplikował kilkanaście metod repozytorium w drugim interfejsie, który fake musiałby odtworzyć — dużo ryzyka przy
+przenoszeniu reguły bezpieczeństwa i żadnego zysku ponad to, co daje strażnik.
+
+Trzy szczegóły, które trzymają to razem:
+
+- **Strażnik jest wymagany, nie opcjonalny.** Zmiana, która nie może stracić właściciela, przekazuje
+  `RefuseLastOwnerLoss(false)`, a nie `nil`. Nie ma więc gałęzi, w której blokada jest po cichu pomijana.
+- **Wszystkie serializowane zmiany blokują ten sam obiekt** — wiersz organizacji. Dotyczy to również usuwania roli, co
+  jest właśnie tym, co porządkuje je względem równoległego przypisywania roli. Dwie różne blokady brane w dwóch
+  kolejnościach to przepis na zakleszczenie.
+- **`RefuseLastOwnerLoss` jest eksportowane**, bo testy warstwy składowania muszą sprawdzać **prawdziwą** regułę na
+  prawdziwym SQL-u. Test z własną kopią porównania mógłby przechodzić, gdy reguła serwisu mówi co innego — czyli dokładnie
+  ta awaria, której cała ta zmiana ma zapobiegać.
+
+`OwnerCount` jako metoda repozytorium **została usunięta**. Liczba istnieje teraz tylko wewnątrz transakcji; osobna
+metoda do liczenia z puli byłaby drugą odpowiedzią na to samo pytanie, a dwie odpowiedzi w końcu się rozjeżdżają.
 
 ## Czego tu nie ma
 

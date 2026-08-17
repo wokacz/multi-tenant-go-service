@@ -150,7 +150,11 @@ func (s *Service) SetMemberStatus(
 		return err
 	}
 
-	return s.repo.SetMemberStatus(ctx, orgID, memberID, status, time.Now().UTC())
+	// Suspending takes the capability away; reinstating gives it back, so only the
+	// first can leave the organization without an owner.
+	guard := RefuseLastOwnerLoss(!status.GrantsPermissions())
+
+	return s.repo.SetMemberStatus(ctx, orgID, memberID, status, time.Now().UTC(), guard)
 }
 
 func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID uuid.UUID) error {
@@ -166,7 +170,7 @@ func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID
 			// No member to compare ranks with. The row may still exist with a
 			// deleted account behind it, and removing it is the only way to clean
 			// that up, so the repository decides.
-			return s.repo.RemoveMember(ctx, orgID, memberID)
+			return s.repo.RemoveMember(ctx, orgID, memberID, RefuseLastOwnerLoss(true))
 		}
 
 		return err
@@ -176,20 +180,22 @@ func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID
 		return err
 	}
 
-	return s.repo.RemoveMember(ctx, orgID, memberID)
+	return s.repo.RemoveMember(ctx, orgID, memberID, RefuseLastOwnerLoss(true))
 }
 
 // SetMemberRoles replaces somebody's roles.
 //
-// Two rules apply, and they are the two ways this endpoint would otherwise be a
-// way around the whole scheme: the caller may only assign roles whose
-// permissions they hold themselves, and the last owner may not be demoted.
+// Three rules apply, and each is a way this endpoint would otherwise be a route
+// around the whole scheme: the caller may not act on somebody who outranks them,
+// may only assign roles whose permissions they hold themselves, and may not leave
+// the organization without an owner.
 //
-// Only the first is enforced here. The last-owner rule lives in the repository,
-// because it has to read the owner count and write the new roles inside one
-// transaction that locks the organization row — a check on this side of the
-// boundary and a mutation on the other would reopen the race it exists to close.
-// That is why ErrLastOwner comes back from a repository call rather than from
+// All three are stated here. The last one is handed to the repository as a guard
+// rather than checked inline, because it has to read the owner count and write the
+// new roles inside one transaction with the organization row locked — a check on
+// this side and a mutation on the other would reopen the race it exists to close.
+// The rule is domain code; only its timing belongs to the store. That is why
+// ErrLastOwner still surfaces from a repository call rather than from
 // anything visible in this function.
 func (s *Service) SetMemberRoles(
 	ctx context.Context,
@@ -216,7 +222,12 @@ func (s *Service) SetMemberRoles(
 		return nil, err
 	}
 
-	if err := s.repo.ReplaceMemberRoles(ctx, orgID, memberID, roleIDs); err != nil {
+	losing, err := s.replacingDropsOwner(ctx, orgID, roleIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.ReplaceMemberRoles(ctx, orgID, memberID, roleIDs, RefuseLastOwnerLoss(losing)); err != nil {
 		return nil, err
 	}
 
@@ -344,11 +355,10 @@ func (s *Service) DeleteRole(ctx context.Context, grant *authz.Grant, roleID uui
 		return ErrRoleProtected
 	}
 
-	if role.Members > 0 {
-		return ErrRoleInUse
-	}
-
-	return s.repo.DeleteRole(ctx, orgID, roleID)
+	// role.Members is not consulted: it was read on another connection and the
+	// delete runs in its own transaction, so a role assigned in between would lose
+	// the assignment to the cascade. The count that decides happens inside.
+	return s.repo.DeleteRole(ctx, orgID, roleID, RefuseRoleInUse())
 }
 
 // ensureRolesAreGrantable is the anti-escalation rule for assignment.
@@ -378,6 +388,73 @@ func ensureOrganizationScoped(permissions []authz.Permission) error {
 	}
 
 	return nil
+}
+
+// RefuseLastOwnerLoss is the last-owner rule.
+//
+// losing says whether the change takes the owner capability away from the
+// subject — suspending them, removing them, or replacing their roles with a set
+// that has no owner in it. Reinstating somebody or widening their roles is not a
+// loss and needs no check.
+//
+// The rule lived in SQL until now, and in a hand-written copy inside the
+// in-memory fake. That is how the two came to disagree about a membership whose
+// account had been deleted: one counted it as an owner, the other did not, and the
+// row became impossible to remove. Here there is one statement of it, in Go,
+// testable without a database — and the repository still runs it inside the
+// transaction that makes the change, with the organization row locked, so nothing
+// about the serialisation is given up in exchange.
+// It is exported because the store's own tests need to exercise the real rule
+// against real SQL. A test that wrote its own copy of the comparison could pass
+// while the rule the service uses said something else, which is the failure this
+// whole rearrangement exists to prevent.
+func RefuseLastOwnerLoss(losing bool) OwnerGuard {
+	return func(state OwnerState) error {
+		if !losing || !state.SubjectHoldsOwner {
+			return nil
+		}
+
+		if state.Owners <= 1 {
+			return ErrLastOwner
+		}
+
+		return nil
+	}
+}
+
+// RefuseRoleInUse is the companion rule for deleting a role.
+//
+// Cascading the delete would take permissions away from people the caller never
+// looked at, and without counting inside the transaction that is exactly what
+// happened: the count was read on one connection and the delete ran on another,
+// so a role assigned in between lost the assignment to the cascade.
+func RefuseRoleInUse() RoleGuard {
+	return func(holders int) error {
+		if holders > 0 {
+			return ErrRoleInUse
+		}
+
+		return nil
+	}
+}
+
+// replacingDropsOwner reports whether roleIDs leaves out the owner role.
+//
+// The lookup happens outside the transaction, which is safe because the answer
+// cannot go stale: the owner role is materialised from the shipped catalog and
+// carries IsSystem, so nothing can delete or rekey it while this runs.
+func (s *Service) replacingDropsOwner(ctx context.Context, orgID uuid.UUID, roleIDs []uuid.UUID) (bool, error) {
+	owner, err := s.repo.RoleByKey(ctx, orgID, string(authz.RoleOwner))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			// No owner role here at all, so no change can drop it.
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return !slices.Contains(roleIDs, owner.ID), nil
 }
 
 // ensureCanAffectMember applies the rank rule to one membership.

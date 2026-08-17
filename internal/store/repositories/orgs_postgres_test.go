@@ -39,7 +39,7 @@ func TestReplaceMemberRolesRefusesAnotherOrganizationsRole(t *testing.T) {
 
 	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive)
 
-	err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{mine.ID, theirs.ID})
+	err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{mine.ID, theirs.ID}, orgs.RefuseLastOwnerLoss(true))
 	if !errors.Is(err, orgs.ErrNotFound) {
 		t.Fatalf("ReplaceMemberRoles() with a foreign role = %v, want ErrNotFound", err)
 	}
@@ -70,7 +70,7 @@ func TestReplaceMemberRolesIsAtomic(t *testing.T) {
 
 	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive, first.ID)
 
-	if err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{second.ID}); err != nil {
+	if err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{second.ID}, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("ReplaceMemberRoles() = %v", err)
 	}
 
@@ -101,9 +101,16 @@ func TestMemberIsScopedToTheOrganization(t *testing.T) {
 	}
 }
 
-// TestOwnerCountOnlyCountsActiveOwners is what the last-owner rule leans on.
-// Counting a suspended owner would let the last usable one be removed.
-func TestOwnerCountOnlyCountsActiveOwners(t *testing.T) {
+// TestTheOwnerStateTheGuardSeesCountsOnlyRealOwners is what the last-owner rule
+// leans on. Counting a suspended owner, or one whose account is gone, would let
+// the last usable one be removed.
+//
+// It reads the state through a guard rather than through a counting method,
+// because that is the only place the number exists now: it is assembled inside
+// the transaction, with the organization row locked, and handed to the domain.
+// Asserting on it here is stronger than the method this replaces — it is the
+// value the rule actually decides from, not a second query that resembles it.
+func TestTheOwnerStateTheGuardSeesCountsOnlyRealOwners(t *testing.T) {
 	db := testDB(t)
 	repo := repositories.NewOrgs(db)
 	users := repositories.NewUser(db)
@@ -113,25 +120,16 @@ func TestOwnerCountOnlyCountsActiveOwners(t *testing.T) {
 	viewer := newRole(t, db, org.ID, string(authz.RoleViewer), string(authz.PermOrganizationRead))
 
 	active := newUser(t, users)
-	newMembership(t, db, org.ID, active.ID, models.MembershipActive, owner.ID)
+	activeMembership := newMembership(t, db, org.ID, active.ID, models.MembershipActive, owner.ID)
 
 	suspended := newUser(t, users)
 	newMembership(t, db, org.ID, suspended.ID, models.MembershipSuspended, owner.ID)
 
 	plain := newUser(t, users)
-	newMembership(t, db, org.ID, plain.ID, models.MembershipActive, viewer.ID)
+	plainMembership := newMembership(t, db, org.ID, plain.ID, models.MembershipActive, viewer.ID)
 
-	got, err := repo.OwnerCount(t.Context(), org.ID)
-	if err != nil {
-		t.Fatalf("OwnerCount() = _, %v", err)
-	}
-
-	if got != 1 {
-		t.Errorf("OwnerCount() = %d, want 1 — only the active owner counts", got)
-	}
-
-	// A deleted account is not an owner either, and a soft delete never fires
-	// the foreign key cascade, so the membership row is still there.
+	// A deleted account is not an owner either, and a soft delete never fires the
+	// foreign key cascade, so the membership row is still there.
 	deleted := newUser(t, users)
 	newMembership(t, db, org.ID, deleted.ID, models.MembershipActive, owner.ID)
 
@@ -139,13 +137,89 @@ func TestOwnerCountOnlyCountsActiveOwners(t *testing.T) {
 		t.Fatalf("delete user: %v", err)
 	}
 
-	got, err = repo.OwnerCount(t.Context(), org.ID)
-	if err != nil {
-		t.Fatalf("OwnerCount() = _, %v", err)
+	// errStop abandons the transaction once the state has been captured, so the
+	// probe reads without changing anything.
+	errStop := errors.New("stop")
+
+	capture := func(memberID uuid.UUID) orgs.OwnerState {
+		t.Helper()
+
+		var seen orgs.OwnerState
+
+		err := repo.RemoveMember(t.Context(), org.ID, memberID, func(state orgs.OwnerState) error {
+			seen = state
+
+			return errStop
+		})
+		if !errors.Is(err, errStop) {
+			t.Fatalf("RemoveMember() = %v, want the guard's own error back", err)
+		}
+
+		return seen
 	}
 
-	if got != 1 {
-		t.Errorf("OwnerCount() = %d after deleting an owner's account, want 1", got)
+	if got := capture(activeMembership.ID); got.Owners != 1 || !got.SubjectHoldsOwner {
+		t.Errorf("state for the one real owner = %+v, want {Owners:1 SubjectHoldsOwner:true}", got)
+	}
+
+	if got := capture(plainMembership.ID); got.Owners != 1 || got.SubjectHoldsOwner {
+		t.Errorf("state for a viewer = %+v, want {Owners:1 SubjectHoldsOwner:false}", got)
+	}
+}
+
+// TestTheRoleGuardCountsHoldersInsideTheTransaction is the M8 half of moving the
+// rules into the domain.
+//
+// The service used to read Role().Members on one connection and call DeleteRole on
+// another, so a role assigned in between kept the caller's "nobody holds this"
+// answer and lost the assignment to the cascade. The count now happens inside the
+// delete's own transaction, after the organization row is locked — the same lock
+// ReplaceMemberRoles takes, so the two cannot interleave.
+//
+// The ordering itself is a property of the lock rather than something a test can
+// observe without a deliberate interleaving, which would be flaky. What is checked
+// here is that the number the domain decides from is assembled in there at all,
+// and that it is the right number.
+func TestTheRoleGuardCountsHoldersInsideTheTransaction(t *testing.T) {
+	db := testDB(t)
+	repo := repositories.NewOrgs(db)
+	users := repositories.NewUser(db)
+
+	org := newOrganization(t, db)
+	role := newRole(t, db, org.ID, "auditor", string(authz.PermMembersRead))
+
+	first := newUser(t, users)
+	newMembership(t, db, org.ID, first.ID, models.MembershipActive, role.ID)
+
+	second := newUser(t, users)
+	newMembership(t, db, org.ID, second.ID, models.MembershipActive, role.ID)
+
+	var seen int
+
+	errStop := errors.New("stop")
+
+	err := repo.DeleteRole(t.Context(), org.ID, role.ID, func(holders int) error {
+		seen = holders
+
+		return errStop
+	})
+	if !errors.Is(err, errStop) {
+		t.Fatalf("DeleteRole() = %v, want the guard's own error back", err)
+	}
+
+	if seen != 2 {
+		t.Errorf("holders = %d, want 2", seen)
+	}
+
+	// The guard refusing means the role is still there: the count and the delete
+	// share one transaction, so abandoning it takes the delete with it.
+	if _, err := repo.Role(t.Context(), org.ID, role.ID); err != nil {
+		t.Errorf("Role() after a refused delete = %v, want it still there", err)
+	}
+
+	// And the real rule agrees about this state.
+	if err := repo.DeleteRole(t.Context(), org.ID, role.ID, orgs.RefuseRoleInUse()); !errors.Is(err, orgs.ErrRoleInUse) {
+		t.Errorf("DeleteRole() with the real rule = %v, want ErrRoleInUse", err)
 	}
 }
 
@@ -251,12 +325,12 @@ func TestAnOwnerWhoseAccountIsDeletedDoesNotBlockRemoval(t *testing.T) {
 		t.Fatalf("delete user: %v", err)
 	}
 
-	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID); err != nil {
+	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("RemoveMember() for an owner whose account is deleted = %v, want it removed", err)
 	}
 
 	// The rule still holds for the owner who is actually there.
-	err := repo.RemoveMember(t.Context(), org.ID, liveMembership.ID)
+	err := repo.RemoveMember(t.Context(), org.ID, liveMembership.ID, orgs.RefuseLastOwnerLoss(true))
 	if !errors.Is(err, orgs.ErrLastOwner) {
 		t.Errorf("RemoveMember() for the last live owner = %v, want ErrLastOwner", err)
 	}
@@ -331,7 +405,7 @@ func TestDeletingARoleIsRefusedForSystemRoles(t *testing.T) {
 		t.Fatalf("create role: %v", err)
 	}
 
-	if err := repo.DeleteRole(t.Context(), org.ID, role.ID); !errors.Is(err, models.ErrRoleIsSystem) {
+	if err := repo.DeleteRole(t.Context(), org.ID, role.ID, orgs.RefuseRoleInUse()); !errors.Is(err, models.ErrRoleIsSystem) {
 		t.Errorf("DeleteRole() on a system role = %v, want ErrRoleIsSystem", err)
 	}
 }
@@ -390,12 +464,12 @@ func TestReinstatingKeepsTheOriginalJoinDate(t *testing.T) {
 	}
 
 	if err := repo.SetMemberStatus(t.Context(), org.ID, member.ID,
-		models.MembershipSuspended, time.Now().UTC()); err != nil {
+		models.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("SetMemberStatus(suspended) = %v", err)
 	}
 
 	if err := repo.SetMemberStatus(t.Context(), org.ID, member.ID,
-		models.MembershipActive, time.Now().UTC()); err != nil {
+		models.MembershipActive, time.Now().UTC(), orgs.RefuseLastOwnerLoss(false)); err != nil {
 		t.Fatalf("SetMemberStatus(active) = %v", err)
 	}
 
@@ -421,7 +495,7 @@ func TestRemovingAMemberCascadesTheirRoleAssignments(t *testing.T) {
 
 	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
 
-	if err := repo.RemoveMember(t.Context(), org.ID, membership.ID); err != nil {
+	if err := repo.RemoveMember(t.Context(), org.ID, membership.ID, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("RemoveMember() = %v", err)
 	}
 
@@ -519,10 +593,10 @@ func TestConcurrentDemotionsLeaveOneOwner(t *testing.T) {
 
 	errs := make(chan error, 2)
 	go func() {
-		errs <- repo.ReplaceMemberRoles(t.Context(), org.ID, first.ID, []uuid.UUID{member.ID})
+		errs <- repo.ReplaceMemberRoles(t.Context(), org.ID, first.ID, []uuid.UUID{member.ID}, orgs.RefuseLastOwnerLoss(true))
 	}()
 	go func() {
-		errs <- repo.ReplaceMemberRoles(t.Context(), org.ID, second.ID, []uuid.UUID{member.ID})
+		errs <- repo.ReplaceMemberRoles(t.Context(), org.ID, second.ID, []uuid.UUID{member.ID}, orgs.RefuseLastOwnerLoss(true))
 	}()
 
 	firstErr, secondErr := <-errs, <-errs
@@ -534,12 +608,23 @@ func TestConcurrentDemotionsLeaveOneOwner(t *testing.T) {
 			firstErr, secondErr)
 	}
 
-	got, err := repo.OwnerCount(t.Context(), org.ID)
-	if err != nil {
-		t.Fatalf("OwnerCount() = _, %v", err)
+	// One owner has to be left. Read through a guard, which is where the count
+	// lives now: it is assembled inside the transaction rather than by a method
+	// anyone can call.
+	errStop := errors.New("stop")
+
+	var seen orgs.OwnerState
+
+	err := repo.RemoveMember(t.Context(), org.ID, first.ID, func(state orgs.OwnerState) error {
+		seen = state
+
+		return errStop
+	})
+	if !errors.Is(err, errStop) {
+		t.Fatalf("RemoveMember() = %v, want the guard's own error back", err)
 	}
 
-	if got != 1 {
-		t.Errorf("OwnerCount() = %d, want 1 — overlapping demotions left the organization without an owner", got)
+	if seen.Owners != 1 {
+		t.Errorf("owners = %d, want 1 — overlapping demotions left the organization without an owner", seen.Owners)
 	}
 }

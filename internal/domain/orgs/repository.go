@@ -84,6 +84,37 @@ type Role struct {
 	Members int
 }
 
+// OwnerState is what the last-owner rule decides from.
+//
+// It is read inside the same transaction as the change it guards, with the
+// organization row locked, so the numbers cannot move between the check and the
+// write. That is the whole reason this exists as a type: the rule belongs in the
+// domain, the transaction belongs in the store, and passing the facts across is
+// what lets both be true at once.
+type OwnerState struct {
+	// Owners is how many active members hold the owner role. A membership whose
+	// account has been deleted is not one of them — see Members for that rule.
+	Owners int
+
+	// SubjectHoldsOwner says whether the membership being changed is one of them.
+	// It cannot be read before the transaction: the subject's roles could change
+	// in between, which is the race this design closes.
+	SubjectHoldsOwner bool
+}
+
+// OwnerGuard is the domain's verdict on an OwnerState. The repository calls it
+// inside the transaction and abandons the change if it returns an error.
+//
+// It is required, not optional. A change that cannot lose the last owner passes
+// RefuseLastOwnerLoss(false) rather than nothing, so there is no nil to forget
+// and no branch where the lock is quietly skipped.
+type OwnerGuard func(OwnerState) error
+
+// RoleGuard is the same arrangement for deleting a role: holders is counted
+// inside the transaction, so a role cannot be assigned to somebody between the
+// count and the delete and lose the assignment to the cascade.
+type RoleGuard func(holders int) error
+
 // Repository is the organization-scoped persistence.
 //
 // Every method takes the organization id as its second parameter, and that is
@@ -149,8 +180,9 @@ type Repository interface {
 	// this organization already has that email.
 	InviteMember(ctx context.Context, orgID uuid.UUID, email string, roleIDs []uuid.UUID, invitedBy uuid.UUID, at time.Time) (*Member, error)
 
-	// SetMemberStatus suspends or reinstates a membership.
-	SetMemberStatus(ctx context.Context, orgID, memberID uuid.UUID, status models.MembershipStatus, at time.Time) error
+	// SetMemberStatus suspends or reinstates a membership. guard is called inside
+	// the transaction, with the organization row locked.
+	SetMemberStatus(ctx context.Context, orgID, memberID uuid.UUID, status models.MembershipStatus, at time.Time, guard OwnerGuard) error
 
 	// RemoveMember deletes the membership and, by cascade, its role
 	// assignments.
@@ -159,7 +191,7 @@ type Repository interface {
 	// has been deleted, and it must stay that way: everything else reports such a
 	// row as not found, so refusing here too would leave it in the organization
 	// with no way to take it out. Do not add a Member lookup in front of this.
-	RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) error
+	RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, guard OwnerGuard) error
 
 	// ReplaceMemberRoles sets the member's roles to exactly roleIDs, in one
 	// transaction.
@@ -169,7 +201,7 @@ type Repository interface {
 	// neither of them chose. It returns ErrNotFound when any role id is not
 	// this organization's, which is what stops a role being borrowed across
 	// tenants.
-	ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID) error
+	ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID, guard OwnerGuard) error
 
 	// Roles lists the organization's roles with their permissions and holder
 	// counts.
@@ -207,15 +239,11 @@ type Repository interface {
 
 	// DeleteRole removes a custom role. The service refuses protected ones and
 	// ones still held; this is the storage half.
-	DeleteRole(ctx context.Context, orgID, roleID uuid.UUID) error
+	DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard RoleGuard) error
 
 	// ReplaceRolePermissions sets the role's permissions to exactly those
 	// given, in one transaction.
 	ReplaceRolePermissions(ctx context.Context, orgID, roleID uuid.UUID, permissions []authz.Permission) error
-
-	// OwnerCount is how many active members hold the owner role. The
-	// last-owner rule counts with it.
-	OwnerCount(ctx context.Context, orgID uuid.UUID) (int, error)
 }
 
 // Directory is the persistence that deliberately is not scoped to one

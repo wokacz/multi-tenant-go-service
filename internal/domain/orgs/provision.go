@@ -213,7 +213,9 @@ func (s *Service) PromoteToOwner(ctx context.Context, orgID, userID uuid.UUID, a
 	member, err := s.repo.MemberByUser(ctx, orgID, userID)
 	switch {
 	case err == nil:
-		if err := s.repo.ReplaceMemberRoles(ctx, orgID, member.ID, []uuid.UUID{owner.ID}); err != nil {
+		// The new set is exactly the owner role, so nothing can be losing it.
+		if err := s.repo.ReplaceMemberRoles(ctx, orgID, member.ID,
+			[]uuid.UUID{owner.ID}, RefuseLastOwnerLoss(false)); err != nil {
 			return err
 		}
 	case errors.Is(err, ErrNotFound):

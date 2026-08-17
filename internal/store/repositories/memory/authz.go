@@ -556,6 +556,7 @@ func (m *Authz) SetMemberStatus(
 	orgID, memberID uuid.UUID,
 	status models.MembershipStatus,
 	at time.Time,
+	guard orgs.OwnerGuard,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -565,7 +566,7 @@ func (m *Authz) SetMemberStatus(
 		return orgs.ErrNotFound
 	}
 
-	if err := m.refuseLastOwnerLossLocked(orgID, memberID, !status.GrantsPermissions()); err != nil {
+	if err := m.applyOwnerGuardLocked(orgID, memberID, guard); err != nil {
 		return err
 	}
 
@@ -587,7 +588,7 @@ func (m *Authz) SetMemberStatus(
 	return nil
 }
 
-func (m *Authz) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) error {
+func (m *Authz) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -596,7 +597,7 @@ func (m *Authz) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) err
 		return orgs.ErrNotFound
 	}
 
-	if err := m.refuseLastOwnerLossLocked(orgID, memberID, true); err != nil {
+	if err := m.applyOwnerGuardLocked(orgID, memberID, guard); err != nil {
 		return err
 	}
 
@@ -612,7 +613,12 @@ func (m *Authz) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) err
 	return nil
 }
 
-func (m *Authz) ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID) error {
+func (m *Authz) ReplaceMemberRoles(
+	ctx context.Context,
+	orgID, memberID uuid.UUID,
+	roleIDs []uuid.UUID,
+	guard orgs.OwnerGuard,
+) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -621,7 +627,7 @@ func (m *Authz) ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUI
 		return orgs.ErrNotFound
 	}
 
-	if err := m.refuseLastOwnerLossLocked(orgID, memberID, m.replacingRolesDropsOwnerLocked(orgID, roleIDs)); err != nil {
+	if err := m.applyOwnerGuardLocked(orgID, memberID, guard); err != nil {
 		return err
 	}
 
@@ -728,13 +734,25 @@ func (m *Authz) UpdateRole(ctx context.Context, orgID, roleID uuid.UUID, name, d
 	return nil
 }
 
-func (m *Authz) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID) error {
+func (m *Authz) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard orgs.RoleGuard) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	role, ok := m.roles[roleID]
 	if !ok || role.OrganizationID != orgID {
 		return orgs.ErrNotFound
+	}
+
+	holders := 0
+
+	for _, assigned := range m.memberRoles {
+		if slices.Contains(assigned, roleID) {
+			holders++
+		}
+	}
+
+	if err := guard(holders); err != nil {
+		return err
 	}
 
 	// BeforeDelete carries the protection rule, so a system role is refused
@@ -781,33 +799,6 @@ func (m *Authz) ReplaceRolePermissions(
 	})
 
 	return nil
-}
-
-func (m *Authz) OwnerCount(_ context.Context, orgID uuid.UUID) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	total := 0
-
-	for _, membership := range m.memberships {
-		if membership.OrganizationID != orgID || !membership.Status.GrantsPermissions() {
-			continue
-		}
-
-		if m.accountDeletedLocked(membership) {
-			continue
-		}
-
-		for _, roleID := range m.memberRoles[membership.ID] {
-			if role, ok := m.roles[roleID]; ok && role.Key == string(authz.RoleOwner) {
-				total++
-
-				break
-			}
-		}
-	}
-
-	return total, nil
 }
 
 // --- orgs.Provisioner ---
@@ -1323,63 +1314,19 @@ func (m *Authz) acceptInvitationLocked(
 	return nil
 }
 
-func (m *Authz) refuseLastOwnerLossLocked(orgID, memberID uuid.UUID, losingCapability bool) error {
-	if !losingCapability {
-		return nil
-	}
-
-	membership, ok := m.memberships[memberID]
-	if !ok || membership.OrganizationID != orgID {
-		return orgs.ErrNotFound
-	}
-
-	// accountDeletedLocked is checked here for the same reason ownerCountLocked
-	// checks it: both answer "is this an owner", and a rule that holds in one and
-	// not the other makes a membership whose account is gone impossible to
-	// remove — it counts as the owner being lost, but never as an owner who
-	// exists.
-	if !membership.Status.GrantsPermissions() ||
-		m.accountDeletedLocked(membership) ||
-		!m.holdsOwnerLocked(memberID) {
-		return nil
-	}
-
-	if m.ownerCountLocked(orgID) <= 1 {
-		return orgs.ErrLastOwner
-	}
-
-	return nil
+// applyOwnerGuardLocked hands the domain the same facts Postgres reads inside its
+// transaction. The mutex here plays the part the organization row lock plays
+// there: nothing else can be counting or writing while the guard decides.
+func (m *Authz) applyOwnerGuardLocked(orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
+	return guard(m.ownerStateLocked(orgID, memberID))
 }
 
-func (m *Authz) replacingRolesDropsOwnerLocked(orgID uuid.UUID, roleIDs []uuid.UUID) bool {
-	var ownerID uuid.UUID
-	for _, role := range m.roles {
-		if role.OrganizationID == orgID && role.Key == string(authz.RoleOwner) {
-			ownerID = role.ID
-
-			break
-		}
-	}
-
-	if ownerID == uuid.Nil {
-		return false
-	}
-
-	return !slices.Contains(roleIDs, ownerID)
-}
-
-func (m *Authz) holdsOwnerLocked(memberID uuid.UUID) bool {
-	for _, roleID := range m.memberRoles[memberID] {
-		if role, ok := m.roles[roleID]; ok && role.Key == string(authz.RoleOwner) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (m *Authz) ownerCountLocked(orgID uuid.UUID) int {
-	total := 0
+// ownerStateLocked counts active owners with live accounts, and says whether the
+// subject is one of them. Both answers come from the same walk, so they cannot
+// disagree about a membership that outlived its account — the disagreement that
+// once made such a row impossible to remove.
+func (m *Authz) ownerStateLocked(orgID, memberID uuid.UUID) orgs.OwnerState {
+	state := orgs.OwnerState{}
 
 	for _, membership := range m.memberships {
 		if membership.OrganizationID != orgID || !membership.Status.GrantsPermissions() {
@@ -1390,10 +1337,26 @@ func (m *Authz) ownerCountLocked(orgID uuid.UUID) int {
 			continue
 		}
 
-		if m.holdsOwnerLocked(membership.ID) {
-			total++
+		if !m.holdsOwnerLocked(membership.ID) {
+			continue
+		}
+
+		state.Owners++
+
+		if membership.ID == memberID {
+			state.SubjectHoldsOwner = true
 		}
 	}
 
-	return total
+	return state
+}
+
+func (m *Authz) holdsOwnerLocked(memberID uuid.UUID) bool {
+	for _, roleID := range m.memberRoles[memberID] {
+		if role, ok := m.roles[roleID]; ok && role.Key == string(authz.RoleOwner) {
+			return true
+		}
+	}
+
+	return false
 }

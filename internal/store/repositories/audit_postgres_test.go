@@ -56,7 +56,7 @@ func TestAnAuditRowRollsBackWithItsChange(t *testing.T) {
 
 	before := countEvents(t, db, org.ID)
 
-	err := repo.ReplaceMemberRoles(ctx, org.ID, membership.ID, []uuid.UUID{mine.ID, theirs.ID})
+	err := repo.ReplaceMemberRoles(ctx, org.ID, membership.ID, []uuid.UUID{mine.ID, theirs.ID}, orgs.RefuseLastOwnerLoss(true))
 	if !errors.Is(err, orgs.ErrNotFound) {
 		t.Fatalf("ReplaceMemberRoles() = %v, want ErrNotFound", err)
 	}
@@ -78,7 +78,7 @@ func TestAnAuditRowLandsWithItsChange(t *testing.T) {
 
 	ctx := actorContext(t, u.ID)
 
-	if err := repo.ReplaceMemberRoles(ctx, org.ID, membership.ID, []uuid.UUID{role.ID}); err != nil {
+	if err := repo.ReplaceMemberRoles(ctx, org.ID, membership.ID, []uuid.UUID{role.ID}, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("ReplaceMemberRoles() = %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestNothingIsRecordedWithoutAnActor(t *testing.T) {
 	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive)
 
 	// No actor on the context.
-	if err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{role.ID}); err != nil {
+	if err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{role.ID}, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("ReplaceMemberRoles() = %v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestTheHistorySurvivesWhatItDescribes(t *testing.T) {
 		t.Fatalf("CreateRole() = _, %v", err)
 	}
 
-	if err := repo.DeleteRole(ctx, org.ID, role.ID); err != nil {
+	if err := repo.DeleteRole(ctx, org.ID, role.ID, orgs.RefuseRoleInUse()); err != nil {
 		t.Fatalf("DeleteRole() = %v", err)
 	}
 

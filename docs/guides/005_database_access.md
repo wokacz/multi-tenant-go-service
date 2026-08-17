@@ -110,11 +110,53 @@ używają `PUT`, nie `PATCH`.
 Dwie równoczesne edycje w wariancie przyrostowym cicho zlewają się w zbiór, którego nie wybrał żaden z administratorów.
 W wariancie zastępującym ostatni wygrywa — w sposób, który da się wyjaśnić.
 
-## Ostatni właściciel zamyka się w transakcji
+## Reguła w domenie, transakcja w repozytorium
 
 Sprawdzenie „czy to ostatni właściciel" i mutacja, która odbiera tę zdolność, muszą iść **w jednej transakcji**, z
 `SELECT … FOR UPDATE` na wierszu organizacji. Dwa nakładające się zdegradowania oba widzą `owners > 1` i oba przechodzą,
 jeśli locka nie ma. `TestConcurrentDemotionsLeaveOneOwner` (Postgres) jest tym, co to pilnuje.
+
+Sama reguła nie mieszka jednak w SQL-u. Repozytorium przyjmuje **strażnika** z domeny, bierze blokadę, liczy fakty
+i pyta go o werdykt:
+
+```go
+// domena decyduje
+func RefuseLastOwnerLoss(losing bool) OwnerGuard {
+    return func(state OwnerState) error {
+        if !losing || !state.SubjectHoldsOwner {
+            return nil
+        }
+        if state.Owners <= 1 {
+            return ErrLastOwner
+        }
+        return nil
+    }
+}
+
+// repozytorium tylko dostarcza fakty pod blokadą
+func applyOwnerGuard(tx *gorm.DB, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
+    if err := lockOrganization(tx, orgID); err != nil {
+        return err
+    }
+    state, err := ownerStateTx(tx, orgID, memberID)
+    if err != nil {
+        return err
+    }
+    return guard(state)
+}
+```
+
+**Dlaczego tak, a nie regułą w zapytaniu:** reguła zapisana w SQL-u musi być powtórzona w fake'u, a dwie kopie w końcu się
+rozjeżdżają. Tak właśnie powstał błąd, w którym członkostwo z usuniętym kontem liczyło się jako właściciel w jednym
+zapytaniu i nie liczyło w drugim — wiersza nie dało się usunąć w ogóle. Szczegóły w
+[design/007](../design/007_authorization.md).
+
+Kiedy piszesz nową regułę tego typu:
+
+- **strażnik jest wymagany** — brak zmiany zdolności to `RefuseLastOwnerLoss(false)`, nigdy `nil`;
+- **blokuj wiersz organizacji**, nie coś innego. Wszystkie serializowane zmiany biorą tę samą blokadę, więc nie ma dwóch
+  kolejności i nie ma zakleszczeń;
+- **fakty licz wewnątrz transakcji.** Odczyt sprzed niej jest dokładnie tym wyścigiem, który zamykasz.
 
 ## Zawężenie idzie do `WHERE`
 

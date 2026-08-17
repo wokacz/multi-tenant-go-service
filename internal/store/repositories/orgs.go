@@ -384,6 +384,7 @@ func (r *Orgs) SetMemberStatus(
 	orgID, memberID uuid.UUID,
 	status models.MembershipStatus,
 	at time.Time,
+	guard orgs.OwnerGuard,
 ) error {
 	updates := map[string]any{"status": status}
 
@@ -400,7 +401,7 @@ func (r *Orgs) SetMemberStatus(
 	}
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := refuseLastOwnerLoss(tx, orgID, memberID, !status.GrantsPermissions()); err != nil {
+		if err := applyOwnerGuard(tx, orgID, memberID, guard); err != nil {
 			return err
 		}
 
@@ -426,9 +427,9 @@ func (r *Orgs) SetMemberStatus(
 	return translateOrgError("set member status", err)
 }
 
-func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) error {
+func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := refuseLastOwnerLoss(tx, orgID, memberID, true); err != nil {
+		if err := applyOwnerGuard(tx, orgID, memberID, guard); err != nil {
 			return err
 		}
 
@@ -455,14 +456,14 @@ func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) erro
 	return translateOrgError("remove member", err)
 }
 
-func (r *Orgs) ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID) error {
+func (r *Orgs) ReplaceMemberRoles(
+	ctx context.Context,
+	orgID, memberID uuid.UUID,
+	roleIDs []uuid.UUID,
+	guard orgs.OwnerGuard,
+) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		losingOwner, err := replacingRolesDropsOwner(tx, orgID, roleIDs)
-		if err != nil {
-			return err
-		}
-
-		if err := refuseLastOwnerLoss(tx, orgID, memberID, losingOwner); err != nil {
+		if err := applyOwnerGuard(tx, orgID, memberID, guard); err != nil {
 			return err
 		}
 
@@ -709,16 +710,30 @@ func (r *Orgs) UpdateRole(ctx context.Context, orgID, roleID uuid.UUID, name, de
 // DeleteRole loads the row first so BeforeDelete sees IsSystem — a bare
 // Where(...).Delete() hands the hook a zero-valued receiver and the protection
 // would not apply.
-func (r *Orgs) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID) error {
-	var role models.Role
+func (r *Orgs) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard orgs.RoleGuard) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// The same lock every other serialised change here takes, so this and a
+		// concurrent role assignment cannot interleave. Counting holders without it
+		// answers a question that stops being true before the delete lands.
+		if err := lockOrganization(tx, orgID); err != nil {
+			return err
+		}
 
-	err := r.db.WithContext(ctx).
-		First(&role, "id = ? AND organization_id = ?", roleID, orgID).Error
-	if err != nil {
-		return translateOrgError("delete role", err)
-	}
+		var role models.Role
+		if err := tx.First(&role, "id = ? AND organization_id = ?", roleID, orgID).Error; err != nil {
+			return err
+		}
 
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var holders int64
+		if err := tx.Model(&models.MembershipRole{}).
+			Where("role_id = ?", roleID).Count(&holders).Error; err != nil {
+			return err
+		}
+
+		if err := guard(int(holders)); err != nil {
+			return err
+		}
+
 		// Recorded before the delete: the role id is captured while the row is
 		// still there, and the key with it, so an entry about a role that no
 		// longer exists still says which one.
@@ -784,27 +799,6 @@ func replacePermissions(tx *gorm.DB, roleID uuid.UUID, permissions []authz.Permi
 	}
 
 	return tx.Create(&rows).Error
-}
-
-// OwnerCount counts the active members holding the owner role. Only active
-// ones: a suspended owner cannot administer anything, so counting them would
-// let the last usable owner be removed.
-func (r *Orgs) OwnerCount(ctx context.Context, orgID uuid.UUID) (int, error) {
-	var total int64
-
-	err := r.db.WithContext(ctx).
-		Table("membership_roles AS mr").
-		Joins("JOIN memberships m ON m.id = mr.membership_id").
-		Joins("JOIN roles r ON r.id = mr.role_id").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ? AND m.status = ? AND r.key = ?",
-			orgID, models.MembershipActive, string(authz.RoleOwner)).
-		Count(&total).Error
-	if err != nil {
-		return 0, fmt.Errorf("store: owner count: %w", err)
-	}
-
-	return int(total), nil
 }
 
 // MembershipsForUser lists the account's organizations with the roles it holds
@@ -1185,91 +1179,69 @@ func claimInvitation(
 	return &existing, nil
 }
 
-// refuseLastOwnerLoss serialises last-owner checks with the mutation that
-// would take the capability away. The organization row is locked so two
-// concurrent demotions cannot both observe owners > 1.
-func refuseLastOwnerLoss(tx *gorm.DB, orgID, memberID uuid.UUID, losingCapability bool) error {
-	if !losingCapability {
-		return nil
-	}
-
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		First(&models.Organization{}, "id = ?", orgID).Error; err != nil {
-		return err
-	}
-
-	// The join to users is inner, and matches ownerCountTx exactly. The two
-	// queries answer the same question — who is an owner here — and the rule has
-	// to be one rule. It was a LEFT JOIN, where the deleted_at condition filtered
-	// nothing: a membership whose account had been deleted counted as holding
-	// owner here but was invisible to ownerCountTx, so removing that row was
-	// refused with ErrLastOwner however many live owners the organization had,
-	// and promoting another one moved both numbers together. The row could not be
-	// removed at all.
-	var holds int64
-	err := tx.Table("membership_roles AS mr").
-		Joins("JOIN memberships m ON m.id = mr.membership_id").
-		Joins("JOIN roles r ON r.id = mr.role_id").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.id = ? AND m.organization_id = ? AND m.status = ? AND r.key = ?",
-			memberID, orgID, models.MembershipActive, string(authz.RoleOwner)).
-		Count(&holds).Error
-	if err != nil {
-		return err
-	}
-
-	if holds == 0 {
-		return nil
-	}
-
-	owners, err := ownerCountTx(tx, orgID)
-	if err != nil {
-		return err
-	}
-
-	if owners <= 1 {
-		return orgs.ErrLastOwner
-	}
-
-	return nil
+// lockOrganization takes the row lock every serialised change to an organization
+// shares.
+//
+// One lock object for all of them on purpose: last-owner checks and role deletes
+// both need to be ordered against concurrent role assignments, and taking two
+// different locks in two different orders is how deadlocks are built.
+func lockOrganization(tx *gorm.DB, orgID uuid.UUID) error {
+	return tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&models.Organization{}, "id = ?", orgID).Error
 }
 
-func ownerCountTx(tx *gorm.DB, orgID uuid.UUID) (int, error) {
-	var total int64
+// ownerStateTx assembles the facts the domain's last-owner rule decides from.
+//
+// Both numbers come from the same join, so they cannot disagree about a
+// membership whose account has been deleted — the disagreement that once made such
+// a row impossible to remove. The join to users is inner: a membership that
+// outlived its account holds nothing.
+func ownerStateTx(tx *gorm.DB, orgID, memberID uuid.UUID) (orgs.OwnerState, error) {
+	var rows []struct {
+		MembershipID uuid.UUID
+	}
 
 	err := tx.Table("membership_roles AS mr").
+		Select("m.id AS membership_id").
 		Joins("JOIN memberships m ON m.id = mr.membership_id").
 		Joins("JOIN roles r ON r.id = mr.role_id").
 		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
 		Where("m.organization_id = ? AND m.status = ? AND r.key = ?",
 			orgID, models.MembershipActive, string(authz.RoleOwner)).
-		Count(&total).Error
+		Scan(&rows).Error
 	if err != nil {
-		return 0, err
+		return orgs.OwnerState{}, err
 	}
 
-	return int(total), nil
+	state := orgs.OwnerState{}
+	seen := map[uuid.UUID]struct{}{}
+
+	for _, row := range rows {
+		if _, dup := seen[row.MembershipID]; dup {
+			continue
+		}
+
+		seen[row.MembershipID] = struct{}{}
+		state.Owners++
+
+		if row.MembershipID == memberID {
+			state.SubjectHoldsOwner = true
+		}
+	}
+
+	return state, nil
 }
 
-// replacingRolesDropsOwner reports whether the new role list leaves out this
-// organization's owner role. It says nothing about who holds it — that is
-// refuseLastOwnerLoss's question — so it takes no membership id.
-func replacingRolesDropsOwner(tx *gorm.DB, orgID uuid.UUID, roleIDs []uuid.UUID) (bool, error) {
-	var owner models.Role
-	if err := tx.Where("organization_id = ? AND key = ?", orgID, string(authz.RoleOwner)).
-		First(&owner).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-
-		return false, err
+// applyOwnerGuard locks the organization, reads the state and asks the domain.
+func applyOwnerGuard(tx *gorm.DB, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
+	if err := lockOrganization(tx, orgID); err != nil {
+		return err
 	}
 
-	for _, id := range roleIDs {
-		if id == owner.ID {
-			return false, nil
-		}
+	state, err := ownerStateTx(tx, orgID, memberID)
+	if err != nil {
+		return err
 	}
 
-	return true, nil
+	return guard(state)
 }
