@@ -927,6 +927,43 @@ func (m *Authz) RoleByKey(_ context.Context, orgID uuid.UUID, key string) (*orgs
 	return nil, orgs.ErrNotFound
 }
 
+func (m *Authz) MemberPermissions(_ context.Context, orgID, memberID uuid.UUID) ([]authz.Permission, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	membership, ok := m.memberships[memberID]
+	if !ok || membership.OrganizationID != orgID {
+		return nil, nil
+	}
+
+	seen := map[authz.Permission]struct{}{}
+	out := []authz.Permission{}
+
+	for _, roleID := range m.memberRoles[memberID] {
+		// A role that has been deleted takes its permissions with it, the same
+		// way the join in Postgres finds nothing for it.
+		if _, ok := m.roles[roleID]; !ok {
+			continue
+		}
+
+		for _, key := range m.rolePerms[roleID] {
+			perm := authz.Permission(key)
+			if _, dup := seen[perm]; dup {
+				continue
+			}
+
+			seen[perm] = struct{}{}
+			out = append(out, perm)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b authz.Permission) int {
+		return strings.Compare(string(a), string(b))
+	})
+
+	return out, nil
+}
+
 func (m *Authz) MemberByUser(_ context.Context, orgID, userID uuid.UUID) (*orgs.Member, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

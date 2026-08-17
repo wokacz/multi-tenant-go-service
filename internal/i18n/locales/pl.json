@@ -25,6 +25,7 @@
   "error.privilege_escalation": "nie można nadać uprawnienia, którego samemu się nie posiada",
   "error.unknown_permission": "nieznane uprawnienie",
   "error.wrong_scope": "uprawnienie należy do innego zakresu",
+  "error.insufficient_rank": "osoba, której zmiana dotyczy, ma uprawnienia, których nie masz",
   "error.role_protected": "ta rola jest częścią produktu i nie może być zmieniana",
   "error.last_owner": "organizacja zostałaby bez właściciela",
   "error.role_in_use": "rola jest wciąż przypisana członkom",

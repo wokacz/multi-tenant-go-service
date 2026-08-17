@@ -128,6 +128,38 @@ nadany **nigdy**, niezależnie od tego, co wołający ma. Bez tego odmowa wraca�
 `422 wrong_scope`. Osobny kod, a nie `unknown_permission`, bo katalog (`GET /v1/permissions`) oddaje każdy klucz **razem
 z zakresem** — klient, który o niego prosi, przeczytał go od nas, więc „nieznany" byłoby po prostu nieprawdą.
 
+## Reguła rangi
+
+`EnsureCanGrant` pilnuje **nadawania**. Druga połowa dotyczy **odbierania** i bez niej schemat był egzekwowany tylko
+w jedną stronę.
+
+`members.remove`, `members.suspend` i `members.roles.assign` należą do roli `admin`, a członkostwo właściciela jest dla
+każdego z nich zwykłym wierszem. Administrator mógł więc usunąć właściciela nad sobą, zawiesić go (czyli zamienić na
+`404` we wszystkim) albo podmienić mu role na `viewer` — bo kontrola anty-eskalacyjna patrzy wyłącznie na role
+**nadawane**, a `viewer` mieści się w zakresie admina. Efektem była inwersja: rola niższa neutralizuje wyższą. Hamowała
+to jedynie reguła ostatniego właściciela, czyli przy dwóch właścicielach admin mógł jednego wyciąć.
+
+Reguła: **nie wolno działać na członku, którego uprawnienia nie są podzbiorem twoich** (`authz.EnsureCanAffect`).
+Obowiązuje w trzech miejscach: usunięcie, zmiana statusu, zmiana ról. Przy zmianie ról działają obie kontrole — najpierw
+ranga (co cel *ma*), potem anty-eskalacja (co cel *dostanie*).
+
+Szczegóły warte zapamiętania:
+
+- **Działanie na sobie zawsze przechodzi.** Dziś przeszłoby i tak, bo grant jest wyprowadzany z ról wołającego w tej
+  organizacji, więc jego własne członkostwo ma dokładnie ten sam zbiór. Wyjątek jest zapisany jawnie, żeby „usuń mnie
+  z organizacji" nie zaczęło kiedyś zawodzić, gdy oba zbiory będą liczone z różnych miejsc.
+- **Status celu nie ma znaczenia.** `MemberPermissions` sumuje uprawnienia ról członkostwa niezależnie od statusu.
+  Zawieszony właściciel nie ma stać się usuwalny dla administratora tylko dlatego, że ktoś zawiesił go pierwszy.
+- **Nieaktualny klucz jest pomijany, nie liczony.** `Sanitize` i tak go odrzuca przy ewaluacji, więc nie nadaje celowi
+  niczego i nie może go chronić — inaczej jeden przestarzały wiersz w `role_permissions` czyniłby członka nietykalnym.
+- **Konsekwencja dla zaproszeń:** administrator nie wycofa zaproszenia wystawionego przez właściciela na rolę `owner`.
+  Zaproszone role są sprawdzane przy wystawianiu (`ensureRolesAreGrantable`), więc admin sam takiego nie wystawi, ale
+  cudzego też nie cofnie. To spójne z regułą i zamierzone.
+- **`403`, nie `404`.** Wołający może tego członka czytać, więc ukrywanie go byłoby i bezużyteczne, i mylące. Kod jest
+  osobny od `privilege_escalation`, bo tu nic nie jest nadawane.
+- Reguła rangi wyprzedza regułę ostatniego właściciela: „nie wolno ci tego w ogóle" jest ważniejsze niż „ta konkretna
+  zmiana zepsułaby organizację".
+
 ## Statusy odmowy
 
 | Sytuacja                                              | Status | `code`                 |
@@ -139,6 +171,7 @@ z zakresem** — klient, który o niego prosi, przeczytał go od nas, więc „n
 | zasób z cudzej organizacji                            | 404    | `not_found`            |
 | nadanie uprawnienia, którego się nie ma               | 403    | `privilege_escalation` |
 | uprawnienie z drugiego zakresu w roli                  | 422    | `wrong_scope`          |
+| zmiana dotyczy kogoś wyżej w hierarchii               | 403    | `insufficient_rank`    |
 | edycja roli systemowej                                | 403    | `role_protected`       |
 | ostatni właściciel                                    | 409    | `last_owner`           |
 | rola wciąż przypisana                                 | 409    | `role_in_use`          |

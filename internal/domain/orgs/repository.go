@@ -187,6 +187,16 @@ type Repository interface {
 	// A deleted account is ErrNotFound, the same as in Members and Member.
 	MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*Member, error)
 
+	// MemberPermissions is the union of what this membership's roles grant, in
+	// one query rather than one per role.
+	//
+	// Status is deliberately not considered. A suspended member grants nothing
+	// while suspended, but the question this answers is "how much power does this
+	// row carry", which is what EnsureCanAffect compares against the caller — and
+	// a suspended owner should not become removable by an administrator merely
+	// because somebody suspended them first.
+	MemberPermissions(ctx context.Context, orgID, memberID uuid.UUID) ([]authz.Permission, error)
+
 	// CreateRole stores a role and its permissions in one transaction. It
 	// returns ErrRoleKeyTaken when the key is already used here.
 	CreateRole(ctx context.Context, orgID uuid.UUID, role *models.Role, permissions []authz.Permission) (*Role, error)

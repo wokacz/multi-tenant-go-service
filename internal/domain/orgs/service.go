@@ -2,6 +2,7 @@ package orgs
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -145,11 +146,37 @@ func (s *Service) SetMemberStatus(
 		return ErrInvalidStatus
 	}
 
+	if err := s.ensureCanAffectMember(ctx, grant, member); err != nil {
+		return err
+	}
+
 	return s.repo.SetMemberStatus(ctx, orgID, memberID, status, time.Now().UTC())
 }
 
 func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID uuid.UUID) error {
-	return s.repo.RemoveMember(ctx, grant.OrganizationID(), memberID)
+	orgID := grant.OrganizationID()
+
+	// Read first, which this did not need to do before the rank rule existed. It
+	// also turns a membership whose account has been deleted into ErrNotFound
+	// here — Member refuses those — so the one path that must still work on such a
+	// row calls the repository directly, further down.
+	member, err := s.repo.Member(ctx, orgID, memberID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			// No member to compare ranks with. The row may still exist with a
+			// deleted account behind it, and removing it is the only way to clean
+			// that up, so the repository decides.
+			return s.repo.RemoveMember(ctx, orgID, memberID)
+		}
+
+		return err
+	}
+
+	if err := s.ensureCanAffectMember(ctx, grant, member); err != nil {
+		return err
+	}
+
+	return s.repo.RemoveMember(ctx, orgID, memberID)
 }
 
 // SetMemberRoles replaces somebody's roles.
@@ -172,7 +199,16 @@ func (s *Service) SetMemberRoles(
 ) (*Member, error) {
 	orgID := grant.OrganizationID()
 
-	if _, err := s.repo.Member(ctx, orgID, memberID); err != nil {
+	member, err := s.repo.Member(ctx, orgID, memberID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Both directions: what the member already holds must be within the caller's
+	// reach, and so must what they are about to be given. Checking only the second
+	// let an administrator replace an owner's roles with "viewer" — viewer being
+	// well inside an admin's own powers.
+	if err := s.ensureCanAffectMember(ctx, grant, member); err != nil {
 		return nil, err
 	}
 
@@ -342,6 +378,26 @@ func ensureOrganizationScoped(permissions []authz.Permission) error {
 	}
 
 	return nil
+}
+
+// ensureCanAffectMember applies the rank rule to one membership.
+//
+// Acting on oneself returns early. That is a guarantee rather than a fix: the
+// grant is resolved from the caller's own roles in this organization, so their
+// membership's permissions are the same set and the comparison would pass anyway.
+// Saying it outright means "remove me from this organization" cannot start
+// failing because the two are computed from different places later on.
+func (s *Service) ensureCanAffectMember(ctx context.Context, grant *authz.Grant, member *Member) error {
+	if member.UserID != uuid.Nil && member.UserID == grant.Actor() {
+		return nil
+	}
+
+	permissions, err := s.repo.MemberPermissions(ctx, grant.OrganizationID(), member.ID)
+	if err != nil {
+		return err
+	}
+
+	return authz.EnsureCanAffect(grant, permissions)
 }
 
 func (s *Service) ensureRolesAreGrantable(ctx context.Context, grant *authz.Grant, roleIDs []uuid.UUID) error {

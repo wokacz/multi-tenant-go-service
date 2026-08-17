@@ -131,6 +131,12 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, authz.ErrWrongScope):
 		return newDocument(locale, http.StatusUnprocessableEntity, CodeWrongScope)
 
+	// 403 and not 404: the caller may read this member, so hiding them would be
+	// both useless and confusing. The refusal is about rank, which is why it does
+	// not reuse privilege_escalation — nothing is being granted here.
+	case errors.Is(err, authz.ErrInsufficientRank):
+		return newDocument(locale, http.StatusForbidden, CodeInsufficientRank)
+
 	// 403 rather than 422: the request is well formed and the role exists, the
 	// caller simply may not edit this one, and no rewording of the body would
 	// make it succeed.

@@ -37,6 +37,10 @@ var (
 	// could ever carry, which is a malformed request rather than a refused one.
 	ErrWrongScope = errors.New("authz: permission belongs to another scope")
 
+	// ErrInsufficientRank means the target of the change holds something the
+	// caller does not. See EnsureCanAffect.
+	ErrInsufficientRank = errors.New("authz: the subject holds permissions the caller does not")
+
 	// ErrScopeMismatch means an organization-scoped permission was asked about
 	// without an organization, or a system-scoped one with one. Always a bug in
 	// the caller, never something a request can provoke on its own.
@@ -377,6 +381,36 @@ func (s *Service) authorizeSystem(ctx context.Context, req Request) (*Grant, err
 // authorization system has been talked out of its own rules. The same applies
 // to assigning an existing role to someone else, which is why the check takes a
 // permission set rather than a role id and both call sites share it.
+// EnsureCanAffect refuses a change aimed at somebody who holds more than the
+// caller does.
+//
+// EnsureCanGrant is the rule about handing power out. This is the rule about
+// taking it away, and without it the scheme is enforced in one direction only.
+// members.remove, members.suspend and members.roles.assign all belong to "admin",
+// and an owner's membership is an ordinary row to each of them — so an
+// administrator could remove the owner above them, suspend them into a 404, or
+// replace their roles with "viewer", since EnsureCanGrant only inspects the roles
+// being assigned and viewer is well within an admin's reach. The result is an
+// inversion: the lesser role neutralises the greater one.
+//
+// A stale key — one no longer in the catalog — is skipped rather than refused.
+// Sanitize already drops it when permissions are resolved, so it grants the target
+// nothing and therefore protects them from nothing; treating it as protection
+// would make a member with one obsolete row in role_permissions untouchable.
+func EnsureCanAffect(g *Grant, targetPermissions []Permission) error {
+	for _, perm := range targetPermissions {
+		if !Known(perm) {
+			continue
+		}
+
+		if !g.Has(perm) {
+			return ErrInsufficientRank
+		}
+	}
+
+	return nil
+}
+
 func EnsureCanGrant(g *Grant, requested []Permission) error {
 	for _, perm := range requested {
 		if !Known(perm) {

@@ -1026,6 +1026,32 @@ func (r *Orgs) MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*orgs
 	return &members[0], nil
 }
 
+func (r *Orgs) MemberPermissions(ctx context.Context, orgID, memberID uuid.UUID) ([]authz.Permission, error) {
+	var keys []string
+
+	// Scoped by organization for the same reason every other method here is: a
+	// membership id from another tenant must answer nothing rather than answer
+	// truthfully. Status is not filtered — see the interface for why.
+	err := r.db.WithContext(ctx).
+		Table("membership_roles AS mr").
+		Distinct("rp.permission_key").
+		Joins("JOIN memberships m ON m.id = mr.membership_id").
+		Joins("JOIN role_permissions rp ON rp.role_id = mr.role_id").
+		Where("m.id = ? AND m.organization_id = ?", memberID, orgID).
+		Order("rp.permission_key ASC").
+		Scan(&keys).Error
+	if err != nil {
+		return nil, fmt.Errorf("store: member permissions: %w", err)
+	}
+
+	out := make([]authz.Permission, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, authz.Permission(key))
+	}
+
+	return out, nil
+}
+
 func (r *Orgs) AcceptInvitation(
 	ctx context.Context,
 	memberID, userID uuid.UUID,

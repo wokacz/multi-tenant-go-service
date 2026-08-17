@@ -34,15 +34,20 @@ func TestSetMemberStatusRefusesInvited(t *testing.T) {
 	service, repo := testService(t)
 
 	orgID := repo.SeedOrganization("acme", "Acme")
-	role := repo.SeedShippedRole(orgID, authz.RoleOwner)
+	viewer := repo.SeedShippedRole(orgID, authz.RoleViewer)
 
 	actor := uuid.Must(uuid.NewV7())
-	repo.SeedMember(orgID, actor, models.MembershipActive, role)
+	repo.SeedMember(orgID, actor, models.MembershipActive, repo.SeedShippedRole(orgID, authz.RoleOwner))
 
+	// A subject holding less than the caller, so the rank rule is satisfied and
+	// this test is about the status argument alone.
 	subject := uuid.Must(uuid.NewV7())
-	member := repo.SeedMember(orgID, subject, models.MembershipActive, role)
+	member := repo.SeedMember(orgID, subject, models.MembershipActive, viewer)
 
-	grant := authz.NewGrant(actor, orgID, []authz.Permission{authz.PermMembersSuspend})
+	grant := authz.NewGrant(actor, orgID, []authz.Permission{
+		authz.PermMembersSuspend,
+		authz.PermOrganizationRead,
+	})
 
 	err := service.SetMemberStatus(t.Context(), grant, member, models.MembershipInvited)
 	if !errors.Is(err, orgs.ErrInvalidStatus) {

@@ -302,6 +302,82 @@ func TestASecondOwnerMakesDemotionPossible(t *testing.T) {
 		expect(t, http.StatusOK)
 }
 
+// TestAnAdministratorCannotReachAboveThemselves is the rank rule end to end.
+//
+// members.remove, members.suspend and members.roles.assign all belong to "admin",
+// and an owner's membership is an ordinary row to each of them. Before this rule
+// an administrator could remove the owner above them, suspend them into a 404, or
+// replace their roles with "viewer" — the anti-escalation check only inspects the
+// roles being assigned, and viewer is well inside an admin's own powers. The
+// result was an inversion: the lesser role neutralising the greater one.
+func TestAnAdministratorCannotReachAboveThemselves(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleAdmin)
+
+	owner := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, owner)
+
+	// A second owner, so the last-owner rule cannot refuse these on its own.
+	// Without it the organization is protected here by accident, and the hole this
+	// test is about — an administrator cutting an owner out of an organization that
+	// has more than one — stays invisible.
+	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, owner)
+
+	member := f.orgPath("/members/" + target.String())
+
+	for _, probe := range []struct {
+		name, method, path, body string
+	}{
+		// remove goes last: if the rule ever stops working, the earlier probes
+		// still act on a member who is there, so each failure names its own
+		// problem instead of cascading into a 404.
+		{"suspend", http.MethodPatch, member, `{"status":"suspended"}`},
+		{"demote", http.MethodPut, member + "/roles", fmt.Sprintf(`{"role_ids":[%q]}`, viewer)},
+		{"remove", http.MethodDelete, member, ""},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			res := f.call(t, probe.method, probe.path, probe.body).expect(t, http.StatusForbidden)
+
+			var doc problemBody
+			res.decode(t, &doc)
+
+			if doc.Code != problem.CodeInsufficientRank {
+				t.Errorf("code = %q, want %q", doc.Code, problem.CodeInsufficientRank)
+			}
+		})
+	}
+}
+
+// TestAnOwnerCanStillActOnAnAdministrator proves the rank rule has a direction.
+// A blanket ban on touching other people would be easy and useless.
+func TestAnOwnerCanStillActOnAnAdministrator(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+
+	admin := f.repo.SeedShippedRole(f.orgID, authz.RoleAdmin)
+	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, admin)
+
+	f.call(t, http.MethodPatch, f.orgPath("/members/"+target.String()),
+		`{"status":"suspended"}`).expect(t, http.StatusOK)
+
+	f.call(t, http.MethodDelete, f.orgPath("/members/"+target.String()), "").
+		expect(t, http.StatusNoContent)
+}
+
+// TestTheRankRuleDoesNotBlockLeaving keeps the one exit an organization has open.
+// The caller's own membership carries exactly the permissions their grant does, so
+// the comparison passes — this pins that it stays that way.
+func TestTheRankRuleDoesNotBlockLeaving(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleAdmin)
+
+	// A second, more powerful member, so nothing else about the organization makes
+	// this refusable: the caller is not the last owner and holds no owner role.
+	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive,
+		f.repo.SeedShippedRole(f.orgID, authz.RoleOwner))
+
+	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").
+		expect(t, http.StatusNoContent)
+}
+
 // TestAnOwnerWhoseAccountIsDeletedCanBeRemoved is the recovery path for a
 // membership that outlived its person.
 //
