@@ -20,6 +20,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,12 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
+
+// wholePage is the limit a case passes when the page is not what it is testing.
+// The listings are paged, and the repository does not clamp a non-positive limit
+// into "everything" — see orgs.Repository — so a case that just wants the rows has
+// to name a number.
+const wholePage = 1000
 
 // backend is one implementation, plus the few fixtures a case cannot build through
 // the interfaces themselves.
@@ -52,13 +59,44 @@ type backend struct {
 	perms authz.Repository
 	users user.Repository
 
-	newAccount    func(t *testing.T) (uuid.UUID, string)
-	registerEmail func(t *testing.T, email string) error
-	newOrgSlug    func(t *testing.T, slug string) error
-	deleteAccount func(t *testing.T, userID uuid.UUID)
-	newOrg        func(t *testing.T) uuid.UUID
-	deleteOrg     func(t *testing.T, orgID uuid.UUID)
-	newRole       func(t *testing.T, orgID uuid.UUID, key string, permissions ...string) uuid.UUID
+	newNamedAccount func(t *testing.T, name string) (uuid.UUID, string)
+	registerEmail   func(t *testing.T, email string) error
+	newOrgSlug      func(t *testing.T, slug string) error
+	deleteAccount   func(t *testing.T, userID uuid.UUID)
+	newOrg          func(t *testing.T) uuid.UUID
+	deleteOrg       func(t *testing.T, orgID uuid.UUID)
+	newRole         func(t *testing.T, orgID uuid.UUID, key string, permissions ...string) uuid.UUID
+
+	// newShippedRole materialises one of the catalog's roles, which is the only way
+	// a case can get its hands on a role with is_system set — and the role listing
+	// orders by that column before it orders by key.
+	newShippedRole func(t *testing.T, orgID uuid.UUID, key authz.RoleKey) uuid.UUID
+}
+
+// newAccount is the common case: an account whose name no case looks at.
+func (b *backend) newAccount(t *testing.T) (uuid.UUID, string) {
+	t.Helper()
+
+	return b.newNamedAccount(t, "Ada")
+}
+
+// accountFixture is shared because both implementations build an account through
+// the same interface. They each had their own identical copy of this.
+func accountFixture(users user.Repository) func(*testing.T, string) (uuid.UUID, string) {
+	return func(t *testing.T, name string) (uuid.UUID, string) {
+		t.Helper()
+
+		u := &models.User{
+			Name:         name,
+			Email:        "ada+" + uuid.Must(uuid.NewV7()).String() + "@example.com",
+			PasswordHash: "not-a-real-hash",
+		}
+		if err := users.Create(t.Context(), u); err != nil {
+			t.Fatalf("create account: %v", err)
+		}
+
+		return u.ID, u.Email
+	}
 }
 
 // eachBackend runs fn against every implementation available in this environment.
@@ -88,20 +126,7 @@ func newMemoryBackend(t *testing.T) *backend {
 		perms: repo,
 		users: users,
 
-		newAccount: func(t *testing.T) (uuid.UUID, string) {
-			t.Helper()
-
-			u := &models.User{
-				Name:         "Ada",
-				Email:        "ada+" + uuid.Must(uuid.NewV7()).String() + "@example.com",
-				PasswordHash: "not-a-real-hash",
-			}
-			if err := users.Create(t.Context(), u); err != nil {
-				t.Fatalf("create account: %v", err)
-			}
-
-			return u.ID, u.Email
-		},
+		newNamedAccount: accountFixture(users),
 		registerEmail: func(t *testing.T, email string) error {
 			t.Helper()
 
@@ -141,6 +166,11 @@ func newMemoryBackend(t *testing.T) *backend {
 			t.Helper()
 
 			return repo.SeedRole(orgID, key, permissions...)
+		},
+		newShippedRole: func(t *testing.T, orgID uuid.UUID, key authz.RoleKey) uuid.UUID {
+			t.Helper()
+
+			return repo.SeedShippedRole(orgID, key)
 		},
 	}
 }
@@ -187,20 +217,7 @@ func newPostgresBackend(t *testing.T) *backend {
 		perms: repositories.NewAuthz(db),
 		users: users,
 
-		newAccount: func(t *testing.T) (uuid.UUID, string) {
-			t.Helper()
-
-			u := &models.User{
-				Name:         "Ada",
-				Email:        "ada+" + uuid.Must(uuid.NewV7()).String() + "@example.com",
-				PasswordHash: "not-a-real-hash",
-			}
-			if err := users.Create(t.Context(), u); err != nil {
-				t.Fatalf("create account: %v", err)
-			}
-
-			return u.ID, u.Email
-		},
+		newNamedAccount: accountFixture(users),
 		registerEmail: func(t *testing.T, email string) error {
 			t.Helper()
 
@@ -256,6 +273,22 @@ func newPostgresBackend(t *testing.T) *backend {
 				&models.Role{Key: key, Name: key}, perms)
 			if err != nil {
 				t.Fatalf("create role: %v", err)
+			}
+
+			return role.ID
+		},
+		newShippedRole: func(t *testing.T, orgID uuid.UUID, key authz.RoleKey) uuid.UUID {
+			t.Helper()
+
+			def, ok := authz.LookupRole(key)
+			if !ok {
+				t.Fatalf("no shipped role named %q", key)
+			}
+
+			role, err := repo.CreateRole(t.Context(), orgID,
+				&models.Role{Key: string(key), Name: def.Name, IsSystem: true}, def.Permissions)
+			if err != nil {
+				t.Fatalf("create shipped role: %v", err)
 			}
 
 			return role.ID
@@ -316,7 +349,7 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 
 		b.deleteAccount(t, goneUser)
 
-		members, err := b.repo.Members(t.Context(), orgID)
+		members, err := b.repo.Members(t.Context(), orgID, wholePage, 0)
 		if err != nil {
 			t.Fatalf("Members() = _, %v", err)
 		}
@@ -503,7 +536,7 @@ func TestAnInvitationTravelsFromOfferToMembership(t *testing.T) {
 		}
 
 		// Inviting is not joining.
-		members, err := b.repo.Members(t.Context(), orgID)
+		members, err := b.repo.Members(t.Context(), orgID, wholePage, 0)
 		if err != nil {
 			t.Fatalf("Members() = _, %v", err)
 		}
@@ -937,4 +970,154 @@ func TestADeletedAccountIsNotFoundByEitherLookup(t *testing.T) {
 			t.Errorf("ByEmail() for a deleted account = %v, want ErrNotFound", err)
 		}
 	})
+}
+
+// TestMembersAreOrderedByNameAndPaged pins the ordering both implementations have
+// to produce, because with a limit and an offset the order decides which rows a
+// page contains. The fake sorted by name-or-email, a leftover from when an
+// invitation was a membership with no account; Postgres sorts by name.
+func TestMembersAreOrderedByNameAndPaged(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+
+		// Inserted out of order, so neither insertion order nor id order can pass
+		// for alphabetical by accident.
+		for _, name := range []string{"Dana", "Ada", "Eve", "Bo", "Cy"} {
+			userID, _ := b.newNamedAccount(t, name)
+			if _, err := b.repo.AddMember(
+				t.Context(), orgID, userID, nil, uuid.Nil, time.Now().UTC(),
+			); err != nil {
+				t.Fatalf("AddMember(%q) = _, %v", name, err)
+			}
+		}
+
+		want := []string{"Ada", "Bo", "Cy", "Dana", "Eve"}
+
+		if got := memberNames(t, b, orgID, wholePage, 0); !slices.Equal(got, want) {
+			t.Errorf("Members(whole page) = %v, want %v", got, want)
+		}
+
+		if got := memberNames(t, b, orgID, 2, 0); !slices.Equal(got, want[:2]) {
+			t.Errorf("Members(2, 0) = %v, want %v", got, want[:2])
+		}
+
+		if got := memberNames(t, b, orgID, 2, 2); !slices.Equal(got, want[2:4]) {
+			t.Errorf("Members(2, 2) = %v, want %v", got, want[2:4])
+		}
+
+		// The last page is short rather than an error, which is how a client knows
+		// it has reached the end.
+		if got := memberNames(t, b, orgID, 2, 4); !slices.Equal(got, want[4:]) {
+			t.Errorf("Members(2, 4) = %v, want %v", got, want[4:])
+		}
+
+		if got := memberNames(t, b, orgID, 2, 99); len(got) != 0 {
+			t.Errorf("Members(2, 99) = %v, want nothing", got)
+		}
+	})
+}
+
+// TestMembersWithTheSameNamePageWithoutRepeating is why the order carries the
+// membership id.
+//
+// Sorting by name alone leaves ties, and a sort with ties may return them in any
+// order it likes from one query to the next — which with an offset means one row
+// appears on two pages and another on none. Three people called Ada is not a
+// contrived case; it is a company with three Kowalskis.
+func TestMembersWithTheSameNamePageWithoutRepeating(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+
+		want := make([]uuid.UUID, 0, 3)
+
+		for range 3 {
+			memberID, _ := addMember(t, b, orgID)
+			want = append(want, memberID)
+		}
+
+		seen := make([]uuid.UUID, 0, 3)
+		for offset := 0; offset < 4; offset += 2 {
+			members, err := b.repo.Members(t.Context(), orgID, 2, offset)
+			if err != nil {
+				t.Fatalf("Members(2, %d) = _, %v", offset, err)
+			}
+
+			for _, member := range members {
+				seen = append(seen, member.ID)
+			}
+		}
+
+		slices.SortFunc(seen, compareIDs)
+		slices.SortFunc(want, compareIDs)
+
+		if !slices.Equal(seen, want) {
+			t.Errorf("two pages of two saw %v, want each of %v exactly once", seen, want)
+		}
+	})
+}
+
+// TestRolesPutTheShippedOnesFirstAndPage pins the other listing's order. The fake
+// sorted by key only and ignored is_system entirely, which nothing noticed while
+// every role came back in one response.
+func TestRolesPutTheShippedOnesFirstAndPage(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+
+		b.newRole(t, orgID, "auditor", string(authz.PermOrganizationRead))
+		b.newRole(t, orgID, "billing", string(authz.PermOrganizationRead))
+		b.newShippedRole(t, orgID, authz.RoleOwner)
+
+		// The shipped role first even though its key sorts last of the three.
+		want := []string{string(authz.RoleOwner), "auditor", "billing"}
+
+		if got := roleKeys(t, b, orgID, wholePage, 0); !slices.Equal(got, want) {
+			t.Errorf("Roles(whole page) = %v, want %v", got, want)
+		}
+
+		if got := roleKeys(t, b, orgID, 1, 0); !slices.Equal(got, want[:1]) {
+			t.Errorf("Roles(1, 0) = %v, want %v", got, want[:1])
+		}
+
+		if got := roleKeys(t, b, orgID, 2, 1); !slices.Equal(got, want[1:]) {
+			t.Errorf("Roles(2, 1) = %v, want %v", got, want[1:])
+		}
+	})
+}
+
+func memberNames(t *testing.T, b *backend, orgID uuid.UUID, limit, offset int) []string {
+	t.Helper()
+
+	members, err := b.repo.Members(t.Context(), orgID, limit, offset)
+	if err != nil {
+		t.Fatalf("Members(%d, %d) = _, %v", limit, offset, err)
+	}
+
+	names := make([]string, 0, len(members))
+	for _, member := range members {
+		names = append(names, member.Name)
+	}
+
+	return names
+}
+
+func roleKeys(t *testing.T, b *backend, orgID uuid.UUID, limit, offset int) []string {
+	t.Helper()
+
+	roles, err := b.repo.Roles(t.Context(), orgID, limit, offset)
+	if err != nil {
+		t.Fatalf("Roles(%d, %d) = _, %v", limit, offset, err)
+	}
+
+	keys := make([]string, 0, len(roles))
+	for _, role := range roles {
+		keys = append(keys, role.Key)
+	}
+
+	return keys
+}
+
+// compareIDs orders identifiers so two collections of them can be compared.
+// uuid.UUID is not cmp.Ordered, so this goes through the string form.
+func compareIDs(a, b uuid.UUID) int {
+	return strings.Compare(a.String(), b.String())
 }

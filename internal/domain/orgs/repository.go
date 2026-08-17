@@ -158,6 +158,12 @@ type RoleGuard func(holders int) error
 // a compile error rather than a hole somebody has to spot in review, and a row
 // from another tenant simply cannot be reached.
 //
+// The paged methods expect a positive limit. Nothing here clamps one: Service is
+// where the caps live, so a limit of zero returns nothing rather than everything,
+// on both implementations. That is the harmless reading of a mistake — an empty
+// page is visible, while silently answering with the whole table is what
+// pagination exists to prevent.
+//
 // TestScopedRepositoryMethodsTakeAnOrganization enforces the shape.
 type Repository interface {
 	// Organization returns the organization, or ErrNotFound when it does not
@@ -184,7 +190,11 @@ type Repository interface {
 	// This is the one statement of that rule. Every method here that resolves a
 	// membership to a person answers it the same way: Member, MemberByUser, and
 	// the last-owner check.
-	Members(ctx context.Context, orgID uuid.UUID) ([]Member, error)
+	//
+	// Paged, because it was not: an organization with fifty thousand members
+	// answered with all of them, and then asked for their roles with an IN list of
+	// fifty thousand ids. Ordered by name so the pages are stable between calls.
+	Members(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]Member, error)
 
 	// Member returns one membership by its id, or ErrNotFound when it belongs
 	// to another organization or its account has been deleted.
@@ -244,8 +254,8 @@ type Repository interface {
 	ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID, guard OwnerGuard) error
 
 	// Roles lists the organization's roles with their permissions and holder
-	// counts.
-	Roles(ctx context.Context, orgID uuid.UUID) ([]Role, error)
+	// counts, paged and ordered by key.
+	Roles(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]Role, error)
 
 	// Role returns one role, or ErrNotFound when it belongs to another
 	// organization.

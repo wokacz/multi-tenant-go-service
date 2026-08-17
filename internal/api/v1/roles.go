@@ -54,6 +54,7 @@ type PermissionResponse struct {
 
 type ListRolesInput struct {
 	OrgID uuid.UUID `path:"orgID" format:"uuid" doc:"Organization id"`
+	PageInput
 }
 
 type ListRolesOutput struct {
@@ -231,13 +232,13 @@ func (h *roleHandlers) catalog(_ context.Context, _ *ListPermissionsInput) (*Lis
 	return out, nil
 }
 
-func (h *roleHandlers) list(ctx context.Context, _ *ListRolesInput) (*ListRolesOutput, error) {
+func (h *roleHandlers) list(ctx context.Context, in *ListRolesInput) (*ListRolesOutput, error) {
 	grant, err := grantFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	roles, err := h.orgs.Roles(ctx, grant)
+	roles, err := h.orgs.Roles(ctx, grant, in.Limit, in.Offset)
 	if err != nil {
 		return nil, problem.Error(ctx, err)
 	}

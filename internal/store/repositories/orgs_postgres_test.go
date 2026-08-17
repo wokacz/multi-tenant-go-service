@@ -14,6 +14,12 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
+// wholePage is the limit a case passes when the page is not what it is testing.
+// The listings are paged, and the repository does not clamp a non-positive limit
+// into "everything" — see orgs.Repository — so a case that just wants the rows has
+// to name a number.
+const wholePage = 1000
+
 // These cover what the in-memory fake reimplements in Go: the transactional
 // replaces, the filtered count that refuses another organization's role id, the
 // owner count's join, and the cascades.
@@ -252,7 +258,7 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 		t.Fatalf("delete user: %v", err)
 	}
 
-	members, err := repo.Members(t.Context(), org.ID)
+	members, err := repo.Members(t.Context(), org.ID, wholePage, 0)
 	if err != nil {
 		t.Fatalf("Members() = _, %v", err)
 	}
@@ -525,7 +531,7 @@ func TestInviteMemberStoresAnUnknownAddress(t *testing.T) {
 
 	// No membership was created: an invitation is an offer, and the address it was
 	// sent to is not evidence that anybody holds it.
-	members, err := repo.Members(t.Context(), org.ID)
+	members, err := repo.Members(t.Context(), org.ID, wholePage, 0)
 	if err != nil {
 		t.Fatalf("Members() = _, %v", err)
 	}

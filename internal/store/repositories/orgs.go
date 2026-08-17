@@ -140,7 +140,12 @@ type memberRow struct {
 // "AND u.deleted_at IS NULL" filtered nothing and a deleted account stayed on the
 // list with an empty name. Every membership has an account behind it now, so the
 // rule "a row whose account is gone is not a member" is the join itself.
-func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID) ([]orgs.Member, error) {
+// It is paged, and the order carries the membership id as a tiebreaker. Names are
+// not unique, and a sort with ties is free to return them in any order it likes
+// between two queries — which with an offset means a page boundary that drops one
+// row and repeats another. The id makes the order total, so the same table always
+// pages the same way.
+func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]orgs.Member, error) {
 	var rows []memberRow
 
 	err := r.db.WithContext(ctx).
@@ -148,7 +153,9 @@ func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID) ([]orgs.Member, err
 		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
 		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
 		Where("m.organization_id = ?", orgID).
-		Order("u.name ASC").
+		Order("u.name ASC, m.id ASC").
+		Limit(limit).
+		Offset(offset).
 		Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("store: members: %w", err)
@@ -478,11 +485,16 @@ func containsID(ids []uuid.UUID, id uuid.UUID) bool {
 	return false
 }
 
-func (r *Orgs) Roles(ctx context.Context, orgID uuid.UUID) ([]orgs.Role, error) {
+// Roles pages by (is_system, key). The shipped roles come first because that is
+// the order the settings screen shows them in, and key is unique within an
+// organization, so the order is already total and the pages are stable.
+func (r *Orgs) Roles(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]orgs.Role, error) {
 	var rows []models.Role
 	if err := r.db.WithContext(ctx).
 		Where("organization_id = ?", orgID).
 		Order("is_system DESC, key ASC").
+		Limit(limit).
+		Offset(offset).
 		Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("store: roles: %w", err)
 	}

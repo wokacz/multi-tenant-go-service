@@ -63,7 +63,9 @@ tasks:
       - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
       - atlas migrate apply --dir "file://migrations"
         --url "postgres://postgres:postgres@localhost:{{.PORT}}/postgres?sslmode=disable"
-      - POSTGRES_TEST=1 POSTGRES_PORT={{.PORT}} go test ./internal/store/... -count=1
+      # CLI_ARGS so one case can be aimed at the real store while it is being
+      # written: task test:store -- -run TestSomething -v
+      - POSTGRES_TEST=1 POSTGRES_PORT={{.PORT}} go test ./internal/store/... -count=1 {{.CLI_ARGS}}
 
   cover:
     desc: Run the tests and open an HTML coverage report
@@ -207,6 +209,17 @@ tasks:
     desc: Install the web client dependencies
     cmds:
       - cd clients/web && npm install
+
+  web:api:
+    desc: Regenerate the committed Angular client from the OpenAPI document
+    # Run this whenever a handler's contract changes. The generated client is
+    # committed, and it had already drifted several commits behind the spec before
+    # anybody looked — the generator's own output is unformatted, so the format step
+    # is part of the task rather than something to remember afterwards.
+    cmds:
+      - task: openapi
+      - cd clients/web && npm run api:generate
+      - task: web:format
 
   web:serve:
     desc: Serve the Swagger UI for the OpenAPI document

@@ -2352,6 +2352,27 @@ paths:
             description: Organization id
             format: uuid
             type: string
+        - description: How many to return
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 100
+            description: How many to return
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many to skip
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many to skip
+            format: int64
+            minimum: 0
+            type: integer
       responses:
         "200":
           content:
@@ -2693,6 +2714,27 @@ paths:
             description: Organization id
             format: uuid
             type: string
+        - description: How many to return
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 100
+            description: How many to return
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many to skip
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many to skip
+            format: int64
+            minimum: 0
+            type: integer
       responses:
         "200":
           content:

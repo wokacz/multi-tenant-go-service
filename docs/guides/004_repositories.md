@@ -53,6 +53,32 @@ Konwencje:
 Rzeczy niezwiązane z pojedynczą organizacją (tworzenie organizacji, listowanie kont) idą do **osobnego** interfejsu —
 `Provisioner`, `Directory` — żeby zasada „każda metoda tutaj jest zawężona" nie miała gwiazdek.
 
+## Paginacja
+
+Każda metoda, która zwraca listę, przyjmuje `limit` i `offset`. Limit **przycina
+warstwa domenowa** — `orgs.MaxMemberPage`, `orgs.MaxRolePage`,
+`user.MaxUserPage` — a nie repozytorium i nie handler:
+
+- schemat huma (`PageInput`) odrzuca zbyt duży limit na wejściu, żeby klient
+  dostał czytelny błąd 422,
+- `Service` przycina go jeszcze raz, żeby reguła nie zależała od tego, czy
+  wywołanie przyszło z HTTP.
+
+Repozytorium nie interpretuje limitu zero jako „wszystko". Zwraca pustą stronę.
+Odpowiedź na cichą pomyłkę ma być widoczna, a nie polegać na wysłaniu całej
+tabeli — po to jest paginacja.
+
+**Porządek musi być totalny.** `ORDER BY u.name` z `LIMIT`/`OFFSET` nie wystarczy:
+nazwiska się powtarzają, a sortowanie z remisami może zwrócić remisujące wiersze
+w dowolnej kolejności przy każdym zapytaniu. Wtedy jeden wiersz trafia na dwie
+strony, a inny na żadną. Dlatego listowanie członków sortuje po `(name, id)` —
+identyfikator jest rozstrzygający — a listowanie roli po `(is_system, key)`, gdzie
+`key` jest już unikalny w organizacji.
+
+To samo dotyczy atrapy w `memory`: jeśli sortuje inaczej niż SQL, po stronicowaniu
+różnica przestaje być kosmetyczna i zmienia to, **które** wiersze są na stronie.
+Oba porządki są przypięte w `internal/store/repositories/contract`.
+
 ## Implementacja GORM
 
 ```go

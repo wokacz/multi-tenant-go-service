@@ -72,8 +72,35 @@ func (s *Service) Delete(ctx context.Context, grant *authz.Grant) error {
 	return s.repo.DeleteOrganization(ctx, grant.OrganizationID())
 }
 
-func (s *Service) Members(ctx context.Context, grant *authz.Grant) ([]Member, error) {
-	return s.repo.Members(ctx, grant.OrganizationID())
+// MaxMemberPage and MaxRolePage cap the two listings inside an organization, the
+// same way MaxOrganizationPage caps the installation-wide one.
+//
+// They are clamped here rather than trusted from the query string, so a caller
+// asking for everything gets a page instead of a denial of service. Roles get a
+// smaller cap because an organization with more than a hundred of them is a
+// different problem.
+const (
+	MaxMemberPage = 100
+	MaxRolePage   = 100
+)
+
+func (s *Service) Members(ctx context.Context, grant *authz.Grant, limit, offset int) ([]Member, error) {
+	limit, offset = clampPage(limit, offset, MaxMemberPage)
+
+	return s.repo.Members(ctx, grant.OrganizationID(), limit, offset)
+}
+
+// clampPage keeps a page request inside what the store is willing to answer.
+func clampPage(limit, offset, max int) (int, int) {
+	if limit <= 0 || limit > max {
+		limit = max
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+
+	return limit, offset
 }
 
 func (s *Service) Member(ctx context.Context, grant *authz.Grant, memberID uuid.UUID) (*Member, error) {
@@ -189,8 +216,10 @@ func (s *Service) SetMemberRoles(
 	return s.repo.Member(ctx, orgID, memberID)
 }
 
-func (s *Service) Roles(ctx context.Context, grant *authz.Grant) ([]Role, error) {
-	return s.repo.Roles(ctx, grant.OrganizationID())
+func (s *Service) Roles(ctx context.Context, grant *authz.Grant, limit, offset int) ([]Role, error) {
+	limit, offset = clampPage(limit, offset, MaxRolePage)
+
+	return s.repo.Roles(ctx, grant.OrganizationID(), limit, offset)
 }
 
 func (s *Service) Role(ctx context.Context, grant *authz.Grant, roleID uuid.UUID) (*Role, error) {

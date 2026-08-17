@@ -65,6 +65,7 @@ func newMemberResponse(m *orgs.Member) MemberResponse {
 
 type ListMembersInput struct {
 	OrgID uuid.UUID `path:"orgID" format:"uuid" doc:"Organization id"`
+	PageInput
 }
 
 type ListMembersOutput struct {
@@ -235,13 +236,17 @@ func registerMembers(api huma.API, service *orgs.Service, mailer mail.Sender, lo
 	}, h.withdrawInvitation)
 }
 
-func (h *memberHandlers) list(ctx context.Context, _ *ListMembersInput) (*ListMembersOutput, error) {
+func (h *memberHandlers) list(ctx context.Context, in *ListMembersInput) (*ListMembersOutput, error) {
 	grant, err := grantFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	members, err := h.orgs.Members(ctx, grant)
+	// The organization comes from the grant, never from in.OrgID. Only the page
+	// comes off the request, and the service clamps it as well: the schema's maximum
+	// refuses an oversized limit here, and the cap means the domain does not depend
+	// on this layer having done so.
+	members, err := h.orgs.Members(ctx, grant, in.Limit, in.Offset)
 	if err != nil {
 		return nil, problem.Error(ctx, err)
 	}

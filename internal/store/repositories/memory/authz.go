@@ -119,12 +119,37 @@ func (m *Authz) subjectOfLocked(memberID uuid.UUID) *uuid.UUID {
 	return nil
 }
 
-func memberSortKey(m orgs.Member) string {
-	if m.Name != "" {
-		return m.Name
+// compareMembers is the fake's copy of "ORDER BY u.name ASC, m.id ASC".
+//
+// It used to fall back to the email when the name was empty, which was left over
+// from the days when an invitation was a membership with no account behind it.
+// Postgres does no such thing — it sorts an empty name first — and once the
+// listing is paged, a difference in ordering is a difference in which rows a page
+// contains. The id is the tiebreaker on both sides for the same reason: names
+// repeat, and a page boundary inside a group of equal names has to fall in the
+// same place twice.
+func compareMembers(a, b orgs.Member) int {
+	if byName := strings.Compare(a.Name, b.Name); byName != 0 {
+		return byName
 	}
 
-	return m.Email
+	return strings.Compare(a.ID.String(), b.ID.String())
+}
+
+// page applies a limit and an offset to an already-ordered slice. The service
+// clamps both before they arrive here, so this only has to handle an offset past
+// the end.
+func page[T any](rows []T, limit, offset int) []T {
+	if offset >= len(rows) {
+		return rows[:0]
+	}
+
+	rows = rows[offset:]
+	if limit < len(rows) {
+		rows = rows[:limit]
+	}
+
+	return rows
 }
 
 func sameAccount(membership *models.Membership, userID uuid.UUID) bool {
@@ -391,7 +416,7 @@ func (m *Authz) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 	return nil
 }
 
-func (m *Authz) Members(_ context.Context, orgID uuid.UUID) ([]orgs.Member, error) {
+func (m *Authz) Members(_ context.Context, orgID uuid.UUID, limit, offset int) ([]orgs.Member, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -405,11 +430,9 @@ func (m *Authz) Members(_ context.Context, orgID uuid.UUID) ([]orgs.Member, erro
 		out = append(out, m.memberLocked(membership))
 	}
 
-	slices.SortFunc(out, func(a, b orgs.Member) int {
-		return strings.Compare(memberSortKey(a), memberSortKey(b))
-	})
+	slices.SortFunc(out, compareMembers)
 
-	return out, nil
+	return page(out, limit, offset), nil
 }
 
 func (m *Authz) Member(_ context.Context, orgID, memberID uuid.UUID) (*orgs.Member, error) {
@@ -584,7 +607,7 @@ func (m *Authz) ReplaceMemberRoles(
 	return nil
 }
 
-func (m *Authz) Roles(_ context.Context, orgID uuid.UUID) ([]orgs.Role, error) {
+func (m *Authz) Roles(_ context.Context, orgID uuid.UUID, limit, offset int) ([]orgs.Role, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -596,11 +619,22 @@ func (m *Authz) Roles(_ context.Context, orgID uuid.UUID) ([]orgs.Role, error) {
 		}
 	}
 
+	// "ORDER BY is_system DESC, key ASC", which this sorted without the first half
+	// until the listing became paged. Key is unique within an organization, so no
+	// tiebreaker is needed beyond it.
 	slices.SortFunc(out, func(a, b orgs.Role) int {
+		if a.IsSystem != b.IsSystem {
+			if a.IsSystem {
+				return -1
+			}
+
+			return 1
+		}
+
 		return strings.Compare(a.Key, b.Key)
 	})
 
-	return out, nil
+	return page(out, limit, offset), nil
 }
 
 func (m *Authz) Role(_ context.Context, orgID, roleID uuid.UUID) (*orgs.Role, error) {
