@@ -295,11 +295,13 @@ func TestARefusedChangeIsNotAudited(t *testing.T) {
 
 	before := len(f.auditLog(t))
 
-	// Refused by the anti-escalation rule: an owner may not grant a permission
-	// measured against the installation.
+	// Refused because a role in an organization cannot carry an installation-wide
+	// permission. Not the anti-escalation rule, which this fixture cannot trip: an
+	// owner holds every organization permission there is. A genuine escalation
+	// refusal is covered by TestCreatingARoleCannotGrantWhatTheCallerLacks.
 	f.call(t, http.MethodPost, f.orgPath("/roles"),
 		`{"key":"sneaky","name":"Sneaky","permissions":["platform.users.delete"]}`).
-		expect(t, http.StatusForbidden)
+		expect(t, http.StatusUnprocessableEntity)
 
 	// Refused by the last-owner rule.
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").

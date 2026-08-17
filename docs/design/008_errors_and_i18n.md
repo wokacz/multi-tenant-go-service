@@ -64,6 +64,7 @@ zawartości.
 | `authz.ErrForbidden`                                                                       | 403    | `forbidden`                                     |
 | `authz.ErrPrivilegeEscalation`                                                             | 403    | `privilege_escalation`                          |
 | `orgs.ErrRoleProtected`                                                                    | 403    | `role_protected`                                |
+| `authz.ErrUnknownPermission`, `ErrWrongScope`                                               | 422    | `unknown_permission`, `wrong_scope`             |
 | `orgs.ErrLastOwner`, `ErrRoleInUse`, `ErrRoleKeyTaken`, `ErrAlreadyMember`, `ErrSlugTaken` | 409    | odpowiedni kod                                  |
 | `models.ErrProtected`                                                                      | 409    | `record_protected`                              |
 | błędy walidacji domenowej                                                                  | 422    | odpowiedni kod                                  |

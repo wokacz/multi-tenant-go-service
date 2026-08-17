@@ -122,7 +122,12 @@ func (s *Service) SetMemberStatus(
 	memberID uuid.UUID,
 	status models.MembershipStatus,
 ) error {
-	if !status.Valid() {
+	// Not status.Valid(): that also accepts "invited", and this operation does not
+	// get to move anybody into a state meaning "waiting for their consent". Only
+	// the DTO's enum stopped it before, which leaves the rule on the edge of the
+	// API rather than where it belongs — and out of reach of any caller that is
+	// not an HTTP request.
+	if status != models.MembershipActive && status != models.MembershipSuspended {
 		return ErrInvalidStatus
 	}
 
@@ -202,6 +207,10 @@ func (s *Service) CreateRole(
 	key, name, description string,
 	permissions []authz.Permission,
 ) (*Role, error) {
+	if err := ensureOrganizationScoped(permissions); err != nil {
+		return nil, err
+	}
+
 	if err := authz.EnsureCanGrant(grant, permissions); err != nil {
 		return nil, err
 	}
@@ -267,6 +276,10 @@ func (s *Service) SetRolePermissions(
 		return nil, ErrRoleProtected
 	}
 
+	if err := ensureOrganizationScoped(permissions); err != nil {
+		return nil, err
+	}
+
 	if err := authz.EnsureCanGrant(grant, permissions); err != nil {
 		return nil, err
 	}
@@ -307,6 +320,30 @@ func (s *Service) DeleteRole(ctx context.Context, grant *authz.Grant, roleID uui
 // Checking the role's permissions rather than the role itself is what makes it
 // airtight: a caller who may not grant organization.delete may not grant it by
 // naming a role that happens to contain it either.
+// ensureOrganizationScoped refuses an installation-wide permission on a role.
+//
+// A role lives in an organization, so a platform.* key could never be granted
+// through one. Without this, EnsureCanGrant reports it as an escalation attempt —
+// telling the caller they lack a permission, when the truth is that no role here
+// could carry it however their own roles were configured.
+//
+// It runs before EnsureCanGrant so the more specific answer wins: a caller who
+// holds neither would otherwise be told about the wrong problem.
+func ensureOrganizationScoped(permissions []authz.Permission) error {
+	for _, perm := range permissions {
+		def, ok := authz.Lookup(perm)
+		if !ok {
+			return authz.ErrUnknownPermission
+		}
+
+		if def.Scope != authz.ScopeOrganization {
+			return authz.ErrWrongScope
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) ensureRolesAreGrantable(ctx context.Context, grant *authz.Grant, roleIDs []uuid.UUID) error {
 	orgID := grant.OrganizationID()
 

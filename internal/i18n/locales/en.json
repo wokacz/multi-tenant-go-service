@@ -24,6 +24,7 @@
   "error.cannot_delete_self": "you cannot delete your own account",
   "error.privilege_escalation": "cannot grant a permission you do not hold yourself",
   "error.unknown_permission": "unknown permission",
+  "error.wrong_scope": "permission belongs to another scope",
   "error.role_protected": "this role ships with the product and cannot be changed",
   "error.last_owner": "the organization would be left without an owner",
   "error.role_in_use": "the role is still assigned to members",

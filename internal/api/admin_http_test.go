@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
@@ -75,6 +76,39 @@ type memberBody struct {
 // permission: define a role holding organization.delete, assign it to yourself,
 // and the whole scheme has been talked out of its own rules through the front
 // door.
+// TestARoleCannotCarryAPlatformPermission separates "you do not have this" from
+// "this could never live here".
+//
+// An owner holds every organization permission, so escalation is not the reason
+// the request fails — no role in an organization can carry an installation-wide
+// key. Reporting a 403 escalation would send the caller looking for a permission
+// to acquire, and the catalog endpoint hands them the key together with its
+// scope, so "unknown permission" would be false as well.
+func TestARoleCannotCarryAPlatformPermission(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+
+	body := fmt.Sprintf(`{"key":"overreach","name":"Overreach","permissions":[%q]}`,
+		authz.PermPlatformUsersDelete)
+
+	res := f.call(t, http.MethodPost, f.orgPath("/roles"), body).
+		expect(t, http.StatusUnprocessableEntity)
+
+	var doc problemBody
+	res.decode(t, &doc)
+
+	if doc.Code != problem.CodeWrongScope {
+		t.Errorf("code = %q, want %q", doc.Code, problem.CodeWrongScope)
+	}
+
+	// The same on the other edit path, which is the one that turns roles.update
+	// into a permission to acquire everything if it is not checked.
+	role := f.repo.SeedRole(f.orgID, "plain", string(authz.PermOrganizationRead))
+	perms := fmt.Sprintf(`{"permissions":[%q]}`, authz.PermPlatformUsersDelete)
+
+	f.call(t, http.MethodPut, f.orgPath("/roles/"+role.String()+"/permissions"), perms).
+		expect(t, http.StatusUnprocessableEntity)
+}
+
 func TestCreatingARoleCannotGrantWhatTheCallerLacks(t *testing.T) {
 	f := newAuthzFixture(t)
 

@@ -1262,6 +1262,12 @@ func (m *Authz) acceptInvitationLocked(
 		return orgs.ErrNotFound
 	}
 
+	// A deleted organization keeps its invitations, and accepting into one would
+	// produce an active membership that every read then filters out.
+	if org, ok := m.orgs[membership.OrganizationID]; !ok || org.IsDeleted() {
+		return orgs.ErrNotFound
+	}
+
 	for _, existing := range m.memberships {
 		if existing.ID != memberID && sameAccount(existing, userID) && existing.OrganizationID == membership.OrganizationID {
 			return orgs.ErrAlreadyMember

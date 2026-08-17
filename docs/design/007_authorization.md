@@ -122,6 +122,12 @@ Reguła: **można nadać wyłącznie uprawnienie, które samemu się posiada**
 Trzecie sprawdza **uprawnienia roli**, nie jej identyfikator — inaczej ktoś, kto nie może nadać `organization.delete`,
 nadałby je, wskazując rolę, która je zawiera.
 
+Przed tą regułą działa kontrola zakresu: rola żyje w organizacji, więc klucz `platform.*` nie mógłby zostać przez nią
+nadany **nigdy**, niezależnie od tego, co wołający ma. Bez tego odmowa wracała jako `403 privilege_escalation`, czyli
+„brakuje ci uprawnienia" — i odsyłała klienta po coś, czego w tym zakresie nie da się mieć. Teraz jest to
+`422 wrong_scope`. Osobny kod, a nie `unknown_permission`, bo katalog (`GET /v1/permissions`) oddaje każdy klucz **razem
+z zakresem** — klient, który o niego prosi, przeczytał go od nas, więc „nieznany" byłoby po prostu nieprawdą.
+
 ## Statusy odmowy
 
 | Sytuacja                                              | Status | `code`                 |
@@ -132,6 +138,7 @@ nadałby je, wskazując rolę, która je zawiera.
 | członkostwo zawieszone                                | 404    | `not_found`            |
 | zasób z cudzej organizacji                            | 404    | `not_found`            |
 | nadanie uprawnienia, którego się nie ma               | 403    | `privilege_escalation` |
+| uprawnienie z drugiego zakresu w roli                  | 422    | `wrong_scope`          |
 | edycja roli systemowej                                | 403    | `role_protected`       |
 | ostatni właściciel                                    | 409    | `last_owner`           |
 | rola wciąż przypisana                                 | 409    | `role_in_use`          |

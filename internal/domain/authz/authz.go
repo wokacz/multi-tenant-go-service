@@ -25,6 +25,18 @@ var (
 	// path; Sanitize handles the second, this covers the first.
 	ErrUnknownPermission = errors.New("authz: permission is not in the catalog")
 
+	// ErrWrongScope means the key exists but belongs to the other scope — an
+	// installation-wide permission asked for in an organization role, or the
+	// reverse.
+	//
+	// It is separate from ErrUnknownPermission because the catalog endpoint
+	// reports every permission together with its scope, so a client that asks for
+	// one has read it from us: "unknown" would be plainly false. And it is
+	// separate from ErrPrivilegeEscalation because the caller is not reaching for
+	// something they lack — they are asking for something no role in this scope
+	// could ever carry, which is a malformed request rather than a refused one.
+	ErrWrongScope = errors.New("authz: permission belongs to another scope")
+
 	// ErrScopeMismatch means an organization-scoped permission was asked about
 	// without an organization, or a system-scoped one with one. Always a bug in
 	// the caller, never something a request can provoke on its own.

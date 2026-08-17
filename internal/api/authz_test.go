@@ -185,6 +185,32 @@ func TestSelfServiceOperationsCannotBeGated(t *testing.T) {
 	}
 }
 
+// TestSelfServiceOperationsHaveNoOrganizationInTheirPath closes the gap the test
+// above leaves open.
+//
+// requirePermission resolves an organization only for operations in
+// operationAccess. A self-service operation sitting on a path with {orgID} would
+// therefore skip authorization altogether while looking, from the URL, exactly
+// like an organization-scoped one. None exists today; this is the assertion that
+// keeps it that way, and it is cheap next to reading the diff that introduces one.
+func TestSelfServiceOperationsHaveNoOrganizationInTheirPath(t *testing.T) {
+	s, _ := newTestServer(t)
+
+	paths := map[string]string{}
+	forEachOperation(s.api.OpenAPI(), func(op *huma.Operation) {
+		paths[op.OperationID] = op.Path
+	})
+
+	param := "{" + orgIDParam + "}"
+
+	for id := range selfServiceOperations {
+		if strings.Contains(paths[id], param) {
+			t.Errorf("%s is self-service but its path %q carries %s, so no permission is "+
+				"ever checked against that organization", id, paths[id], param)
+		}
+	}
+}
+
 // TestScopedRepositoryMethodsTakeAnOrganization is the encapsulation test for
 // the resource half of a decision.
 //

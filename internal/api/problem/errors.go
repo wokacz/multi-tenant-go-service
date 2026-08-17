@@ -125,6 +125,12 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, authz.ErrUnknownPermission):
 		return newDocument(locale, http.StatusUnprocessableEntity, CodeUnknownPermission)
 
+	// 422 like an unknown key, and for the same reason: no permission the caller
+	// might acquire would make this request succeed. The code is separate because
+	// the key is real and the caller read it, with its scope, from the catalog.
+	case errors.Is(err, authz.ErrWrongScope):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeWrongScope)
+
 	// 403 rather than 422: the request is well formed and the role exists, the
 	// caller simply may not edit this one, and no rewording of the body would
 	// make it succeed.

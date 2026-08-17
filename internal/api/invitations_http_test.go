@@ -192,6 +192,30 @@ func TestRegisteringDoesNotClaimAnInvitationToTheDefaultOrganization(t *testing.
 	}
 }
 
+// TestAnInvitationToADeletedOrganizationCannotBeAccepted stops a row that would
+// immediately start lying.
+//
+// Deleting an organization does not remove its invitations. Accepting one produced
+// an active membership in an organization that no longer exists — harmless while
+// every read joins to organizations and filters it out, and wrong the moment
+// something counts memberships without that join.
+func TestAnInvitationToADeletedOrganizationCannotBeAccepted(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	outsider := registerOutsider(t, f)
+
+	invited := inviteBody(t, f, outsider, viewer)
+	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+
+	f.repo.SeedSoftDeletedOrganization(f.orgID)
+
+	rec := do(t, f.server.http.Handler,
+		authed(t, http.MethodPost, "/v1/me/invitations/"+invited.ID.String()+"/accept", "", bobToken, ""))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("accept into a deleted organization = %d, want 404; body %s", rec.Code, rec.Body.Bytes())
+	}
+}
+
 func TestAForeignInvitationIsNotFound(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)

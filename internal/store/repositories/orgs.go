@@ -1083,6 +1083,21 @@ func acceptInvitationTx(
 		return err
 	}
 
+	// The organization has to still exist. Deleting one does not remove its
+	// invitations, and accepting into a deleted organization produces an active
+	// membership that every read then filters out — harmless today, and a row that
+	// starts lying the moment somebody counts memberships without joining to
+	// organizations.
+	var live int64
+	if err := tx.Model(&models.Organization{}).
+		Where("id = ?", membership.OrganizationID).Count(&live).Error; err != nil {
+		return err
+	}
+
+	if live == 0 {
+		return orgs.ErrNotFound
+	}
+
 	uid := userID
 	membership.UserID = &uid
 	membership.Activate(at)

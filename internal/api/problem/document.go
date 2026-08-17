@@ -43,6 +43,7 @@ const (
 
 	CodePrivilegeEscalation = "privilege_escalation"
 	CodeUnknownPermission   = "unknown_permission"
+	CodeWrongScope          = "wrong_scope"
 	CodeRoleProtected       = "role_protected"
 	CodeLastOwner           = "last_owner"
 	CodeRoleInUse           = "role_in_use"
