@@ -24,9 +24,11 @@ t.Fatalf("attempts = %d, want %d — nakładające się próby zostały zgubione
 | domenowy                   | `internal/domain/*/…_test.go` (fake)                          | nie             |
 | HTTP                       | `internal/api/*_http_test.go` (pełny router)                  | nie             |
 | SQL                        | `internal/store/repositories/*_postgres_test.go`              | **tak**         |
+| kontraktowy (obie impl.)   | `internal/store/repositories/contract/`                       | do połowy       |
 
 Reguła doboru: **jeśli test przeszedłby na fake'u, jego miejsce jest na fake'u.**
-Testy na Postgresie zostawiamy dla tego, co fake udaje w Go.
+Testy na Postgresie zostawiamy dla tego, co fake udaje w Go. A to, o czym **obie
+implementacje muszą mówić to samo**, idzie do zestawu kontraktowego — patrz niżej.
 
 ## Testy strukturalne
 
@@ -147,11 +149,22 @@ repo := repositories.NewOrgs(db)
 ```
 
 ```bash
+task test:store            # jednorazowa baza na własnym porcie, migracja, testy, sprzątanie
+```
+
+Albo ręcznie, przeciwko czemuś, co już stoi:
+
+```bash
 task up -- postgres && task migrate
-POSTGRES_TEST=1 go test ./internal/store/repositories -v
+POSTGRES_TEST=1 go test ./internal/store/... -v
 ```
 
 CI uruchamia je na kontenerze usługowym, więc **nie są opcjonalne** — po prostu lokalnie domyślnie się pomijają.
+
+`POSTGRES_PORT` jest czytane ze środowiska (jak wszystkie pozostałe `POSTGRES_*`) i to nie jest kosmetyka. Dopóki port
+był literałem `5432`, na maszynie, gdzie ten port trzyma baza innego projektu, tych testów **nie dało się uruchomić** —
+a skierowanie ich tam puściłoby migracje i czyszczenie tabel po cudzych danych. Efektem było to, że pomijały się w
+milczeniu i cała warstwa SQL jechała bez weryfikacji.
 
 Dane testowe muszą być unikalne, żeby powtórzone uruchomienie na tej samej bazie nie kolidowało:
 
@@ -168,6 +181,30 @@ Co tu należy, a co nie:
 | rzutowania (`::inet`), `NULLS LAST` | mapowanie błędów              |
 | kaskady i ograniczenia unikalności  | wszystko, co nie dotyka SQL-a |
 | transakcyjność (cofnięcie zmiany)   |                               |
+
+## Zestaw kontraktowy: jedna tabela przypadków, dwie implementacje
+
+`internal/store/repositories/contract/` uruchamia **te same** przypadki na fake'u i na Postgresie:
+
+```go
+eachBackend(t, func(t *testing.T, b *backend) {
+    // wszystko przez interfejsy: b.repo, b.dir, b.perms
+})
+```
+
+Powód jest konkretny, nie estetyczny. Fake odtwarza semantykę SQL-a ręcznie i **rozjechał się**: członkostwo, którego
+konto usunięto, było członkiem dla jednego i nie było dla drugiego, reguła ostatniego właściciela liczyła je inaczej w
+każdym — a ponieważ testy HTTP jeżdżą wyłącznie na fake'u, wszystko przechodziło, gdy Postgres zachowywał się inaczej.
+Naprawianie tego po jednym naprawia egzemplarze; zestaw kontraktowy zamyka **klasę**.
+
+Co tu należy: wszystko, co jest **odpowiedzią na to samo pytanie** i musi wypaść identycznie — rozstrzyganie
+członkostwa, zakres najemcy, cykl życia zaproszenia, fakty, które trafiają do strażników domenowych.
+
+Czego tu nie ma: fikstury. Utworzenie konta albo miękkie usunięcie go nie da się wyrazić przez `orgs.Repository`, a obie
+implementacje robią to zupełnie inaczej — dlatego `backend` wystawia garść funkcji do budowania stanu. **Wszystko, na
+czym przypadek asercjonuje, sięga przez interfejsy**, inaczej testowałby fikstury.
+
+Połowa na fake'u jedzie wszędzie; połowa Postgresowa pomija się bez `POSTGRES_TEST`.
 
 ## Nazewnictwo
 

@@ -45,6 +45,26 @@ tasks:
     cmds:
       - go test ./... -race
 
+  # The store tests skip themselves without POSTGRES_TEST, so `task test` proves
+  # nothing about the SQL. This runs them against a throwaway database on a port
+  # of its own, which matters on a machine where something else already owns
+  # 5432: pointing them at that would run migrations and truncations over
+  # somebody else's data.
+  test:store:
+    desc: Run the store and contract tests against a throwaway Postgres
+    vars:
+      PORT: '{{.PORT | default "55432"}}'
+      NAME: mtgs-test-pg
+    cmds:
+      - defer: docker rm -f {{.NAME}} >/dev/null 2>&1 || true
+      - docker rm -f {{.NAME}} >/dev/null 2>&1 || true
+      - docker run -d --name {{.NAME}} -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres
+        -e POSTGRES_DB=postgres -p 127.0.0.1:{{.PORT}}:5432 postgres:18 >/dev/null
+      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
+      - atlas migrate apply --dir "file://migrations"
+        --url "postgres://postgres:postgres@localhost:{{.PORT}}/postgres?sslmode=disable"
+      - POSTGRES_TEST=1 POSTGRES_PORT={{.PORT}} go test ./internal/store/... -count=1
+
   cover:
     desc: Run the tests and open an HTML coverage report
     cmds:

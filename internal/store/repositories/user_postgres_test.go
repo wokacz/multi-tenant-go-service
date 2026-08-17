@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -37,8 +38,13 @@ func testDB(t *testing.T) *store.DB {
 	}
 
 	cfg := &config.Config{
-		PostgresHost:         envOr("POSTGRES_HOST", "localhost"),
-		PostgresPort:         5432,
+		PostgresHost: envOr("POSTGRES_HOST", "localhost"),
+		// Read from the environment like everything else here. It was a literal,
+		// which meant these tests could only ever run against whatever happened to
+		// own port 5432 — on a machine with another project's database there, they
+		// could not run at all, and pointing them at it would have run migrations
+		// and truncations over somebody else's data.
+		PostgresPort:         envOrInt("POSTGRES_PORT", 5432),
 		PostgresUser:         envOr("POSTGRES_USER", "postgres"),
 		PostgresPassword:     envOr("POSTGRES_PASSWORD", "postgres"),
 		PostgresDatabaseName: envOr("POSTGRES_DATABASE_NAME", "postgres"),
@@ -61,6 +67,20 @@ func testDB(t *testing.T) *store.DB {
 	})
 
 	return db
+}
+
+func envOrInt(key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+
+	return value
 }
 
 func envOr(key, fallback string) string {

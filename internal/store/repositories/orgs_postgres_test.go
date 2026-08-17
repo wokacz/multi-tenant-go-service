@@ -227,11 +227,11 @@ func TestTheRoleGuardCountsHoldersInsideTheTransaction(t *testing.T) {
 // to agree on: a row whose account is gone is not a member.
 //
 // It is a Postgres test because this is where the rule was broken and the fake
-// cannot show it. A condition in a LEFT JOIN does not remove rows, it only
-// blanks the joined columns — so "AND u.deleted_at IS NULL" hanging off the join
-// in Members and Member filtered nothing, and a deleted account stayed on the
-// list with an empty name and a live user id, while MemberByUser and OwnerCount
-// left it out.
+// could not show it. The join had to be a left one while an invitation was a
+// membership with no account, and a condition in a LEFT JOIN does not remove rows
+// — so "AND u.deleted_at IS NULL" filtered nothing and a deleted account stayed on
+// the list with an empty name. The join is inner now, which is what makes the rule
+// the join itself.
 func TestADeletedAccountIsNotAMember(t *testing.T) {
 	db := testDB(t)
 	repo := repositories.NewOrgs(db)
@@ -245,15 +245,6 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 
 	gone := newUser(t, users)
 	goneMembership := newMembership(t, db, org.ID, gone.ID, models.MembershipActive, role.ID)
-
-	// An invitation has no account at all, and still has to be listed. That is
-	// why the join stays a left one rather than becoming an inner one.
-	invited, err := repo.InviteMember(t.Context(), org.ID,
-		"invited@example.com", orgs.HashInvitationToken("a-token"),
-		[]uuid.UUID{role.ID}, live.ID, time.Now().UTC().Add(orgs.InvitationTTL), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("InviteMember() = _, %v", err)
-	}
 
 	// A soft delete never fires the foreign key cascade, so the membership row
 	// is still there afterwards.
@@ -273,11 +264,10 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 
 	slices.Sort(listed)
 
-	want := []string{liveMembership.ID.String(), invited.ID.String()}
-	slices.Sort(want)
+	want := []string{liveMembership.ID.String()}
 
 	if !slices.Equal(listed, want) {
-		t.Errorf("Members() listed %v, want the live account and the invitation (%v) — "+
+		t.Errorf("Members() listed %v, want only the live account (%v) — "+
 			"the deleted account's membership is %v", listed, want, goneMembership.ID)
 	}
 
@@ -289,14 +279,10 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 		t.Errorf("MemberByUser() for a deleted account = %v, want ErrNotFound", err)
 	}
 
-	// The live account and the invitation are still reachable one at a time, so
-	// the added predicate has not taken out more than it should.
+	// The live account is still reachable, so the join has not taken out more than
+	// it should.
 	if _, err := repo.Member(t.Context(), org.ID, liveMembership.ID); err != nil {
 		t.Errorf("Member() for a live account = %v, want it found", err)
-	}
-
-	if _, err := repo.Member(t.Context(), org.ID, invited.ID); err != nil {
-		t.Errorf("Member() for an invitation = %v, want it found", err)
 	}
 }
 
@@ -522,8 +508,13 @@ func TestInviteMemberStoresAnUnknownAddress(t *testing.T) {
 
 	now := time.Now().UTC()
 
+	// A token unique to this test: token_hash carries an installation-wide unique
+	// index, on purpose — a token has to identify exactly one invitation — so two
+	// tests sharing a literal collide in a database they also share.
+	token := "unknown-address-" + uuid.Must(uuid.NewV7()).String()
+
 	invitation, err := repo.InviteMember(t.Context(), org.ID, "nobody@example.com",
-		orgs.HashInvitationToken("a-token"), nil, uuid.Nil, now.Add(orgs.InvitationTTL), now)
+		orgs.HashInvitationToken(token), nil, uuid.Nil, now.Add(orgs.InvitationTTL), now)
 	if err != nil {
 		t.Fatalf("InviteMember() = _, %v", err)
 	}
@@ -544,7 +535,7 @@ func TestInviteMemberStoresAnUnknownAddress(t *testing.T) {
 	}
 
 	// And it is reachable by the token that was mailed, not by the address.
-	found, err := repo.InvitationByToken(t.Context(), orgs.HashInvitationToken("a-token"), now)
+	found, err := repo.InvitationByToken(t.Context(), orgs.HashInvitationToken(token), now)
 	if err != nil {
 		t.Fatalf("InvitationByToken() = _, %v", err)
 	}
