@@ -497,7 +497,7 @@ func (m *Authz) AddMember(
 	m.memberRoles[id] = uniqueIDs(roleIDs)
 
 	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, SubjectID: &userID, Action: models.ActionMemberInvited,
+		OrganizationID: &orgID, SubjectID: &userID, Action: models.ActionMemberJoined,
 	})
 
 	member := m.memberLocked(membership)

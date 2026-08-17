@@ -9,7 +9,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
+	"github.com/wokacz/multi-tenant-go-service/internal/api/reqctx"
 	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
@@ -120,6 +122,25 @@ func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutpu
 	return &GetUserOutput{Body: newUserResponse(u)}, nil
 }
 
+// joinCtx names the new account as the actor of its own joining.
+//
+// Nothing is recorded without an actor, and requireBearer is the only middleware
+// that sets one — so registration, which has no session, produced an active
+// membership in the default organization and left no trace of how anyone got
+// there. The account itself is the honest answer rather than a synthetic
+// "system" identity: signing up is what caused the membership, and an actor that
+// resolves to a real row also renders with a name in the audit screen instead of
+// a bare uuid nobody can look up.
+func joinCtx(ctx context.Context, userID uuid.UUID) context.Context {
+	client := reqctx.ClientFrom(ctx)
+
+	return audit.WithActor(ctx, audit.Actor{
+		ID:        userID,
+		IP:        client.IP,
+		UserAgent: client.UserAgent,
+	})
+}
+
 func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*struct{}, error) {
 	// Only a language the client actually asked for, and only one this build can
 	// render. Storing the fallback for somebody who expressed no preference
@@ -152,7 +173,7 @@ func (h *userHandlers) create(ctx context.Context, in *CreateUserInput) (*struct
 	// first the roles it was invited with, in somebody else's organization. The
 	// invitee accepts through POST /v1/me/invitations/{id}/accept.
 	if h.orgs != nil {
-		if err := h.orgs.JoinDefaultOrganization(ctx, created.ID); err != nil {
+		if err := h.orgs.JoinDefaultOrganization(joinCtx(ctx, created.ID), created.ID); err != nil {
 			return nil, problem.Error(ctx, err)
 		}
 	}

@@ -38,6 +38,57 @@ func (f *authzFixture) auditLog(t *testing.T) []auditEventBody {
 	return body.Events
 }
 
+// TestRegisteringIsAudited covers the one mutation that reaches the store without
+// a session behind it.
+//
+// Nothing is recorded without an actor, and only requireBearer sets one — so
+// joining the default organization at registration left an active membership and
+// no record of how anybody got there. The actor is the new account itself, which
+// is both the honest description and an id that resolves to a real row, so the
+// entry renders with a name rather than a bare uuid.
+func TestRegisteringIsAudited(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+
+	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), models.DefaultOrganizationSlug)
+	if err != nil {
+		t.Fatalf("default organization: %v", err)
+	}
+
+	// Reading the default organization's log needs audit.read there, and
+	// registration only made Ada a plain member of it.
+	promoteInDefaultOrganization(t, f, defaultOrg.ID)
+
+	const joiner = "pat@example.com"
+	registerAccount(t, f, joiner)
+
+	var body struct {
+		Events []auditEventBody `json:"events"`
+	}
+	f.call(t, http.MethodGet, "/v1/orgs/"+defaultOrg.ID.String()+"/audit", "").
+		expect(t, http.StatusOK).decode(t, &body)
+
+	found := false
+
+	for _, event := range body.Events {
+		if event.Action != string(models.ActionMemberJoined) || event.Actor.Email != joiner {
+			continue
+		}
+
+		found = true
+
+		// Actor and subject are the same person, which is what makes this
+		// entry different from every other one in the log.
+		if event.Subject == nil || event.Subject.ID != event.Actor.ID {
+			t.Errorf("subject = %v, want the same account as the actor %v", event.Subject, event.Actor.ID)
+		}
+	}
+
+	if !found {
+		t.Errorf("no %s entry for %s; the log has %+v",
+			models.ActionMemberJoined, joiner, body.Events)
+	}
+}
+
 // mutatingProbes are the organization-scoped operations that change something,
 // with the action each must record.
 //

@@ -281,7 +281,7 @@ func (r *Orgs) AddMember(
 	membership.Activate(at)
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		action := models.ActionMemberInvited
+		action := models.ActionMemberJoined
 
 		// A unique violation aborts the Postgres transaction. The savepoint
 		// lets us recover and claim an outstanding invitation in the same

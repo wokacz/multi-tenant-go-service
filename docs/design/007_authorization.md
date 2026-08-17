@@ -185,6 +185,18 @@ Strażnikiem jest skutek, nie mechanizm:
 `TestEveryMutatingOperationIsAudited` wywołuje po kolei każdy mutujący endpoint i wymaga wpisu. Ten sam test przewraca
 build, gdy nowa chroniona operacja nie trafi ani na listę mutujących, ani tylko do odczytu.
 
+Aktora ustawia `requireBearer`, więc domyślnie ma go **tylko** żądanie z tokenem. Jedna mutacja sięga do składowania bez
+sesji: rejestracja, która dołącza do organizacji `default`. Przez to powstawało aktywne członkostwo bez żadnego śladu,
+jak ktokolwiek się tam znalazł — a w organizacji `default` to najczęstszy sposób powstania członkostwa. Handler
+rejestracji ustawia więc aktora sam, i jest nim **nowe konto**: to prawdziwy opis tego, co się stało (założenie konta
+spowodowało członkostwo), a identyfikator wskazuje na istniejący wiersz, więc wpis renderuje się z nazwą, nie z gołym
+uuid-em. Aktor tożsamy z podmiotem odróżnia ten wpis od wszystkich pozostałych.
+
+Ta ścieżka ma własną akcję `member.joined`. `member.invited` opisywałoby zaproszenie, którego nikt nie wysłał, a
+`member.accepted` — zgodę, której nikt nie wyraził. Tej samej akcji używa promowanie pierwszego właściciela: to również
+provisioning, nie zaproszenie. Bootstrap uruchamiany z CLI nadal nie ma aktora i **nie zostawia wpisu** — patrz
+[Bootstrap](#bootstrap).
+
 Klucz roli i identyfikator konta zapisywane są **w momencie zmiany**, nie doklejane przy odczycie — rola może zostać
 usunięta, a „kto usunął tę rolę" to dokładnie ten wpis, którego ktoś będzie szukał.
 
@@ -203,7 +215,12 @@ Nie „pierwszy zarejestrowany wygrywa" — przy otwartej rejestracji to wyścig
 pierwszego administratora platformy; trzeba jej poprosić.
 
 Organizacja `default` powstaje leniwie, przy pierwszej rejestracji, wraz ze swoimi rolami systemowymi. Jest
-`IsProtected`, więc zwykła ścieżka usuwania jej odmawia. Nowe konto dołącza do niej jako `member`.
+`IsProtected`, więc zwykła ścieżka usuwania jej odmawia. Nowe konto dołącza do niej jako `member`, a wpis w dzienniku
+(`member.joined`) wskazuje jako aktora to właśnie konto — patrz [Audyt](#audyt).
+
+Samo polecenie bootstrap nie ma sesji ani aktora, więc **nie zostawia wpisu w dzienniku**. Jest to świadome: reguła „bez
+aktora nie ma wiersza" obowiązuje, a wpis przypisujący promowanie osobie, która przy tym nie była, byłby fałszem.
+Śladem jest tu wykonanie polecenia na maszynie, nie dziennik aplikacji.
 
 **Instalacja jednoorganizacyjna** nie wymaga niczego: wszyscy lądują w `default`, a model wielonajemcowy jest wtedy
 niewidoczny — ale nie trzeba go dokładać później, gdy się okaże potrzebny.
@@ -226,10 +243,10 @@ nie odróżni „adres już w organizacji" od „poczta nie wyszła", wpisałby 
 
 Zaproszony przyjmuje albo odrzuca **sam**, bo zgoda nie może być zastąpiona przez `PATCH` administratora:
 
-| Operacja | Ścieżka                                         | Kategoria     |
-|----------|-------------------------------------------------|---------------|
-| przyjęcie | `POST /v1/me/invitations/{invitationID}/accept` | samoobsługowa |
-| odrzucenie | `DELETE /v1/me/invitations/{invitationID}`     | samoobsługowa |
+| Operacja   | Ścieżka                                         | Kategoria     |
+|------------|-------------------------------------------------|---------------|
+| przyjęcie  | `POST /v1/me/invitations/{invitationID}/accept` | samoobsługowa |
+| odrzucenie | `DELETE /v1/me/invitations/{invitationID}`      | samoobsługowa |
 
 Ścieżka jest pod `/v1/me`, nie pod `{orgID}`: zaproszony często nie ma jeszcze członkostwa, które middleware mogłoby
 zautoryzować, a cudze zaproszenie jest nieodróżnialne od brakującego (`404`).
@@ -238,17 +255,17 @@ zautoryzować, a cudze zaproszenie jest nieodróżnialne od brakującego (`404`)
 
 Rejestracja **nie aktywuje** zaległych zaproszeń na podany adres. Robiła to wcześniej — nowe konto lądowało od razu we
 wszystkich organizacjach, do których zaproszono ten adres — i to była dziura, nie wygoda: **adres konta nie jest
-weryfikowany** (patrz [Czego tu nie ma](#czego-tu-nie-ma)), więc rejestracja nie dowodzi niczego o skrzynce. Kto pierwszy
-zarejestrował zaproszony adres, dziedziczył zaproszenie razem z rolami w cudzej organizacji — a prawowity adresat nie
-mógł się już zarejestrować, bo adres był zajęty, i widział `204` jak przy sukcesie.
+weryfikowany** (patrz [Czego tu nie ma](#czego-tu-nie-ma)), więc rejestracja nie dowodzi niczego o skrzynce. Kto
+pierwszy zarejestrował zaproszony adres, dziedziczył zaproszenie razem z rolami w cudzej organizacji — a prawowity
+adresat nie mógł się już zarejestrować, bo adres był zajęty, i widział `204` jak przy sukcesie.
 
 Zaproszenie przyjmuje wyłącznie zaproszony, przez `POST /v1/me/invitations/{invitationID}/accept`.
 
 Z tego wynika drugi, mniej oczywisty warunek. Rejestracja dołącza jeszcze do organizacji `default`, a ta ścieżka idzie
 przez `AddMember`, który przy kolizji na unikacie `(organization_id, email)` **przejmuje** zaproszenie: aktywuje
 członkostwo i podmienia nadane role na `member`. Samo usunięcie automatycznego przyjęcia zostawiłoby więc dziurę otwartą
-dla organizacji `default`, i to z cichą degradacją ról. Dlatego `JoinDefaultOrganization` najpierw sprawdza, czy konto ma
-już jakikolwiek wiersz w `default` — w tym zaproszenie adresowane na jego adres — i wtedy nie robi nic.
+dla organizacji `default`, i to z cichą degradacją ról. Dlatego `JoinDefaultOrganization` najpierw sprawdza, czy konto
+ma już jakikolwiek wiersz w `default` — w tym zaproszenie adresowane na jego adres — i wtedy nie robi nic.
 
 Konsekwencja, którą trzeba znać: konto zaproszone do `default` po rejestracji **nie ma żadnego aktywnego członkostwa**,
 dopóki nie przyjmie zaproszenia. To jest poprawne — samoobsługa (`/v1/me/*`) działa bez członkostwa, a alternatywą jest
@@ -262,8 +279,8 @@ Zostaje wąskie okno: zaproszenie utworzone **pomiędzy** sprawdzeniem a wstawie
 Skutkiem jest degradacja ról, nie eskalacja, i zamknie się dopiero wtedy, gdy zaproszenia dostaną własną tabelę i
 przestaną dzielić unikat z członkostwami.
 
-Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu
-organizacji. Dwa nakładające się zdegradowania nie mogą oba zobaczyć `owners > 1` i oba przejść.
+Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu organizacji.
+Dwa nakładające się zdegradowania nie mogą oba zobaczyć `owners > 1` i oba przejść.
 
 ## Czego tu nie ma
 
@@ -274,5 +291,5 @@ organizacji. Dwa nakładające się zdegradowania nie mogą oba zobaczyć `owner
   tworzonych przez użytkownika pokazują się z kolumny `roles.name`, w jednym języku.
 - **Cache uprawnień.** Rozwiązanie uprawnień to jedno zapytanie, migawka też. Cache dokłada ryzyko nieświeżej decyzji za
   oszczędność, której nikt jeszcze nie zmierzył.
-- **TOCTOU na grancie.** Decyzja zapada raz, w middleware; handler pracuje na `Grant` z kontekstu. Zmiana roli w trakcie żądania
-  nie cofa trwającej operacji. Akceptowalne i warte zapisania, nie warte rozproszonej blokady.
+- **TOCTOU na grancie.** Decyzja zapada raz, w middleware; handler pracuje na `Grant` z kontekstu. Zmiana roli w trakcie
+  żądania nie cofa trwającej operacji. Akceptowalne i warte zapisania, nie warte rozproszonej blokady.

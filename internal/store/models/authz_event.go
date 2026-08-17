@@ -22,8 +22,15 @@ const (
 	ActionOrganizationUpdated AuthzAction = "organization.updated"
 	ActionOrganizationDeleted AuthzAction = "organization.deleted"
 
-	ActionMemberInvited      AuthzAction = "member.invited"
-	ActionMemberAccepted     AuthzAction = "member.accepted"
+	ActionMemberInvited  AuthzAction = "member.invited"
+	ActionMemberAccepted AuthzAction = "member.accepted"
+
+	// ActionMemberJoined is the provisioning path: registering into the default
+	// organization, or an operator promoting the first owner. Nobody was invited
+	// and nobody accepted, so reporting either would describe something that did
+	// not happen.
+	ActionMemberJoined AuthzAction = "member.joined"
+
 	ActionMemberRemoved      AuthzAction = "member.removed"
 	ActionMemberSuspended    AuthzAction = "member.suspended"
 	ActionMemberReinstated   AuthzAction = "member.reinstated"
@@ -41,7 +48,8 @@ const (
 func (a AuthzAction) Valid() bool {
 	switch a {
 	case ActionOrganizationCreated, ActionOrganizationUpdated, ActionOrganizationDeleted,
-		ActionMemberInvited, ActionMemberAccepted, ActionMemberRemoved, ActionMemberSuspended,
+		ActionMemberInvited, ActionMemberAccepted, ActionMemberJoined,
+		ActionMemberRemoved, ActionMemberSuspended,
 		ActionMemberReinstated, ActionMemberRolesChanged,
 		ActionRoleCreated, ActionRoleUpdated, ActionRoleDeleted, ActionRolePermissionsChanged,
 		ActionSystemRoleGranted, ActionSystemRoleRevoked:
