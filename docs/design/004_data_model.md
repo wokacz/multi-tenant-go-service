@@ -130,19 +130,19 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 
 ## Spis tabel
 
-| Tabela                                     | Zawiera                                                       |
-|--------------------------------------------|---------------------------------------------------------------|
-| `users`                                    | konta, epoka sesji, drugi składnik, zawieszenie, język        |
-| `devices`                                  | znane urządzenia, odcisk `SHA-256`, zaufanie, odwołanie       |
-| `login_events`                             | historia logowań                                              |
-| `password_resets`, `two_factor_challenges` | kody jednorazowe (HMAC, TTL, licznik prób)                    |
-| `organizations`                            | najemcy                                                       |
+| Tabela                                     | Zawiera                                                                                       |
+|--------------------------------------------|-----------------------------------------------------------------------------------------------|
+| `users`                                    | konta, epoka sesji, drugi składnik, zawieszenie, język                                        |
+| `devices`                                  | znane urządzenia, odcisk `SHA-256`, zaufanie, odwołanie                                       |
+| `login_events`                             | historia logowań                                                                              |
+| `password_resets`, `two_factor_challenges` | kody jednorazowe (HMAC, TTL, licznik prób)                                                    |
+| `organizations`                            | najemcy                                                                                       |
 | `memberships`                              | kto należy do której organizacji i w jakim stanie; zaproszenie trzyma adres i puste `user_id` |
-| `roles`, `role_permissions`                | role organizacji i to, co nadają                              |
-| `membership_roles`                         | przypisania ról                                               |
-| `user_system_roles`                        | role platformowe, przypisywane kluczem                        |
-| `role_translations`                        | tłumaczenia nazw ról własnych — **tabela jeszcze nieużywana** |
-| `authz_events`                             | dziennik zmian uprawnień                                      |
+| `roles`, `role_permissions`                | role organizacji i to, co nadają                                                              |
+| `membership_roles`                         | przypisania ról                                                                               |
+| `user_system_roles`                        | role platformowe, przypisywane kluczem                                                        |
+| `role_translations`                        | tłumaczenia nazw ról własnych — **tabela jeszcze nieużywana**                                 |
+| `authz_events`                             | dziennik zmian uprawnień                                                                      |
 
 Każdy nowy model musi trafić do listy w `loader/main.go`. Pominięty jest po cichu nieobecny w generowanym schemacie, a
 Atlas zaproponuje **usunięcie** jego tabeli.
