@@ -132,13 +132,14 @@ type memberRow struct {
 	JoinedAt *time.Time
 }
 
+// Members lists everyone in the organization.
+//
 // The join is inner, and now it can be. It had to be a left join while an
 // invitation was a membership with no user id, and that was the trap: a condition
 // in a LEFT JOIN does not remove rows, it only blanks the joined columns, so
 // "AND u.deleted_at IS NULL" filtered nothing and a deleted account stayed on the
 // list with an empty name. Every membership has an account behind it now, so the
 // rule "a row whose account is gone is not a member" is the join itself.
-
 func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID) ([]orgs.Member, error) {
 	var rows []memberRow
 
@@ -894,12 +895,93 @@ func (r *Orgs) GrantSystemRole(
 		grant.GrantedBy = &by
 	}
 
-	err := r.db.WithContext(ctx).Create(grant).Error
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		return nil
-	}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// ON CONFLICT DO NOTHING rather than inserting and recovering from the
+		// unique violation. A violation aborts the whole Postgres transaction, so
+		// swallowing the error and returning nil asks GORM to commit a transaction
+		// that is already dead — "commit unexpectedly resulted in rollback". The
+		// old AddMember worked around exactly this with a savepoint; one statement
+		// that cannot fail is better than recovering from one that does.
+		res := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(grant)
+		if res.Error != nil {
+			return res.Error
+		}
+
+		// Already granted. Idempotent, and nothing changed, so nothing is recorded
+		// either — an entry for a grant that did not happen would be a second
+		// answer to "when did they get this".
+		if res.RowsAffected == 0 {
+			return nil
+		}
+
+		return record(ctx, tx, &models.AuthzEvent{
+			SubjectID: &userID,
+			Action:    models.ActionSystemRoleGranted,
+			Detail:    string(key),
+		})
+	})
 
 	return translateOrgError("grant system role", err)
+}
+
+func (r *Orgs) RevokeSystemRole(ctx context.Context, userID uuid.UUID, key authz.RoleKey) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("user_id = ? AND role_key = ?", userID, string(key)).
+			Delete(&models.UserSystemRole{})
+		if res.Error != nil {
+			return res.Error
+		}
+
+		// Nothing to revoke is not an error, but it is also not an event.
+		if res.RowsAffected == 0 {
+			return nil
+		}
+
+		return record(ctx, tx, &models.AuthzEvent{
+			SubjectID: &userID,
+			Action:    models.ActionSystemRoleRevoked,
+			Detail:    string(key),
+		})
+	})
+
+	return translateOrgError("revoke system role", err)
+}
+
+func (r *Orgs) SystemRoleHolders(ctx context.Context) ([]orgs.SystemRoleHolder, error) {
+	var rows []struct {
+		UserID    uuid.UUID
+		Name      string
+		Email     string
+		RoleKey   string
+		GrantedBy *uuid.UUID
+		GrantedAt time.Time
+	}
+
+	// Inner join: a grant belonging to a deleted account confers nothing, the same
+	// rule every membership lookup follows.
+	err := r.db.WithContext(ctx).
+		Table("user_system_roles AS usr").
+		Select("usr.user_id, u.name, u.email, usr.role_key, usr.granted_by, usr.created_at AS granted_at").
+		Joins("JOIN users u ON u.id = usr.user_id AND u.deleted_at IS NULL").
+		Order("u.name ASC, usr.role_key ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("store: system role holders: %w", err)
+	}
+
+	out := make([]orgs.SystemRoleHolder, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, orgs.SystemRoleHolder{
+			UserID:    row.UserID,
+			Name:      row.Name,
+			Email:     row.Email,
+			RoleKey:   row.RoleKey,
+			GrantedBy: row.GrantedBy,
+			GrantedAt: row.GrantedAt,
+		})
+	}
+
+	return out, nil
 }
 
 func (r *Orgs) RoleByKey(ctx context.Context, orgID uuid.UUID, key string) (*orgs.Role, error) {

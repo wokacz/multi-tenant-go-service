@@ -175,6 +175,15 @@ func Error(ctx context.Context, err error) error {
 	// 409, and it names the reason. The caller is holding the token, so the
 	// invitation's existence is not a secret from them, and a bare 404 would leave
 	// them with nothing to tell whoever invited them.
+	// 409: the request is well formed and the role exists, the current state is
+	// what refuses it — and the caller can act on that by granting somebody else
+	// the role first.
+	case errors.Is(err, orgs.ErrCannotRevokeOwnLastSystemRole):
+		return newDocument(locale, http.StatusConflict, CodeLastSystemRole)
+
+	case errors.Is(err, orgs.ErrInvalidSystemRole):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidSystemRole)
+
 	case errors.Is(err, orgs.ErrInvitationAddressMismatch):
 		return newDocument(locale, http.StatusConflict, CodeInvitationMismatch)
 

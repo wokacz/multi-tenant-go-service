@@ -50,6 +50,7 @@ type Authz struct {
 	systemRoles  map[uuid.UUID][]string
 	deletedUsers map[uuid.UUID]bool
 	invitations  map[uuid.UUID]*models.Invitation
+	systemGrants map[systemGrantKey]systemGrant
 	inviteRoles  map[uuid.UUID][]uuid.UUID
 
 	// events is append-only, the way the table is. Writes go through
@@ -81,6 +82,7 @@ func NewAuthz(users *Users) *Authz {
 		systemRoles:  map[uuid.UUID][]string{},
 		deletedUsers: map[uuid.UUID]bool{},
 		invitations:  map[uuid.UUID]*models.Invitation{},
+		systemGrants: map[systemGrantKey]systemGrant{},
 		inviteRoles:  map[uuid.UUID][]uuid.UUID{},
 	}
 }
@@ -815,19 +817,118 @@ func (m *Authz) AllOrganizations(_ context.Context, limit, offset int) ([]models
 }
 
 func (m *Authz) GrantSystemRole(
-	_ context.Context,
+	ctx context.Context,
 	userID uuid.UUID,
 	key authz.RoleKey,
-	_ uuid.UUID,
+	grantedBy uuid.UUID,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if !slices.Contains(m.systemRoles[userID], string(key)) {
-		m.systemRoles[userID] = append(m.systemRoles[userID], string(key))
+	// Already granted: idempotent, and nothing changed, so nothing is recorded —
+	// the same rule the SQL follows.
+	if slices.Contains(m.systemRoles[userID], string(key)) {
+		return nil
 	}
 
+	m.systemRoles[userID] = append(m.systemRoles[userID], string(key))
+	m.systemGrants[systemGrantKey{userID, string(key)}] = systemGrant{by: grantedBy, at: time.Now().UTC()}
+
+	m.recordLocked(ctx, models.AuthzEvent{
+		SubjectID: ptr(userID),
+		Action:    models.ActionSystemRoleGranted,
+		Detail:    string(key),
+	})
+
 	return nil
+}
+
+func (m *Authz) RevokeSystemRole(ctx context.Context, userID uuid.UUID, key authz.RoleKey) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	held := m.systemRoles[userID]
+	if !slices.Contains(held, string(key)) {
+		return nil
+	}
+
+	m.systemRoles[userID] = slices.DeleteFunc(slices.Clone(held), func(k string) bool {
+		return k == string(key)
+	})
+	delete(m.systemGrants, systemGrantKey{userID, string(key)})
+
+	m.recordLocked(ctx, models.AuthzEvent{
+		SubjectID: ptr(userID),
+		Action:    models.ActionSystemRoleRevoked,
+		Detail:    string(key),
+	})
+
+	return nil
+}
+
+func (m *Authz) SystemRoleHolders(_ context.Context) ([]orgs.SystemRoleHolder, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := []orgs.SystemRoleHolder{}
+
+	for userID, keys := range m.systemRoles {
+		// A grant belonging to a deleted account confers nothing, the same rule
+		// every membership lookup follows.
+		if m.deletedUsers[userID] {
+			continue
+		}
+
+		for _, key := range keys {
+			holder := orgs.SystemRoleHolder{UserID: userID, RoleKey: key}
+
+			if grant, ok := m.systemGrants[systemGrantKey{userID, key}]; ok {
+				holder.GrantedAt = grant.at
+				if grant.by != uuid.Nil {
+					holder.GrantedBy = ptr(grant.by)
+				}
+			}
+
+			if m.users != nil {
+				if u, err := m.users.ByID(context.Background(), userID); err == nil {
+					holder.Name, holder.Email = u.Name, u.Email
+				}
+			}
+
+			out = append(out, holder)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b orgs.SystemRoleHolder) int {
+		if c := strings.Compare(a.Name, b.Name); c != 0 {
+			return c
+		}
+
+		return strings.Compare(a.RoleKey, b.RoleKey)
+	})
+
+	return out, nil
+}
+
+// systemGrant remembers who granted a system role and when, which the SQL keeps in
+// columns on the row.
+type systemGrant struct {
+	by uuid.UUID
+	at time.Time
+}
+
+// systemGrantKey is the pair the unique index is on. A struct key rather than a
+// concatenation: uuid.UUID is an array, and inventing a separator for something Go
+// can key on directly is how a collision gets built.
+type systemGrantKey struct {
+	user uuid.UUID
+	role string
+}
+
+func ptr(id uuid.UUID) *uuid.UUID {
+	copied := id
+
+	return &copied
 }
 
 func (m *Authz) RoleByKey(_ context.Context, orgID uuid.UUID, key string) (*orgs.Role, error) {

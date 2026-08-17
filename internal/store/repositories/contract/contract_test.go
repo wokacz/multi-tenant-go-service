@@ -676,3 +676,128 @@ func TestTheRoleGuardSeesTheHolderCount(t *testing.T) {
 		}
 	})
 }
+
+// TestSystemRoleGrantsAgreeOnBothSides covers the installation-wide roles, which
+// were written twice by hand — once in SQL, once in the fake — and had no test
+// comparing them.
+//
+// Idempotence is the part worth pinning: the bootstrap command may run again, so a
+// second grant must not fail, and it must not record a second event either. An entry
+// for a grant that did not happen would be a second answer to "when did they get
+// this".
+func TestSystemRoleGrantsAgreeOnBothSides(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		userID, email := b.newAccount(t)
+		granter, _ := b.newAccount(t)
+
+		if err := b.prov.GrantSystemRole(t.Context(), userID, authz.RolePlatformAdmin, granter); err != nil {
+			t.Fatalf("GrantSystemRole() = %v", err)
+		}
+
+		holder := findHolder(t, b, userID)
+
+		if holder.RoleKey != string(authz.RolePlatformAdmin) {
+			t.Errorf("role_key = %q, want platform_admin", holder.RoleKey)
+		}
+
+		// The name and address are resolved, because "who administers this
+		// installation" is a question about people rather than ids.
+		if holder.Email != email {
+			t.Errorf("email = %q, want %q", holder.Email, email)
+		}
+
+		if holder.GrantedBy == nil || *holder.GrantedBy != granter {
+			t.Errorf("granted_by = %v, want %v", holder.GrantedBy, granter)
+		}
+
+		if holder.GrantedAt.IsZero() {
+			t.Error("granted_at is zero; the listing cannot say when")
+		}
+
+		// Granting again is not an error and does not duplicate the row.
+		if err := b.prov.GrantSystemRole(t.Context(), userID, authz.RolePlatformAdmin, granter); err != nil {
+			t.Fatalf("GrantSystemRole() a second time = %v", err)
+		}
+
+		if got := countHolders(t, b, userID); got != 1 {
+			t.Errorf("holders for one account = %d, want 1", got)
+		}
+
+		// A grant belonging to a deleted account confers nothing, the same rule
+		// every membership lookup follows.
+		b.deleteAccount(t, userID)
+
+		if got := countHolders(t, b, userID); got != 0 {
+			t.Errorf("a deleted account still holds %d installation roles", got)
+		}
+	})
+}
+
+// TestRevokingASystemRoleIsIdempotent pins the other half.
+func TestRevokingASystemRoleIsIdempotent(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		userID, _ := b.newAccount(t)
+
+		if err := b.prov.GrantSystemRole(t.Context(), userID, authz.RolePlatformAdmin, uuid.Nil); err != nil {
+			t.Fatalf("GrantSystemRole() = %v", err)
+		}
+
+		// Granted with no granter — the bootstrap path — so the column stays empty
+		// rather than pointing at nobody.
+		if holder := findHolder(t, b, userID); holder.GrantedBy != nil {
+			t.Errorf("granted_by = %v, want it absent for a grant from the command line", holder.GrantedBy)
+		}
+
+		if err := b.prov.RevokeSystemRole(t.Context(), userID, authz.RolePlatformAdmin); err != nil {
+			t.Fatalf("RevokeSystemRole() = %v", err)
+		}
+
+		if got := countHolders(t, b, userID); got != 0 {
+			t.Errorf("the role is still held after revoking: %d", got)
+		}
+
+		// Revoking what is not held is not an error: the caller asked for a state
+		// and that is the state they get.
+		if err := b.prov.RevokeSystemRole(t.Context(), userID, authz.RolePlatformAdmin); err != nil {
+			t.Errorf("RevokeSystemRole() a second time = %v, want nil", err)
+		}
+	})
+}
+
+func findHolder(t *testing.T, b *backend, userID uuid.UUID) orgs.SystemRoleHolder {
+	t.Helper()
+
+	holders, err := b.prov.SystemRoleHolders(t.Context())
+	if err != nil {
+		t.Fatalf("SystemRoleHolders() = _, %v", err)
+	}
+
+	for i := range holders {
+		if holders[i].UserID == userID {
+			return holders[i]
+		}
+	}
+
+	t.Fatalf("account %v is not among the holders %+v", userID, holders)
+
+	return orgs.SystemRoleHolder{}
+}
+
+func countHolders(t *testing.T, b *backend, userID uuid.UUID) int {
+	t.Helper()
+
+	holders, err := b.prov.SystemRoleHolders(t.Context())
+	if err != nil {
+		t.Fatalf("SystemRoleHolders() = _, %v", err)
+	}
+
+	count := 0
+
+	for i := range holders {
+		if holders[i].UserID == userID {
+			count++
+		}
+	}
+
+	return count
+}

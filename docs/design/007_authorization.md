@@ -174,6 +174,8 @@ Szczegóły warte zapamiętania:
 | zmiana dotyczy kogoś wyżej w hierarchii               | 403    | `insufficient_rank`    |
 | zaproszenie wygasło                                   | 410    | `invitation_expired`   |
 | zaproszenie na inny adres                             | 409    | `invitation_address_mismatch` |
+| odebranie sobie ostatniej roli instalacji             | 409    | `last_system_role`     |
+| klucz nie jest rolą instalacji                        | 422    | `invalid_system_role`  |
 | edycja roli systemowej                                | 403    | `role_protected`       |
 | ostatni właściciel                                    | 409    | `last_owner`           |
 | rola wciąż przypisana                                 | 409    | `role_in_use`          |
@@ -266,6 +268,38 @@ aktora nie ma wiersza" obowiązuje, a wpis przypisujący promowanie osobie, któ
 
 **Instalacja jednoorganizacyjna** nie wymaga niczego: wszyscy lądują w `default`, a model wielonajemcowy jest wtedy
 niewidoczny — ale nie trzeba go dokładać później, gdy się okaże potrzebny.
+
+### Role instalacji przez API
+
+Bootstrap przerywa koło, ale nie może być jedyną drogą. Rola `platform_admin` obejmuje **wszystkie** klucze
+`platform.*`, więc jej nadanie jest najbardziej doniosłą zmianą w instalacji — a przez długi czas nie zostawiało
+**żadnego** śladu: nie było endpointu, `GrantSystemRole` nie wołało `record`, a dwie stałe akcji dla tego zdarzenia były
+martwym kodem, podczas gdy [Audyt](#audyt) obiecywał, że każda zmiana uprawnień jest zapisywana.
+
+| Operacja   | Ścieżka                                                   | Uprawnienie                     |
+|------------|-----------------------------------------------------------|---------------------------------|
+| lista      | `GET /v1/platform/system-roles`                           | `platform.system_roles.read`    |
+| nadanie    | `POST /v1/platform/system-roles`                          | `platform.system_roles.assign`  |
+| odebranie  | `DELETE /v1/platform/system-roles/{userID}/{roleKey}`     | `platform.system_roles.remove`  |
+
+Trzy uprawnienia, nie jedno: czytanie „kto administruje instalacją" to inna decyzja niż dopisanie się do tej listy.
+
+Rzeczy, które trzeba znać:
+
+- **Nadanie i odebranie są idempotentne, ale nie zapisują zdarzenia bez zmiany.** Wpis o nadaniu, które się nie
+  odbyło, byłby drugą odpowiedzią na pytanie „kiedy to dostali". Bootstrap może zostać uruchomiony ponownie, więc
+  idempotencja nie jest wygodą.
+- **Nie ma tu anty-eskalacji, i to nie jest przeoczenie.** Zakresy są rozdzielone: wołający przeszedł autoryzację na
+  poziomie systemu, a jedyna istniejąca rola systemowa obejmuje wszystkie uprawnienia platformowe — reguła „możesz nadać
+  tylko to, co masz" porównywałaby zbiór ze sobą. Druga rola systemowa o węższym zbiorze to zmieni i wtedy właśnie tam
+  trafi ta kontrola.
+- **Nie da się odebrać sobie ostatniej.** Odebranie własnego `platform_admin` zabiera uprawnienie potrzebne do nadania
+  go z powrotem, a bez innego posiadacza nie ma już nikogo, kto mógłby. `409 last_system_role`; przy drugim posiadaczu
+  przechodzi, bo reguła **liczy**, a nie zabrania.
+- **Klucz musi być rolą systemową.** Klucz roli organizacyjnej wylądowałby w `user_system_roles`, gdzie nic go nie
+  czyta — `422 invalid_system_role`.
+- **Grant z CLI nadal nie ma aktora**, więc nie zostawia wpisu. Ta sama zasada co przy bootstrapie i ten sam ślad:
+  wykonanie polecenia na maszynie.
 
 ## Zaproszenia
 

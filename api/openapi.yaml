@@ -372,6 +372,29 @@ components:
         value:
           description: The value at the given location
       type: object
+    GrantSystemRoleRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/GrantSystemRoleRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        role_key:
+          description: Installation-wide role key
+          maxLength: 64
+          minLength: 1
+          type: string
+        user_id:
+          description: Account to grant it to
+          format: uuid
+          type: string
+      required:
+        - user_id
+        - role_key
+      type: object
     HealthOutputBody:
       additionalProperties: false
       properties:
@@ -649,6 +672,25 @@ components:
             - "null"
       required:
         - roles
+      type: object
+    ListSystemRolesOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ListSystemRolesOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        holders:
+          items:
+            $ref: "#/components/schemas/SystemRoleHolderResponse"
+          type:
+            - array
+            - "null"
+      required:
+        - holders
       type: object
     LoginEventResponse:
       additionalProperties: false
@@ -1155,6 +1197,32 @@ components:
           type: boolean
       required:
         - suspended
+      type: object
+    SystemRoleHolderResponse:
+      additionalProperties: false
+      properties:
+        email:
+          format: email
+          type: string
+        granted_at:
+          format: date-time
+          type: string
+        granted_by:
+          description: Who granted it, absent when it came from the bootstrap command
+          format: uuid
+          type: string
+        name:
+          type: string
+        role_key:
+          description: Installation-wide role held, e.g. platform_admin
+          type: string
+        user_id:
+          format: uuid
+          type: string
+      required:
+        - user_id
+        - role_key
+        - granted_at
       type: object
     UpdateMemberStatusRequest:
       additionalProperties: false
@@ -3312,6 +3380,140 @@ paths:
       security:
         - bearer: []
       summary: Delete any organization
+      tags:
+        - platform
+  /v1/platform/system-roles:
+    get:
+      description: Every installation-wide role grant, with who granted it and when. Requires platform.system_roles.read. Until this existed there was no way to find out who held platform_admin without reading the database.
+      operationId: list-system-roles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSystemRolesOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: List who administers the installation
+      tags:
+        - platform
+    post:
+      description: Makes an account an administrator of the whole installation. Requires platform.system_roles.assign. Granting twice is not an error and records nothing the second time. This is the most consequential change available here — platform_admin covers every platform permission — and it is written to the audit log.
+      operationId: grant-system-role
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantSystemRoleRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Grant an installation-wide role
+      tags:
+        - platform
+  /v1/platform/system-roles/{userID}/{roleKey}:
+    delete:
+      description: "Requires platform.system_roles.remove. Revoking one that was never granted is not an error. Revoking your own last one is refused with 409: it would take away the permission needed to grant it back, and with no other holder nobody could."
+      operationId: revoke-system-role
+      parameters:
+        - description: Account to take it from
+          in: path
+          name: userID
+          required: true
+          schema:
+            description: Account to take it from
+            format: uuid
+            type: string
+        - description: Installation-wide role key
+          in: path
+          name: roleKey
+          required: true
+          schema:
+            description: Installation-wide role key
+            maxLength: 64
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Forbidden
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Revoke an installation-wide role
       tags:
         - platform
   /v1/platform/users:

@@ -111,6 +111,10 @@ var operationAccess = map[string]accessRule{
 	"suspend-platform-user": {authz.PermPlatformUsersSuspend, authz.ScopeSystem},
 	"delete-platform-user":  {authz.PermPlatformUsersDelete, authz.ScopeSystem},
 
+	"list-system-roles":  {authz.PermPlatformSystemRolesRead, authz.ScopeSystem},
+	"grant-system-role":  {authz.PermPlatformSystemRolesAssign, authz.ScopeSystem},
+	"revoke-system-role": {authz.PermPlatformSystemRolesRemove, authz.ScopeSystem},
+
 	"list-platform-audit-events": {authz.PermPlatformAuditRead, authz.ScopeSystem},
 }
 

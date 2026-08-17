@@ -29,6 +29,18 @@ func platformProbes(orgID, userID uuid.UUID) map[string]probe {
 		},
 		"delete-platform-user": {http.MethodDelete, "/v1/platform/users/" + userID.String(), ""},
 
+		"list-system-roles": {http.MethodGet, "/v1/platform/system-roles", ""},
+		"grant-system-role": {
+			http.MethodPost, "/v1/platform/system-roles",
+			`{"user_id":"` + userID.String() + `","role_key":"platform_admin"}`,
+		},
+		// Aimed at the second account, not the caller: revoking your own last one
+		// is refused for a different reason, and this matrix is about the
+		// permission the middleware demands.
+		"revoke-system-role": {
+			http.MethodDelete, "/v1/platform/system-roles/" + userID.String() + "/platform_admin", "",
+		},
+
 		"list-platform-audit-events": {http.MethodGet, "/v1/platform/audit", ""},
 	}
 }

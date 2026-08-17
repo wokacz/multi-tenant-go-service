@@ -31,6 +31,8 @@
   "error.email_taken": "ten adres jest już używany",
   "error.invitation_expired": "to zaproszenie wygasło",
   "error.invitation_address_mismatch": "to zaproszenie wystawiono na inny adres",
+  "error.invalid_system_role": "to nie jest rola instalacji",
+  "error.last_system_role": "po odebraniu nikt nie mógłby nadać jej ponownie",
   "error.role_protected": "ta rola jest częścią produktu i nie może być zmieniana",
   "error.last_owner": "organizacja zostałaby bez właściciela",
   "error.role_in_use": "rola jest wciąż przypisana członkom",
@@ -90,6 +92,12 @@
   "role.viewer.description": "Dostęp tylko do odczytu samej organizacji.",
   "permission.audit.read.name": "Podgląd dziennika zmian",
   "permission.audit.read.description": "Wgląd w to, kto i kiedy zmieniał role oraz członkostwo.",
+  "permission.platform.system_roles.read.name": "Podgląd ról instalacji",
+  "permission.platform.system_roles.read.description": "Wgląd w to, kto administruje całą instalacją.",
+  "permission.platform.system_roles.assign.name": "Nadawanie ról instalacji",
+  "permission.platform.system_roles.assign.description": "Uczynienie kogoś administratorem całej instalacji.",
+  "permission.platform.system_roles.remove.name": "Odbieranie ról instalacji",
+  "permission.platform.system_roles.remove.description": "Odebranie nadanej roli instalacji.",
   "permission.platform.audit.read.name": "Podgląd dziennika instalacji",
   "permission.platform.audit.read.description": "Wgląd w zmiany uprawnień we wszystkich organizacjach."
 }

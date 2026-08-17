@@ -67,6 +67,14 @@ const (
 	PermPlatformUsersSuspend Permission = "platform.users.suspend"
 	PermPlatformUsersDelete  Permission = "platform.users.delete"
 
+	// The installation-wide roles themselves. Granting one is the most
+	// consequential change anybody can make here — platform_admin covers every
+	// platform.* key — so it is a permission of its own rather than something
+	// bundled with managing accounts.
+	PermPlatformSystemRolesRead   Permission = "platform.system_roles.read"
+	PermPlatformSystemRolesAssign Permission = "platform.system_roles.assign"
+	PermPlatformSystemRolesRemove Permission = "platform.system_roles.remove"
+
 	PermPlatformAuditRead Permission = "platform.audit.read"
 )
 
@@ -114,6 +122,10 @@ var catalog = []Definition{
 	{PermPlatformUsersRead, ScopeSystem, "platform.users"},
 	{PermPlatformUsersSuspend, ScopeSystem, "platform.users"},
 	{PermPlatformUsersDelete, ScopeSystem, "platform.users"},
+
+	{PermPlatformSystemRolesRead, ScopeSystem, "platform.system_roles"},
+	{PermPlatformSystemRolesAssign, ScopeSystem, "platform.system_roles"},
+	{PermPlatformSystemRolesRemove, ScopeSystem, "platform.system_roles"},
 
 	{PermPlatformAuditRead, ScopeSystem, "platform.audit"},
 }

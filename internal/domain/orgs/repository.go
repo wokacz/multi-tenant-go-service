@@ -58,6 +58,12 @@ var (
 	// the person who invited them.
 	ErrInvitationAddressMismatch = errors.New("orgs: the invitation was issued to a different address")
 	ErrInvalidEmail              = errors.New("orgs: email is empty")
+
+	// ErrInvalidSystemRole refuses a key that is not an installation-wide role
+	// this build ships. Role keys are code, the same way permissions are, so a row
+	// naming one that does not exist would grant nothing while looking as though
+	// it should.
+	ErrInvalidSystemRole = errors.New("orgs: not an installation-wide role")
 )
 
 // Membership is the view of one organization from one account's point of view.

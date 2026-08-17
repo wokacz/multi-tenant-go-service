@@ -34,9 +34,35 @@ type Provisioner interface {
 	AllOrganizations(ctx context.Context, limit, offset int) ([]models.Organization, error)
 
 	// GrantSystemRole assigns an installation-wide role by key. It is
-	// idempotent: granting twice is not an error, because the only caller is a
+	// idempotent: granting twice is not an error, because one caller is a
 	// deployment step that may well run again.
+	//
+	// It records the grant when there is an actor on the context. There was no
+	// entry at all for a long time, which meant the most consequential change in
+	// the installation — platform_admin covers every platform.* key — left no
+	// trace, while the design document claimed every change to authority was
+	// logged.
 	GrantSystemRole(ctx context.Context, userID uuid.UUID, key authz.RoleKey, grantedBy uuid.UUID) error
+
+	// RevokeSystemRole takes one back. Revoking one that was never granted is not
+	// an error, for the same reason granting twice is not: the caller asked for a
+	// state and that is the state they get.
+	RevokeSystemRole(ctx context.Context, userID uuid.UUID, key authz.RoleKey) error
+
+	// SystemRoleHolders lists who holds an installation-wide role, with the names
+	// and addresses resolved, because "who administers this installation" is a
+	// question about people rather than about ids.
+	SystemRoleHolders(ctx context.Context) ([]SystemRoleHolder, error)
+}
+
+// SystemRoleHolder is one installation-wide grant.
+type SystemRoleHolder struct {
+	UserID    uuid.UUID
+	Name      string
+	Email     string
+	RoleKey   string
+	GrantedBy *uuid.UUID
+	GrantedAt time.Time
 }
 
 // DefaultOrganizationName is what the seeded organization is called until

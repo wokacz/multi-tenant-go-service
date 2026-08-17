@@ -138,6 +138,22 @@ func LookupRole(key RoleKey) (RoleDefinition, bool) {
 	return RoleDefinition{}, false
 }
 
+// IsSystemScopeRole reports whether the key names an installation-wide role.
+//
+// It is separate from IsShippedRole because the two answer different questions: one
+// asks "does this exist", the other "is it granted against the installation rather
+// than inside an organization". Granting an organization role through the platform
+// endpoint would put a key nothing reads into user_system_roles.
+func IsSystemScopeRole(key RoleKey) bool {
+	for _, def := range systemRoles {
+		if def.Key == key {
+			return true
+		}
+	}
+
+	return false
+}
+
 // IsShippedRole reports whether the key names a role the code defines. Rows with
 // such a key are protected from editing, so this is what the service consults
 // before allowing a change.

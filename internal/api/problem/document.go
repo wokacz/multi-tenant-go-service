@@ -50,6 +50,8 @@ const (
 	CodeEmailTaken          = "email_taken"
 	CodeInvitationExpired   = "invitation_expired"
 	CodeInvitationMismatch  = "invitation_address_mismatch"
+	CodeInvalidSystemRole   = "invalid_system_role"
+	CodeLastSystemRole      = "last_system_role"
 	CodeRoleProtected       = "role_protected"
 	CodeLastOwner           = "last_owner"
 	CodeRoleInUse           = "role_in_use"

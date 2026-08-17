@@ -56,6 +56,7 @@ func Register(api huma.API, deps Deps) {
 	registerRoles(api, deps.Orgs)
 	registerPermissions(api, deps.Orgs, deps.Authz)
 	registerPlatform(api, deps.Orgs, deps.Users)
+	registerSystemRoles(api, deps.Orgs)
 	registerAudit(api, deps.Audit)
 }
 

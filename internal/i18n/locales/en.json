@@ -31,6 +31,8 @@
   "error.email_taken": "that address is already in use",
   "error.invitation_expired": "this invitation has expired",
   "error.invitation_address_mismatch": "this invitation was issued to a different address",
+  "error.invalid_system_role": "not an installation-wide role",
+  "error.last_system_role": "revoking this would leave nobody able to grant it back",
   "error.role_protected": "this role ships with the product and cannot be changed",
   "error.last_owner": "the organization would be left without an owner",
   "error.role_in_use": "the role is still assigned to members",
@@ -90,6 +92,12 @@
   "role.viewer.description": "Read-only access to the organization itself.",
   "permission.audit.read.name": "View the audit log",
   "permission.audit.read.description": "See who changed roles and membership, and when.",
+  "permission.platform.system_roles.read.name": "View installation-wide roles",
+  "permission.platform.system_roles.read.description": "See who administers the whole installation.",
+  "permission.platform.system_roles.assign.name": "Grant installation-wide roles",
+  "permission.platform.system_roles.assign.description": "Make somebody an administrator of the whole installation.",
+  "permission.platform.system_roles.remove.name": "Revoke installation-wide roles",
+  "permission.platform.system_roles.remove.description": "Take an installation-wide role away again.",
   "permission.platform.audit.read.name": "View the installation audit log",
   "permission.platform.audit.read.description": "See authorization changes across every organization."
 }
