@@ -24,6 +24,9 @@ się po cichu. CI przewraca build, gdy model zmienił się bez migracji.
 
 Krok po kroku: [instrukcja modeli i migracji](../guides/003_models_and_migrations.md).
 
+Katalog trzyma **jedną** migrację bazową, dopóki nic nie jest wdrożone — i dlaczego to przestaje być darmowe
+po pierwszym wdrożeniu: [instrukcja 003](../guides/003_models_and_migrations.md#zgniatanie-historii-dopóki-nic-nie-jest-wdrożone).
+
 ## Typy bazowe
 
 ```go
@@ -135,7 +138,7 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 | `users`                                    | konta, epoka sesji, drugi składnik, zawieszenie, język                                        |
 | `devices`                                  | znane urządzenia, odcisk `SHA-256`, zaufanie, odwołanie                                       |
 | `login_events`                             | historia logowań                                                                              |
-| `password_resets`, `two_factor_challenges` | kody jednorazowe (HMAC, TTL, licznik prób)                                                    |
+| `password_resets`, `two_factor_challenges`, `email_changes` | kody jednorazowe (HMAC z osobnym `purpose`, TTL, licznik prób)               |
 | `organizations`                            | najemcy                                                                                       |
 | `memberships`                              | kto należy do której organizacji i w jakim stanie; zaproszenie trzyma adres i puste `user_id` |
 | `roles`, `role_permissions`                | role organizacji i to, co nadają                                                              |

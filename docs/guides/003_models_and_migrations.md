@@ -150,6 +150,30 @@ atlas migrate diff ci_drift --env local     # "synced" = brak dryfu
 
 CI robi dokładnie to i przewraca build, gdy model zmienił się bez migracji.
 
+## Zgniatanie historii, dopóki nic nie jest wdrożone
+
+Katalog zawiera **jedną** migrację — `..._baseline.sql` — i tak ma zostać, dopóki repozytorium nie ma wdrożonej bazy.
+Osiem plików opisujących drogę do jednego schematu to osiem plików do przeczytania, żeby poznać jeden schemat, a kolejność
+kroków, których żadna baza nie wykonała, nie jest historią, tylko szumem.
+
+```bash
+rm -f migrations/*.sql migrations/atlas.sum
+task migrate:diff NAME=baseline
+atlas migrate diff verify --env local        # "synced" = baseline zgadza się z modelami
+```
+
+Dwie rzeczy przy tym giną i trzeba o nich wiedzieć:
+
+- **Backfille danych.** `ADD COLUMN … NOT NULL` na tabeli z wierszami wymaga dopisanego `UPDATE` (patrz wyżej). Baseline
+  startuje od zera wierszy, więc taki krok jest zbędny — ale jeśli zgniatasz historię, w której był, sprawdź, czy nie
+  zawierał **czegoś więcej** niż uzupełnienie kolumny.
+- **Stany przejściowe.** Kolumna, która była `NOT NULL`, a potem stała się nullowalna, w baseline jest po prostu
+  nullowalna. To dobrze — model mówi dokładnie to.
+
+**Od momentu pierwszego wdrożenia zgniatanie przestaje być darmowe.** Atlas zapisuje w bazie zastosowane wersje; po
+zgnieceniu te wersje nie istnieją i `task migrate` odmówi. Wtedy jedyną drogą jest `atlas migrate baseline`, a nie
+usunięcie plików.
+
 ## Czego nie robić
 
 - **Nie wołaj `AutoMigrate`.** Zgaduje zmiany kolumn i nigdy nic nie usuwa.
