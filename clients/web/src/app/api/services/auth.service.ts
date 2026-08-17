@@ -21,8 +21,10 @@ import { Observable } from 'rxjs';
 import { BASE_PATH_DEFAULT, CLIENT_CONTEXT_TOKEN_DEFAULT } from '../tokens';
 import { HttpParamsBuilder } from '../utils/http-params-builder';
 import {
-  SetTwoFactorRequest,
+  BeginEmailChangeRequest,
   RequestOptions,
+  ConfirmEmailChangeRequest,
+  SetTwoFactorRequest,
   RequestPasswordResetRequest,
   ConfirmPasswordResetRequest,
   CreateSessionRequest,
@@ -40,6 +42,94 @@ export class AuthService {
   private createContextWithClientId(existingContext?: HttpContext): HttpContext {
     const context = existingContext || new HttpContext();
     return context.set(this.clientContextToken, 'default');
+  }
+
+  beginEmailChange(
+    beginEmailChangeRequest: BeginEmailChangeRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  beginEmailChange(
+    beginEmailChangeRequest: BeginEmailChangeRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  beginEmailChange(
+    beginEmailChangeRequest: BeginEmailChangeRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Sends a confirmation code to the new address. The account keeps its current address until the code comes back, so an address nobody has answered on never becomes the one that receives password resets. Requires the current password. Whether the new address is already registered is not disclosed here — that answer is given only to somebody who can read the code out of the mailbox. */
+  beginEmailChange(
+    beginEmailChangeRequest: BeginEmailChangeRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/email`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: beginEmailChangeRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  confirmEmailChange(
+    confirmEmailChangeRequest: ConfirmEmailChangeRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  confirmEmailChange(
+    confirmEmailChangeRequest: ConfirmEmailChangeRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  confirmEmailChange(
+    confirmEmailChangeRequest: ConfirmEmailChangeRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Applies the address the code was sent to. A wrong, expired or already-spent code, and no outstanding change at all, share one answer. Existing sessions are deliberately left alone: the password has not changed, so signing every device out would be a surprise with no security benefit. 409 means the address was claimed by somebody else while the code was in flight. */
+  confirmEmailChange(
+    confirmEmailChangeRequest: ConfirmEmailChangeRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/email/verify`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: confirmEmailChangeRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
   }
 
   setTwoFactor(

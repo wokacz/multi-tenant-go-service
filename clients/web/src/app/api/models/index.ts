@@ -11,10 +11,17 @@ import { HttpContext, HttpHeaders } from '@angular/common/http';
 export interface AddMemberRequest {
   /** A URL to the JSON Schema for this object. */
   readonly $schema?: string;
-  /** Address of an existing account */
+  /** Address to invite. An existing account is not required. */
   email: string;
   /** Roles to grant. Every one must be a role the caller could grant themselves. */
   role_ids: Array<string>;
+}
+
+export interface AppointOwnerRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Account to make owner */
+  user_id: string;
 }
 
 export interface AuditEventResponse {
@@ -40,6 +47,22 @@ export interface AuditParty {
   email?: string;
   id: string;
   name?: string;
+}
+
+export interface BeginEmailChangeRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Address to move the account to */
+  new_email: string;
+  /** Current password */
+  password: string;
+}
+
+export interface ConfirmEmailChangeRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Code from the message sent to the new address */
+  code: string;
 }
 
 export interface ConfirmPasswordResetRequest {
@@ -149,11 +172,39 @@ export interface ErrorDetail {
   value?: any;
 }
 
+export interface GrantSystemRoleRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Installation-wide role key */
+  role_key: string;
+  /** Account to grant it to */
+  user_id: string;
+}
+
 export interface HealthOutputBody {
   /** A URL to the JSON Schema for this object. */
   readonly $schema?: string;
   /** Overall health of the service */
   status: string;
+}
+
+export interface InvitationResponse {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Address the invitation was issued to */
+  email: string;
+  /** After this it can no longer be accepted */
+  expires_at: Date;
+  organization: OrganizationResponse;
+  /** Role keys it will grant once accepted */
+  roles: Array<string>;
+}
+
+export interface InvitationTokenRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Token from the invitation message */
+  token: string;
 }
 
 export interface ListAuditOutputBody {
@@ -168,6 +219,12 @@ export interface ListDevicesOutputBody {
   devices: Array<DeviceResponse>;
 }
 
+export interface ListInvitationsOutputBody {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  invitations: Array<InvitationResponse>;
+}
+
 export interface ListLoginEventsOutputBody {
   /** A URL to the JSON Schema for this object. */
   readonly $schema?: string;
@@ -178,6 +235,12 @@ export interface ListMembersOutputBody {
   /** A URL to the JSON Schema for this object. */
   readonly $schema?: string;
   members: Array<MemberResponse>;
+}
+
+export interface ListMyInvitationsOutputBody {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  invitations: Array<InvitationResponse>;
 }
 
 export interface ListMyOrganizationsOutputBody {
@@ -210,6 +273,12 @@ export interface ListRolesOutputBody {
   roles: Array<RoleResponse>;
 }
 
+export interface ListSystemRolesOutputBody {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  holders: Array<SystemRoleHolderResponse>;
+}
+
 export interface LoginEventResponse {
   /** When it happened */
   created_at: Date;
@@ -234,22 +303,24 @@ export interface MemberResponse {
   id: string;
   /** When the membership first became active */
   joined_at?: Date;
-  /** Display name */
-  name: string;
+  /** Display name. Absent until the invitation is accepted. */
+  name?: string;
   /** Roles held in this organization */
   roles: Array<RoleSummaryResponse>;
   /** Whether the membership grants anything */
-  status: 'invited' | 'active' | 'suspended';
-  /** The account behind the membership */
-  user_id: string;
+  status: 'active' | 'suspended';
+  /** The account behind the membership. Absent while the invitation is outstanding, so listing members cannot tell a registered address from an unknown one. */
+  user_id?: string;
 }
 
 export interface MembershipResponse {
+  /** Membership id, used to accept or decline an invitation */
+  id: string;
   organization: OrganizationResponse;
   /** Keys of the roles the caller holds here */
   roles: Array<string>;
   /** Where the caller stands in this organization */
-  status: 'invited' | 'active' | 'suspended';
+  status: 'active' | 'suspended';
 }
 
 export interface OrganizationResponse {
@@ -387,7 +458,7 @@ export interface SnapshotMembership {
   /** Role keys held here */
   roles: Array<string>;
   slug: string;
-  status: 'invited' | 'active' | 'suspended';
+  status: 'active' | 'suspended';
 }
 
 export interface SnapshotSystem {
@@ -408,6 +479,17 @@ export interface SuspendPlatformUserRequest {
   readonly $schema?: string;
   /** true blocks the account everywhere, false restores it */
   suspended: boolean;
+}
+
+export interface SystemRoleHolderResponse {
+  email?: string;
+  granted_at: Date;
+  /** Who granted it, absent when it came from the bootstrap command */
+  granted_by?: string;
+  name?: string;
+  /** Installation-wide role held, e.g. platform_admin */
+  role_key: string;
+  user_id: string;
 }
 
 export interface UpdateMemberStatusRequest {

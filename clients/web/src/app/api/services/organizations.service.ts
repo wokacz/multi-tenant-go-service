@@ -27,10 +27,12 @@ import {
   OrganizationResponse,
   UpdateOrganizationRequest,
   ListAuditOutputBody,
+  ListInvitationsOutputBody,
+  InvitationResponse,
   ListMembersOutputBody,
   AddMemberRequest,
-  MemberResponse,
   UpdateMemberStatusRequest,
+  MemberResponse,
   SetMemberRolesRequest,
   ListRolesOutputBody,
   CreateRoleRequest,
@@ -63,7 +65,7 @@ export class OrganizationsService {
     observe?: 'events',
     options?: RequestOptions<'json'>,
   ): Observable<HttpEvent<ListMyOrganizationsOutputBody>>;
-  /** Returns every organization the account belongs to, including the ones it has only been invited to and the ones it is suspended in, so a client can tell those apart. Self-service: no permission is required, and none can take it away. */
+  /** Returns every organization the account belongs to, including the ones it is suspended in, so a client can tell those apart. Invitations are not memberships and are listed separately at GET /v1/me/invitations. Self-service: no permission is required, and none can take it away. */
   listMyOrganizations(
     observe?: 'body' | 'events' | 'response',
     options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
@@ -323,28 +325,28 @@ export class OrganizationsService {
     });
   }
 
-  listMembers(
+  listInvitations(
     orgID: string,
     observe?: 'body',
     options?: RequestOptions<'json'>,
-  ): Observable<ListMembersOutputBody>;
-  listMembers(
+  ): Observable<ListInvitationsOutputBody>;
+  listInvitations(
     orgID: string,
     observe?: 'response',
     options?: RequestOptions<'json'>,
-  ): Observable<HttpResponse<ListMembersOutputBody>>;
-  listMembers(
+  ): Observable<HttpResponse<ListInvitationsOutputBody>>;
+  listInvitations(
     orgID: string,
     observe?: 'events',
     options?: RequestOptions<'json'>,
-  ): Observable<HttpEvent<ListMembersOutputBody>>;
-  /** Everyone in the organization, including invitations and suspensions, with the roles each holds. Requires members.read. */
-  listMembers(
+  ): Observable<HttpEvent<ListInvitationsOutputBody>>;
+  /** Offers this organization has made that nobody has taken up yet. Requires members.read. No tokens: the organization issued them but cannot accept on anybody's behalf. */
+  listInvitations(
     orgID: string,
     observe?: 'body' | 'events' | 'response',
     options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
   ): Observable<any> {
-    const url = `${this.basePath}/v1/orgs/${orgID}/members`;
+    const url = `${this.basePath}/v1/orgs/${orgID}/invitations`;
 
     let headers: HttpHeaders;
     if (options?.headers instanceof HttpHeaders) {
@@ -366,25 +368,176 @@ export class OrganizationsService {
     });
   }
 
+  withdrawInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  withdrawInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  withdrawInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Takes back an offer. Distinct from the invitee declining it: the two are authorized by different facts — the invitee holds the token, the organization holds members.remove — and the audit entry says which of them ended it. */
+  withdrawInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/orgs/${orgID}/invitations/${invitationID}`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+
+    return this.httpClient.request('delete', url, {
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  reissueInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<InvitationResponse>;
+  reissueInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<InvitationResponse>>;
+  reissueInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<InvitationResponse>>;
+  /** Mails a fresh token and pushes the expiry out. The previous token stops working — resending the same secret would keep a leaked link alive, and issuing a second invitation would collide with the first. Requires members.invite. */
+  reissueInvitation(
+    orgID: string,
+    invitationID: string,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/orgs/${orgID}/invitations/${invitationID}/reissue`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Advertise the response content type declared in the spec
+    if (!headers.has('Accept')) {
+      headers = headers.set('Accept', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: null,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  listMembers(
+    orgID: string,
+    limit?: number,
+    offset?: number,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<ListMembersOutputBody>;
+  listMembers(
+    orgID: string,
+    limit?: number,
+    offset?: number,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<ListMembersOutputBody>>;
+  listMembers(
+    orgID: string,
+    limit?: number,
+    offset?: number,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<ListMembersOutputBody>>;
+  /** Everyone in the organization, including invitations and suspensions, with the roles each holds. Requires members.read. */
+  listMembers(
+    orgID: string,
+    limit?: number,
+    offset?: number,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/orgs/${orgID}/members`;
+
+    let params = new HttpParams();
+    if (limit != null) {
+      params = HttpParamsBuilder.addToHttpParams(params, limit, 'limit');
+    }
+    if (offset != null) {
+      params = HttpParamsBuilder.addToHttpParams(params, offset, 'offset');
+    }
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Advertise the response content type declared in the spec
+    if (!headers.has('Accept')) {
+      headers = headers.set('Accept', 'application/json');
+    }
+
+    return this.httpClient.request('get', url, {
+      observe,
+      headers,
+      params,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
   addMember(
     orgID: string,
     addMemberRequest: AddMemberRequest,
     observe?: 'body',
     options?: RequestOptions<'json'>,
-  ): Observable<MemberResponse>;
+  ): Observable<InvitationResponse>;
   addMember(
     orgID: string,
     addMemberRequest: AddMemberRequest,
     observe?: 'response',
     options?: RequestOptions<'json'>,
-  ): Observable<HttpResponse<MemberResponse>>;
+  ): Observable<HttpResponse<InvitationResponse>>;
   addMember(
     orgID: string,
     addMemberRequest: AddMemberRequest,
     observe?: 'events',
     options?: RequestOptions<'json'>,
-  ): Observable<HttpEvent<MemberResponse>>;
-  /** Puts an existing account into the organization with the given roles. Requires members.invite, and every role named must be one the caller could grant themselves — otherwise this endpoint would be a way to acquire permissions the caller does not have. */
+  ): Observable<HttpEvent<InvitationResponse>>;
+  /** Stores an invitation for the address with the given roles. The account need not exist yet; unknown and known addresses produce the same response, so the call cannot be used to discover who is registered. Requires members.invite, and every role named must be one the caller could grant themselves — otherwise this endpoint would be a way to acquire permissions the caller does not have. */
   addMember(
     orgID: string,
     addMemberRequest: AddMemberRequest,
@@ -575,26 +728,42 @@ export class OrganizationsService {
 
   listRoles(
     orgID: string,
+    limit?: number,
+    offset?: number,
     observe?: 'body',
     options?: RequestOptions<'json'>,
   ): Observable<ListRolesOutputBody>;
   listRoles(
     orgID: string,
+    limit?: number,
+    offset?: number,
     observe?: 'response',
     options?: RequestOptions<'json'>,
   ): Observable<HttpResponse<ListRolesOutputBody>>;
   listRoles(
     orgID: string,
+    limit?: number,
+    offset?: number,
     observe?: 'events',
     options?: RequestOptions<'json'>,
   ): Observable<HttpEvent<ListRolesOutputBody>>;
   /** Every role in the organization with what it grants and how many people hold it. Requires roles.read. */
   listRoles(
     orgID: string,
+    limit?: number,
+    offset?: number,
     observe?: 'body' | 'events' | 'response',
     options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
   ): Observable<any> {
     const url = `${this.basePath}/v1/orgs/${orgID}/roles`;
+
+    let params = new HttpParams();
+    if (limit != null) {
+      params = HttpParamsBuilder.addToHttpParams(params, limit, 'limit');
+    }
+    if (offset != null) {
+      params = HttpParamsBuilder.addToHttpParams(params, offset, 'offset');
+    }
 
     let headers: HttpHeaders;
     if (options?.headers instanceof HttpHeaders) {
@@ -610,6 +779,7 @@ export class OrganizationsService {
     return this.httpClient.request('get', url, {
       observe,
       headers,
+      params,
       reportProgress: options?.reportProgress,
       withCredentials: options?.withCredentials,
       context: this.createContextWithClientId(options?.context),

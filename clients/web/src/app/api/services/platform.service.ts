@@ -26,6 +26,9 @@ import {
   ListPlatformOrganizationsOutputBody,
   CreatePlatformOrganizationRequest,
   PlatformOrganizationResponse,
+  AppointOwnerRequest,
+  ListSystemRolesOutputBody,
+  GrantSystemRoleRequest,
   ListPlatformUsersOutputBody,
   SuspendPlatformUserRequest,
 } from '../models';
@@ -223,6 +226,186 @@ export class PlatformService {
     options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
   ): Observable<any> {
     const url = `${this.basePath}/v1/platform/organizations/${id}`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+
+    return this.httpClient.request('delete', url, {
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  appointOrganizationOwner(
+    id: string,
+    appointOwnerRequest: AppointOwnerRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  appointOrganizationOwner(
+    id: string,
+    appointOwnerRequest: AppointOwnerRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  appointOrganizationOwner(
+    id: string,
+    appointOwnerRequest: AppointOwnerRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /**
+   * Makes an account the owner of any organization, without the caller joining it. Requires platform.organizations.owners.assign.
+   *
+   * This is the other half of creating an organization. Creating one deliberately leaves it empty, and adding a member needs a permission inside it — which a platform administrator does not have — so without this an organization made here had nobody in it and no way to get anybody. It is also the way back from an organization that lost its last owner.
+   *
+   * It does not grant the installation-wide role: owning one organization and administering the installation are separate authorizations with separate endpoints.
+   */
+  appointOrganizationOwner(
+    id: string,
+    appointOwnerRequest: AppointOwnerRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/platform/organizations/${id}/owners`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: appointOwnerRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  listSystemRoles(
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<ListSystemRolesOutputBody>;
+  listSystemRoles(
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<ListSystemRolesOutputBody>>;
+  listSystemRoles(
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<ListSystemRolesOutputBody>>;
+  /** Every installation-wide role grant, with who granted it and when. Requires platform.system_roles.read. Until this existed there was no way to find out who held platform_admin without reading the database. */
+  listSystemRoles(
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/platform/system-roles`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Advertise the response content type declared in the spec
+    if (!headers.has('Accept')) {
+      headers = headers.set('Accept', 'application/json');
+    }
+
+    return this.httpClient.request('get', url, {
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  grantSystemRole(
+    grantSystemRoleRequest: GrantSystemRoleRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  grantSystemRole(
+    grantSystemRoleRequest: GrantSystemRoleRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  grantSystemRole(
+    grantSystemRoleRequest: GrantSystemRoleRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Makes an account an administrator of the whole installation. Requires platform.system_roles.assign. Granting twice is not an error and records nothing the second time. This is the most consequential change available here — platform_admin covers every platform permission — and it is written to the audit log. */
+  grantSystemRole(
+    grantSystemRoleRequest: GrantSystemRoleRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/platform/system-roles`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: grantSystemRoleRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  revokeSystemRole(
+    userID: string,
+    roleKey: string,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  revokeSystemRole(
+    userID: string,
+    roleKey: string,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  revokeSystemRole(
+    userID: string,
+    roleKey: string,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Requires platform.system_roles.remove. Revoking one that was never granted is not an error. Revoking your own last one is refused with 409: it would take away the permission needed to grant it back, and with no other holder nobody could. */
+  revokeSystemRole(
+    userID: string,
+    roleKey: string,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/platform/system-roles/${userID}/${roleKey}`;
 
     let headers: HttpHeaders;
     if (options?.headers instanceof HttpHeaders) {

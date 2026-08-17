@@ -20,7 +20,12 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { BASE_PATH_DEFAULT, CLIENT_CONTEXT_TOKEN_DEFAULT } from '../tokens';
 import { HttpParamsBuilder } from '../utils/http-params-builder';
-import { RequestOptions, UserResponse } from '../models';
+import {
+  RequestOptions,
+  UserResponse,
+  ListMyInvitationsOutputBody,
+  InvitationTokenRequest,
+} from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class UsersService {
@@ -58,6 +63,133 @@ export class UsersService {
     }
 
     return this.httpClient.request('get', url, {
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  listMyInvitations(
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<ListMyInvitationsOutputBody>;
+  listMyInvitations(
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<ListMyInvitationsOutputBody>>;
+  listMyInvitations(
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<ListMyInvitationsOutputBody>>;
+  /** What has been offered to the caller's address, without the tokens. Accepting still needs the token from the message — this is here so somebody who deleted the mail can see that an offer is open and ask for it again. */
+  listMyInvitations(
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/invitations`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Advertise the response content type declared in the spec
+    if (!headers.has('Accept')) {
+      headers = headers.set('Accept', 'application/json');
+    }
+
+    return this.httpClient.request('get', url, {
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  acceptInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  acceptInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  acceptInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Takes up an offer using the token from the message, creating an active membership with the roles the invitation carries. The roles come from the invitation, never from this request. The address it was issued to must match the caller's account: 409 says the token is good but was meant for somebody else, and 410 that it has expired. */
+  acceptInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/invitations/accept`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: invitationTokenRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  declineInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  declineInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  declineInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Removes the offer. Holding the token is the authorization: whoever can read the mailbox is entitled to refuse on its behalf. */
+  declineInvitation(
+    invitationTokenRequest: InvitationTokenRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/invitations/decline`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: invitationTokenRequest,
       observe,
       headers,
       reportProgress: options?.reportProgress,
