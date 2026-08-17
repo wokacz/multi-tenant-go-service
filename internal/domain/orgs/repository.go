@@ -109,10 +109,21 @@ type Repository interface {
 
 	// Members lists everyone in the organization, including invitations and
 	// suspensions, with the roles each holds.
+	//
+	// A membership whose account has been deleted is not listed. Soft deleting an
+	// account does not fire the foreign key cascade, so the membership row
+	// outlives its person; reporting it would put an entry with no name and
+	// nobody behind it into every administrator's list. An invitation, which has
+	// no account yet, *is* listed — the difference between "nobody has taken this
+	// up" and "the person is gone" is worth keeping.
+	//
+	// This is the one statement of that rule. Every method here that resolves a
+	// membership to a person answers it the same way: Member, MemberByUser, and
+	// the last-owner check.
 	Members(ctx context.Context, orgID uuid.UUID) ([]Member, error)
 
 	// Member returns one membership by its id, or ErrNotFound when it belongs
-	// to another organization.
+	// to another organization or its account has been deleted.
 	Member(ctx context.Context, orgID, memberID uuid.UUID) (*Member, error)
 
 	// AddMember creates an active membership for an existing account and
@@ -143,6 +154,11 @@ type Repository interface {
 
 	// RemoveMember deletes the membership and, by cascade, its role
 	// assignments.
+	//
+	// It is the one method here that still works on a membership whose account
+	// has been deleted, and it must stay that way: everything else reports such a
+	// row as not found, so refusing here too would leave it in the organization
+	// with no way to take it out. Do not add a Member lookup in front of this.
 	RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) error
 
 	// ReplaceMemberRoles sets the member's roles to exactly roleIDs, in one
@@ -168,6 +184,7 @@ type Repository interface {
 	RoleByKey(ctx context.Context, orgID uuid.UUID, key string) (*Role, error)
 
 	// MemberByUser finds the membership belonging to an account, or ErrNotFound.
+	// A deleted account is ErrNotFound, the same as in Members and Member.
 	MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*Member, error)
 
 	// CreateRole stores a role and its permissions in one transaction. It

@@ -268,6 +268,60 @@ func TestASecondOwnerMakesDemotionPossible(t *testing.T) {
 		expect(t, http.StatusOK)
 }
 
+// TestAnOwnerWhoseAccountIsDeletedCanBeRemoved is the recovery path for a
+// membership that outlived its person.
+//
+// Soft deleting an account does not fire the foreign key cascade, so the
+// membership row stays, still holding owner. It must not count as the owner the
+// organization would lose, because it counts nowhere else: the check that
+// refuses the change saw it, and the count of owners that could overrule the
+// refusal did not. The row was therefore impossible to remove however many live
+// owners existed, and promoting another owner moved both numbers together.
+func TestAnOwnerWhoseAccountIsDeletedCanBeRemoved(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+
+	owner, err := f.repo.RoleByKey(t.Context(), f.orgID, string(authz.RoleOwner))
+	if err != nil {
+		t.Fatalf("owner role: %v", err)
+	}
+
+	ghostAccount := uuid.Must(uuid.NewV7())
+	ghost := f.repo.SeedMember(f.orgID, ghostAccount, models.MembershipActive, owner.ID)
+	f.repo.SeedSoftDeletedUser(ghostAccount)
+
+	f.call(t, http.MethodDelete, f.orgPath("/members/"+ghost.String()), "").
+		expect(t, http.StatusNoContent)
+
+	// The rule itself is not switched off: Ada is the only live owner, so she
+	// still cannot be removed.
+	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").
+		expect(t, http.StatusConflict)
+}
+
+// TestAMembershipWhoseAccountIsDeletedIsNotListed pins the other half of the
+// same rule on the side the fake can see. The store test covers the Postgres
+// queries, where the condition sat in a LEFT JOIN and filtered nothing.
+func TestAMembershipWhoseAccountIsDeletedIsNotListed(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleOwner)
+
+	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	ghostAccount := uuid.Must(uuid.NewV7())
+	f.repo.SeedMember(f.orgID, ghostAccount, models.MembershipActive, viewer)
+	f.repo.SeedSoftDeletedUser(ghostAccount)
+
+	var list struct {
+		Members []memberDetail `json:"members"`
+	}
+	f.call(t, http.MethodGet, f.orgPath("/members"), "").
+		expect(t, http.StatusOK).decode(t, &list)
+
+	for _, member := range list.Members {
+		if member.UserID != nil && *member.UserID == ghostAccount {
+			t.Errorf("the membership of a deleted account is listed as %+v", member)
+		}
+	}
+}
+
 // TestShippedRolesCannotBeEdited keeps every organization's copy of "admin"
 // meaning the same thing.
 func TestShippedRolesCannotBeEdited(t *testing.T) {

@@ -1290,7 +1290,14 @@ func (m *Authz) refuseLastOwnerLossLocked(orgID, memberID uuid.UUID, losingCapab
 		return orgs.ErrNotFound
 	}
 
-	if !membership.Status.GrantsPermissions() || !m.holdsOwnerLocked(memberID) {
+	// accountDeletedLocked is checked here for the same reason ownerCountLocked
+	// checks it: both answer "is this an owner", and a rule that holds in one and
+	// not the other makes a membership whose account is gone impossible to
+	// remove — it counts as the owner being lost, but never as an owner who
+	// exists.
+	if !membership.Status.GrantsPermissions() ||
+		m.accountDeletedLocked(membership) ||
+		!m.holdsOwnerLocked(memberID) {
 		return nil
 	}
 

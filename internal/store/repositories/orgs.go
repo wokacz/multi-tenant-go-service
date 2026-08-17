@@ -132,6 +132,14 @@ type memberRow struct {
 	JoinedAt *time.Time
 }
 
+// The join has to be a left one, because an invitation carries no user id and
+// still has to appear. That is also the trap: a condition in a LEFT JOIN does
+// not remove rows, it only blanks the joined columns, so "AND u.deleted_at IS
+// NULL" on its own filtered nothing and a deleted account stayed on the list
+// with an empty name. The predicate that actually drops it belongs in the WHERE
+// clause: a row either has no account at all, or has one that the join matched.
+const liveAccountOrInvitation = "(m.user_id IS NULL OR u.id IS NOT NULL)"
+
 func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID) ([]orgs.Member, error) {
 	var rows []memberRow
 
@@ -139,7 +147,7 @@ func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID) ([]orgs.Member, err
 		Table("memberships AS m").
 		Select("m.id, m.user_id, COALESCE(u.name, '') AS name, COALESCE(u.email, m.email) AS email, m.status, m.joined_at").
 		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ?", orgID).
+		Where("m.organization_id = ? AND "+liveAccountOrInvitation, orgID).
 		Order("COALESCE(u.name, m.email) ASC").
 		Scan(&rows).Error
 	if err != nil {
@@ -156,14 +164,15 @@ func (r *Orgs) Member(ctx context.Context, orgID, memberID uuid.UUID) (*orgs.Mem
 		Table("memberships AS m").
 		Select("m.id, m.user_id, COALESCE(u.name, '') AS name, COALESCE(u.email, m.email) AS email, m.status, m.joined_at").
 		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ? AND m.id = ?", orgID, memberID).
+		Where("m.organization_id = ? AND m.id = ? AND "+liveAccountOrInvitation, orgID, memberID).
 		Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("store: member: %w", err)
 	}
 
 	// Scoped by organization, so a membership id from another tenant simply
-	// does not match and comes back as not found.
+	// does not match and comes back as not found. A membership whose account has
+	// been deleted is not found either, the same as in Members.
 	if len(rows) == 0 {
 		return nil, orgs.ErrNotFound
 	}
@@ -448,7 +457,7 @@ func (r *Orgs) RemoveMember(ctx context.Context, orgID, memberID uuid.UUID) erro
 
 func (r *Orgs) ReplaceMemberRoles(ctx context.Context, orgID, memberID uuid.UUID, roleIDs []uuid.UUID) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		losingOwner, err := replacingRolesDropsOwner(tx, orgID, memberID, roleIDs)
+		losingOwner, err := replacingRolesDropsOwner(tx, orgID, roleIDs)
 		if err != nil {
 			return err
 		}
@@ -1148,12 +1157,20 @@ func refuseLastOwnerLoss(tx *gorm.DB, orgID, memberID uuid.UUID, losingCapabilit
 		return err
 	}
 
+	// The join to users is inner, and matches ownerCountTx exactly. The two
+	// queries answer the same question — who is an owner here — and the rule has
+	// to be one rule. It was a LEFT JOIN, where the deleted_at condition filtered
+	// nothing: a membership whose account had been deleted counted as holding
+	// owner here but was invisible to ownerCountTx, so removing that row was
+	// refused with ErrLastOwner however many live owners the organization had,
+	// and promoting another one moved both numbers together. The row could not be
+	// removed at all.
 	var holds int64
 	err := tx.Table("membership_roles AS mr").
 		Joins("JOIN memberships m ON m.id = mr.membership_id").
 		Joins("JOIN roles r ON r.id = mr.role_id").
-		Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.id = ? AND m.organization_id = ? AND m.status = ? AND r.key = ? AND m.user_id IS NOT NULL",
+		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
+		Where("m.id = ? AND m.organization_id = ? AND m.status = ? AND r.key = ?",
 			memberID, orgID, models.MembershipActive, string(authz.RoleOwner)).
 		Count(&holds).Error
 	if err != nil {
@@ -1193,9 +1210,10 @@ func ownerCountTx(tx *gorm.DB, orgID uuid.UUID) (int, error) {
 	return int(total), nil
 }
 
-func replacingRolesDropsOwner(tx *gorm.DB, orgID, memberID uuid.UUID, roleIDs []uuid.UUID) (bool, error) {
-	_ = memberID
-
+// replacingRolesDropsOwner reports whether the new role list leaves out this
+// organization's owner role. It says nothing about who holds it — that is
+// refuseLastOwnerLoss's question — so it takes no membership id.
+func replacingRolesDropsOwner(tx *gorm.DB, orgID uuid.UUID, roleIDs []uuid.UUID) (bool, error) {
 	var owner models.Role
 	if err := tx.Where("organization_id = ? AND key = ?", orgID, string(authz.RoleOwner)).
 		First(&owner).Error; err != nil {

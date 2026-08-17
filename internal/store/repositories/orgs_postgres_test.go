@@ -149,6 +149,119 @@ func TestOwnerCountOnlyCountsActiveOwners(t *testing.T) {
 	}
 }
 
+// TestADeletedAccountIsNotAMember pins the one rule every membership lookup has
+// to agree on: a row whose account is gone is not a member.
+//
+// It is a Postgres test because this is where the rule was broken and the fake
+// cannot show it. A condition in a LEFT JOIN does not remove rows, it only
+// blanks the joined columns — so "AND u.deleted_at IS NULL" hanging off the join
+// in Members and Member filtered nothing, and a deleted account stayed on the
+// list with an empty name and a live user id, while MemberByUser and OwnerCount
+// left it out.
+func TestADeletedAccountIsNotAMember(t *testing.T) {
+	db := testDB(t)
+	repo := repositories.NewOrgs(db)
+	users := repositories.NewUser(db)
+
+	org := newOrganization(t, db)
+	role := newRole(t, db, org.ID, string(authz.RoleViewer), string(authz.PermOrganizationRead))
+
+	live := newUser(t, users)
+	liveMembership := newMembership(t, db, org.ID, live.ID, models.MembershipActive, role.ID)
+
+	gone := newUser(t, users)
+	goneMembership := newMembership(t, db, org.ID, gone.ID, models.MembershipActive, role.ID)
+
+	// An invitation has no account at all, and still has to be listed. That is
+	// why the join stays a left one rather than becoming an inner one.
+	invited, err := repo.InviteMember(t.Context(), org.ID,
+		"invited@example.com", []uuid.UUID{role.ID}, live.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("InviteMember() = _, %v", err)
+	}
+
+	// A soft delete never fires the foreign key cascade, so the membership row
+	// is still there afterwards.
+	if err := db.Delete(gone).Error; err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+
+	members, err := repo.Members(t.Context(), org.ID)
+	if err != nil {
+		t.Fatalf("Members() = _, %v", err)
+	}
+
+	listed := make([]string, 0, len(members))
+	for i := range members {
+		listed = append(listed, members[i].ID.String())
+	}
+
+	slices.Sort(listed)
+
+	want := []string{liveMembership.ID.String(), invited.ID.String()}
+	slices.Sort(want)
+
+	if !slices.Equal(listed, want) {
+		t.Errorf("Members() listed %v, want the live account and the invitation (%v) — "+
+			"the deleted account's membership is %v", listed, want, goneMembership.ID)
+	}
+
+	if _, err := repo.Member(t.Context(), org.ID, goneMembership.ID); !errors.Is(err, orgs.ErrNotFound) {
+		t.Errorf("Member() for a deleted account = %v, want ErrNotFound", err)
+	}
+
+	if _, err := repo.MemberByUser(t.Context(), org.ID, gone.ID); !errors.Is(err, orgs.ErrNotFound) {
+		t.Errorf("MemberByUser() for a deleted account = %v, want ErrNotFound", err)
+	}
+
+	// The live account and the invitation are still reachable one at a time, so
+	// the added predicate has not taken out more than it should.
+	if _, err := repo.Member(t.Context(), org.ID, liveMembership.ID); err != nil {
+		t.Errorf("Member() for a live account = %v, want it found", err)
+	}
+
+	if _, err := repo.Member(t.Context(), org.ID, invited.ID); err != nil {
+		t.Errorf("Member() for an invitation = %v, want it found", err)
+	}
+}
+
+// TestAnOwnerWhoseAccountIsDeletedDoesNotBlockRemoval is the SQL half of the
+// last-owner fix.
+//
+// The check that refuses the change and the count that can overrule it have to
+// use the same rule. The first joined users with a LEFT JOIN, where the
+// deleted_at condition filtered nothing, so a membership whose account had been
+// deleted counted as holding owner there and was invisible to the count. The row
+// could not be removed however many live owners the organization had.
+func TestAnOwnerWhoseAccountIsDeletedDoesNotBlockRemoval(t *testing.T) {
+	db := testDB(t)
+	repo := repositories.NewOrgs(db)
+	users := repositories.NewUser(db)
+
+	org := newOrganization(t, db)
+	owner := newRole(t, db, org.ID, string(authz.RoleOwner), string(authz.PermOrganizationDelete))
+
+	live := newUser(t, users)
+	liveMembership := newMembership(t, db, org.ID, live.ID, models.MembershipActive, owner.ID)
+
+	gone := newUser(t, users)
+	goneMembership := newMembership(t, db, org.ID, gone.ID, models.MembershipActive, owner.ID)
+
+	if err := db.Delete(gone).Error; err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+
+	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID); err != nil {
+		t.Fatalf("RemoveMember() for an owner whose account is deleted = %v, want it removed", err)
+	}
+
+	// The rule still holds for the owner who is actually there.
+	err := repo.RemoveMember(t.Context(), org.ID, liveMembership.ID)
+	if !errors.Is(err, orgs.ErrLastOwner) {
+		t.Errorf("RemoveMember() for the last live owner = %v, want ErrLastOwner", err)
+	}
+}
+
 // TestCreateRoleIsAtomic proves the role and its permissions land together.
 func TestCreateRoleIsAtomic(t *testing.T) {
 	db := testDB(t)

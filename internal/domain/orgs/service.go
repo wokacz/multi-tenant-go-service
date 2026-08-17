@@ -152,6 +152,13 @@ func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID
 // Two rules apply, and they are the two ways this endpoint would otherwise be a
 // way around the whole scheme: the caller may only assign roles whose
 // permissions they hold themselves, and the last owner may not be demoted.
+//
+// Only the first is enforced here. The last-owner rule lives in the repository,
+// because it has to read the owner count and write the new roles inside one
+// transaction that locks the organization row — a check on this side of the
+// boundary and a mutation on the other would reopen the race it exists to close.
+// That is why ErrLastOwner comes back from a repository call rather than from
+// anything visible in this function.
 func (s *Service) SetMemberRoles(
 	ctx context.Context,
 	grant *authz.Grant,
