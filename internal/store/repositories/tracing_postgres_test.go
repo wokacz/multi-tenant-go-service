@@ -51,7 +51,7 @@ func TestAQueryBecomesASpan(t *testing.T) {
 
 	spans := recorder.Ended()
 	if len(spans) == 0 {
-		t.Fatal("no spans recorded; the callbacks are not registered")
+		t.Fatal("no spans recorded; the driver wrapper is not bound")
 	}
 
 	var found bool
@@ -138,8 +138,8 @@ func TestASpanNeverCarriesQueryValues(t *testing.T) {
 
 // TestARecordNotFoundIsNotAnError keeps the traces readable.
 //
-// ErrRecordNotFound is ordinary control flow here — the API turns it into a 404 — and
-// marking those spans red trains everybody to ignore red.
+// A miss is zero rows from the driver, then a domain error. Marking those spans
+// red trains everybody to ignore red.
 func TestARecordNotFoundIsNotAnError(t *testing.T) {
 	db, recorder := instrumented(t)
 	repo := repositories.NewUser(db)

@@ -16,18 +16,12 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
-// tracedDriver is the ent half of D5: a dialect.Driver that turns every statement
-// into a span, without depending on GORM's callback API.
+// tracedDriver turns every statement into a span.
 //
-// It wraps the driver the ent client already has, so GORM's callbacks keep covering
-// the repositories that have not moved yet and this covers the ones that have. The
-// two must not stack on the same statement — this wrapper is only on the ent client,
-// never on the *sql.DB GORM holds.
-//
-// Bound values never enter the span. The query string already carries $1, $2, …;
-// the args stay in the call and out of the attributes. That is the same rule as
-// the GORM callbacks, and TestASpanNeverCarriesQueryValues is the acceptance test
-// for both.
+// It wraps the driver the ent client already has. Bound values never enter the
+// span: the query string already carries $1, $2, …; the args stay in the call
+// and out of the attributes. TestASpanNeverCarriesQueryValues is the acceptance
+// test.
 type tracedDriver struct {
 	dialect.Driver
 	tel atomic.Pointer[telemetry.Telemetry]

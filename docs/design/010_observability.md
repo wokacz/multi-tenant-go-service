@@ -37,7 +37,7 @@ ostrzeżenie — a to lepsza awaria niż API, które nie startuje bez stosu obse
 | Warstwa | Czym | Dlaczego tak |
 |---|---|---|
 | HTTP | `otelhttp` (oficjalne contrib) | konwencje semantyczne to ruchomy cel utrzymywany przez ludzi czytających specyfikację; źle dobrane kubełki histogramu dają wykresy, które wyglądają dobrze i kłamią przy porównaniu między usługami |
-| SQL | **własne callbacki GORM** w [`internal/store/tracing.go`](../../internal/store/tracing.go) | pełna kontrola nad tym, co wchodzi do atrybutów spanu — patrz niżej |
+| SQL | wrapper sterownika ent w [`internal/store/enttrace.go`](../../internal/store/enttrace.go) | pełna kontrola nad tym, co wchodzi do atrybutów spanu — patrz niżej |
 | poczta | dekorator `telemetry.MeteredMailer` | handlery **celowo** przełykają błąd wysyłki (wiersz istnieje, kod da się wysłać ponownie), więc bez tego awaria jest tylko linią logu, na którą nikt nie ma alertu |
 | domena | ręczne liczniki | patrz „Metryki domenowe" |
 
@@ -54,20 +54,20 @@ jest jedną nierozróżnialną serią — czyli wykresem opóźnień, który nie
 
 ### SQL w spanie: **placeholdery, nigdy wartości**
 
-To warunek, na jakim ta instrumentacja w ogóle może istnieć. Logger GORM-a jest już skonfigurowany z
-`ParameterizedQueries`, żeby hasze haseł, adresy i IP nie trafiały do logu przez linię o wolnym zapytaniu. **Atrybut
+To warunek, na jakim ta instrumentacja w ogóle może istnieć. Zapytanie w atrybucie niesie `$1`, `$2`, … i nigdy
+wartości. **Atrybut
 spanu to linia logu z innym okresem retencji i innym zbiorem osób, które mogą ją czytać** — trace niosący wartości cicho
-cofałby tę decyzję, z pakietu, którego nikt nie kojarzy z prywatnością.
+cofałby decyzję, z pakietu, którego nikt nie kojarzy z prywatnością.
 
 Przypina to `TestASpanNeverCarriesQueryValues`: bierze adres i hash z utworzonego konta i sprawdza, że **żaden** atrybut
 **żadnego** spanu ich nie zawiera — a przy okazji, że SQL z `$1` tam jest, bo trace bez zapytania nie odpowie, które
 zapytanie było wolne.
 
-Nazwa tabeli pochodzi z SQL-a, nie z `Statement.Table`: `Table("memberships AS m")` zapisuje `m`, więc metryka grupowana
-po tym twierdziłaby, że najruchliwsza tabela w instalacji nazywa się „m".
+Nazwa tabeli pochodzi z SQL-a: złączenie zapisane jako `memberships AS m` inaczej twierdziłoby, że najruchliwsza tabela
+w instalacji nazywa się „m".
 
-`ErrRecordNotFound` **nie jest** błędem na spanie. To zwykły przepływ sterowania — API zamienia go na 404 — a malowanie
-każdego chybienia na czerwono uczy wszystkich ignorować czerwone.
+Chybienie **nie jest** błędem na spanie. Zapytanie wraca z zerową liczbą wierszy, repozytorium mapuje to na błąd
+domenowy, a API na 404 — malowanie każdego chybienia na czerwono uczy wszystkich ignorować czerwone.
 
 ## Metryki domenowe
 

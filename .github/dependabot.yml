@@ -21,10 +21,10 @@ updates:
       - dependency-name: github.com/danielgtaylor/huma/v2
         update-types: [version-update:semver-minor, version-update:semver-major]
 
-  # The Atlas loader is a module of its own and would otherwise never be
+  # The generator is a module of its own and would otherwise never be
   # updated.
   - package-ecosystem: gomod
-    directory: /loader
+    directory: /tools/entgen
     schedule:
       interval: monthly
     open-pull-requests-limit: 3

@@ -15,7 +15,7 @@ element, nie czytając wszystkiego od zera.
 | [001 Stack technologiczny](design/001_technology_stack.md)       | biblioteki, narzędzia, czego świadomie nie ma, dwa moduły Go                |
 | [002 Architektura](design/002_architecture.md)                   | warstwy, kierunek zależności, granice pilnowane testem, podział `internal/` |
 | [003 Kontrakt API](design/003_api_contract.md)                   | wersjonowanie, generowane OpenAPI, DTO, wymagania wobec operacji            |
-| [004 Model danych](design/004_data_model.md)                     | modele jako źródło schematu, Atlas, pułapki GORM-a, spis tabel              |
+| [004 Model danych](design/004_data_model.md)                     | schemat ent, Atlas, pułapki, spis tabel                                     |
 | [005 Uwierzytelnianie](design/005_authentication.md)             | hasła, token JWT, epoka sesji, co unieważnia co, reset hasła                |
 | [006 Urządzenia i drugi składnik](design/006_devices_and_2fa.md) | rozpoznawanie klienta, zaufanie, odwoływanie, kody z maila                  |
 | [007 Autoryzacja](design/007_authorization.md)                   | role, uprawnienia, organizacje, anty-eskalacja, migawka, audyt              |

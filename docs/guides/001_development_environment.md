@@ -14,7 +14,7 @@ słucha na `0.0.0.0`, więc wbudowane wartości deweloperskie są odrzucane.
 | [Task](https://taskfile.dev/) | polecenia projektu, w tym stos Compose |
 
 Do samego `task up` potrzebujesz Dockera i Taska. `task check`,
-`task migrate:diff` i testy z `-race` wymagają reszty narzędzi hosta — obraz nie zawiera `loader/` ani lintera, a detektor
+`task migrate:diff` i testy z `-race` wymagają reszty narzędzi hosta — obraz nie zawiera generatora ent ani lintera, a detektor
 wyścigów nie działa na Alpine.
 
 ### Na hoście
@@ -57,7 +57,7 @@ Podnosi Postgresa, czeka aż będzie zdrowy, stosuje migracje, a potem startuje 
 kompiluje cały moduł (healthcheck ma 90 s zapasu). Zapis pliku `.go` albo `.json` w katalogu tłumaczeń przebudowuje i
 restartuje serwis w kilka sekund — nic nie trzeba robić ręcznie.
 
-Dlaczego nie ma obrazu produkcyjnego i czemu `loader/` nie jest w obrazie:
+Dlaczego nie ma obrazu produkcyjnego i czemu generator nie jest w obrazie:
 [stack](../design/001_technology_stack.md#docker-compose).
 
 ### Na hoście
@@ -70,7 +70,7 @@ task run
 ```
 
 Szybsze przy intensywnym cyklu edycja–kompilacja i to jedyna droga dla
-`task migrate:diff`, który potrzebuje modułu `loader/` (celowo nieobecnego w obrazie —
+`task migrate:diff`, który potrzebuje modułu `tools/entgen/` (celowo nieobecnego w obrazie —
 patrz [stack](../design/001_technology_stack.md#dwa-moduły-go)).
 
 **Nie uruchamiaj obu naraz na tym samym porcie.** Objaw jest mylący: `docker

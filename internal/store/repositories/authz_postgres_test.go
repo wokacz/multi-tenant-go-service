@@ -222,10 +222,9 @@ func TestOnlyActiveMembershipsResolve(t *testing.T) {
 	}
 }
 
-// TestSoftDeletesStopGranting covers the filters GORM does not add for us. This
-// query is built from a table name, so its soft-delete scope never applies and
-// the conditions have to be written out; drop either one and a deleted account
-// or a deleted organization keeps working.
+// TestSoftDeletesStopGranting covers the filters a query built from table names
+// has to write itself. Drop either one and a deleted account or a deleted
+// organization keeps working.
 func TestSoftDeletesStopGranting(t *testing.T) {
 	t.Run("deleted organization", func(t *testing.T) {
 		db := testDB(t)

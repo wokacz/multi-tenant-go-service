@@ -9,7 +9,7 @@ Zależności idą **do środka**. Warstwa zewnętrzna wie o wewnętrznej, nigdy 
 | Transport    | `internal/api`      | nagłówki, statusy HTTP, uwierzytelnienie, autoryzacja, OpenAPI |
 | Kryptografia | `internal/auth`     | podpisuje i weryfikuje JWT; nie wie o HTTP ani o bazie         |
 | Reguły       | `internal/domain/*` | co wolno, komu i kiedy; nie wie o HTTP ani o SQL               |
-| Trwałość     | `internal/store`    | GORM; tłumaczy błędy sterownika na błędy domenowe              |
+| Trwałość     | `internal/store`    | ent; tłumaczy błędy sterownika na błędy domenowe               |
 | Języki       | `internal/i18n`     | negocjacja `Accept-Language`, katalogi komunikatów             |
 
 ```
@@ -24,7 +24,8 @@ internal/store/repositories ─┘   (implementuje interfejsy domeny)
 `internal/` i przewraca build, gdy:
 
 - cokolwiek poza `internal/api` importuje **huma**,
-- cokolwiek poza `internal/store` importuje **gorm**.
+- cokolwiek poza `internal/store` importuje **entgo.io**,
+- cokolwiek pod `internal/` importuje poprzedni ORM (strażnik migracji).
 
 To nie są reguły stylu. Framework, który wycieknie do domeny, zamienia „możemy wymienić huma" w przepisanie projektu, a
 import łamiący tę zasadę zawsze wygląda niewinnie w pojedynkę — dlatego jest to test, a nie konwencja.
@@ -66,8 +67,9 @@ internal/
 │   ├── authz/      katalog uprawnień i decyzja autoryzacyjna
 │   ├── orgs/       organizacje, członkostwa, role
 │   └── user/       konta, hasła, urządzenia, drugi składnik
-└── store/          trwałość            ← tylko tu żyje GORM
-    ├── models/     modele GORM (źródło prawdy dla schematu)
+└── store/          trwałość            ← tylko tu żyje ent
+    ├── ent/schema/ schemat (źródło prawdy dla bazy)
+    ├── models/     struktury domeny; repozytoria mapują na nie encje
     └── repositories/
         └── memory/ fake in-memory, wspólny dla wszystkich testów
 ```
@@ -83,8 +85,8 @@ sterownik  ──▶  błąd domenowy  ──▶  status HTTP
            repo             problem
 ```
 
-1. **Repozytorium** zamienia błąd GORM-a na domenowy (`gorm.ErrDuplicatedKey` → `user.ErrEmailTaken`). Tu kończy się
-   GORM.
+1. **Repozytorium** zamienia błąd sterownika na domenowy (`23505` → `user.ErrEmailTaken`). Tu kończy się
+   baza.
 2. **`internal/api/problem`** zamienia domenowy na status HTTP i kod. Nie wie, że istnieje baza danych.
 
 Cokolwiek niezmapowanego staje się nieprzejrzystym `500`, a prawdziwy błąd trafia do logu przy identyfikatorze żądania.

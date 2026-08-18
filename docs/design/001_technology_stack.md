@@ -8,8 +8,8 @@ Serwis HTTP w Go, z Postgresem, bez frontendu. Kontrakt API jest generowany z ko
 |----------------------------------------------|------------------|--------------------------------------------------|
 | [huma](https://huma.rocks/)                  | v2.39.1          | operacje, walidacja wejścia, generowanie OpenAPI |
 | [chi](https://github.com/go-chi/chi)         | v5.3.1           | router i middleware                              |
-| [ent](https://entgo.io/) | v0.14.6 | schemat i migracje; docelowo cały dostęp do bazy (pgx pod spodem) |
-| [GORM](https://gorm.io/) + driver `postgres` | v1.31.2 / v1.6.2 | dostęp do bazy w repozytoriach — **przenoszony na ent**, patrz `ENT.md` |
+| [ent](https://entgo.io/) | v0.14.6 | schemat, klient, migracje; dostęp do bazy |
+| [pgx](https://github.com/jackc/pgx) | v5.10.0 | sterownik Postgresa pod `database/sql` |
 | `github.com/google/uuid`                     | v1.6.0           | identyfikatory UUIDv7                            |
 | `golang.org/x/crypto`                        | v0.55.0          | bcrypt                                           |
 | `golang.org/x/text`                          | v0.41.0          | negocjacja języka (`Accept-Language`)            |
@@ -57,10 +57,10 @@ Repozytorium zawiera **dwa** moduły:
 `go mod tidy` w głównym module wybierał wersję jednej z tych zależności, która się nie kompiluje. Nic z tego nie
 ma prawa być w grafie zależności serwisu, który rozmawia wyłącznie z Postgresem.
 
-Praktyczny skutek: `go mod tidy` bez `-C loader` pomija drugi moduł. `task tidy`
+Praktyczny skutek: `go mod tidy` bez `-C tools/entgen` pomija drugi moduł. `task tidy`
 robi oba i CI to sprawdza.
 
-Drugi skutek: obraz developerski **nie zawiera** `loader/`. Generowanie migracji (`task migrate:diff`) wymaga Atlasa i
+Drugi skutek: obraz developerski **nie zawiera** generatora. Generowanie migracji (`task migrate:diff`) wymaga Atlasa i
 tego modułu na hoście; stosowanie gotowych plików (`migrate apply`) wystarcza sam binarny Atlas, i to robi usługa
 `migrate`
 w Compose.

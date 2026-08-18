@@ -243,7 +243,7 @@ tasks:
         | grep -v -E '^\\(un)?restrict |^-- Dumped (from|by)' > {{.OUT}}
       - 'echo "wrote {{.OUT}}"'
 
-  # Still worth having after the migration off GORM: it catches a migration edited by
+  # Still worth having after the schema moved onto ent: it catches a migration edited by
   # hand, or a schema change somebody generated against the wrong branch. It is the
   # schema's openapi:check, except that it needs Docker and so is not in `task check`.
   schema:compare:

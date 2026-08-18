@@ -32,7 +32,7 @@ const statusClientClosedRequest = 499
 // rule to an HTTP status is decided in exactly one place and the layers below
 // never have to know what a status code is.
 //
-// Note what is absent: gorm. The repositories translate storage errors into
+// Note what is absent: a database driver. The repositories translate storage errors into
 // domain errors, so this package maps only domain vocabulary. A driver error
 // arriving here means a repository forgot to translate one, and it correctly
 // becomes an opaque 500.

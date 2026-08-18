@@ -126,8 +126,8 @@ func applySchema(dsn string) error {
 	}()
 
 	// Two names, two meanings: pgx is the database/sql driver, postgres is the ent
-	// dialect. OpenDB on an existing pool is also the mechanism that will let ent and
-	// GORM share one pool while the repositories move over one at a time.
+	// dialect. OpenDB on an existing pool is what lets the migrate tool and the
+	// API share one way of talking to Postgres.
 	drv := entsql.OpenDB(dialect.Postgres, db)
 
 	return migrate.Create(context.Background(), migrate.NewSchema(drv), migrate.Tables)

@@ -34,7 +34,7 @@
 
 ---
 
-Szablon serwisu HTTP: chi na routerze, huma na operacjach i OpenAPI, GORM nad pgx do Postgresa, Atlas do migracji. Granice między warstwami — huma tylko w `internal/api`, gorm tylko w `internal/store` — pilnuje test, nie recenzja.
+Szablon serwisu HTTP: chi na routerze, huma na operacjach i OpenAPI, ent nad pgx do Postgresa, Atlas do migracji. Granice między warstwami — huma tylko w `internal/api`, ent tylko w `internal/store` — pilnuje test, nie recenzja.
 
 Szczegóły, decyzje i instrukcje: [`docs/`](docs/README.md).
 
@@ -44,7 +44,7 @@ Szczegóły, decyzje i instrukcje: [`docs/`](docs/README.md).
   <a href="https://go.dev/"><img alt="Go" src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" /></a>
   <a href="https://github.com/go-chi/chi"><img alt="chi" src="https://img.shields.io/badge/chi-router-111827?style=for-the-badge" /></a>
   <a href="https://huma.rocks/"><img alt="huma" src="https://img.shields.io/badge/huma-OpenAPI-5B21B6?style=for-the-badge" /></a>
-  <a href="https://gorm.io/"><img alt="GORM" src="https://img.shields.io/badge/GORM-pgx-E24329?style=for-the-badge" /></a>
+  <a href="https://entgo.io/"><img alt="ent" src="https://img.shields.io/badge/ent-pgx-7732e6?style=for-the-badge" /></a>
   <a href="https://www.postgresql.org/"><img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-18-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" /></a>
   <a href="https://atlasgo.io/"><img alt="Atlas" src="https://img.shields.io/badge/Atlas-migracje-FF6A00?style=for-the-badge" /></a>
   <a href="https://docs.docker.com/compose/"><img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" /></a>

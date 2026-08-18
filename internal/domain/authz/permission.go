@@ -3,7 +3,8 @@
 //
 // It knows nothing about HTTP or SQL. The transport lives in internal/api, the
 // persistence in internal/store/repositories. Nothing here imports huma or
-// gorm, and internal/architecture_test.go fails the build if that changes.
+// the database driver, and internal/architecture_test.go fails the build if that
+// changes.
 package authz
 
 import (

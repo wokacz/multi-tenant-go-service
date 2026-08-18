@@ -11,14 +11,12 @@ import (
 	entuser "github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
 )
 
-// The soft-delete semantics, asked of ent rather than of GORM.
+// The interceptor and the delete hook, asked of the client the repositories use.
 //
-// Nothing in the application uses the ent client yet, which is exactly why these exist:
-// the repositories are about to move onto it one file at a time, and every one of them
-// depends on "a retired row is invisible" holding without being asked. Under GORM that
-// came from the scope on gorm.DeletedAt, and the one place it did not apply — a
-// condition hanging off a LEFT JOIN — is where deleted accounts stayed visible for
-// months.
+// Every read depends on "a retired row is invisible" holding without being asked.
+// The one place a filter like that does not apply — a condition hanging off a
+// LEFT JOIN, or an EXISTS from an edge — is where deleted accounts stayed visible
+// for months.
 
 func entClient(t *testing.T) *ent.Client {
 	t.Helper()

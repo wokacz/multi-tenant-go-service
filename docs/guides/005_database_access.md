@@ -4,14 +4,11 @@ Pułapki, które w tym projekcie już raz kosztowały czas. Każda ma test, któ
 
 ## Połączenie
 
-`store.OpenPostgres` ustawia rzeczy, na które kod liczy:
+`store.OpenPostgres` otwiera pulę przez pgx (`database/sql`) i buduje na niej klienta ent. Ping jest osobnym krokiem, pod
+`DBConnectTimeout` — `sql.Open` jest leniwe i samo nic nie udowadnia.
 
-| Ustawienie                                          | Po co                                                                                       |
-|-----------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `TranslateError: true`                              | bez tego nie ma `gorm.ErrDuplicatedKey`, a repozytorium nie rozpozna naruszenia unikalności |
-| `NowFunc` w UTC                                     |                                                                                             |
-| `DisableAutomaticPing`                              | ping robimy sami, pod własnym timeoutem                                                     |
-| logger na poziomie `Warn` z progiem wolnych zapytań |                                                                                             |
+Tłumaczenie naruszeń unikalności jest w repozytorium (`isUniqueViolation`, kod Postgresa `23505`), nie w konfiguracji
+połączenia. Domyślne czasy w schemacie ent są w UTC.
 
 `time.Local = time.UTC` w `main` jest konieczne, bo pgx dekoduje `timestamptz`
 do strefy lokalnej — bez tego ten sam wiersz serializowałby się inaczej na laptopie i na serwerze.
@@ -29,77 +26,68 @@ save(row)
 Nakładające się żądania odczytają tę samą wartość i zapiszą tę samą wartość, więc pięć równoległych prób zostawia
 licznik na jedynce. Spóźniony zapis może nawet przywrócić `consumed_at`, które inne żądanie właśnie ustawiło.
 
-**Dobrze** — jeden warunkowy `UPDATE`:
+**Dobrze** — jeden warunkowy `UPDATE`, przez `Modify`, bo ent umie `AddAttempts(1)`, ale nie „spal kod, gdy ten increment
+dojdzie do limitu":
 
 ```go
-r.db.WithContext(ctx).
-Model(&models.PasswordReset{}).
-Where("id = ? AND consumed_at IS NULL", resetID).
-Updates(map[string]any{
-"attempts":    gorm.Expr("attempts + 1"),
-"consumed_at": gorm.Expr("CASE WHEN attempts + 1 >= ? THEN ?::timestamptz ELSE consumed_at END",
-maxAttempts, now),
-})
+r.db.Ent().EmailChange.Update().
+	Where(emailchange.ID(changeID), emailchange.ConsumedAtIsNil()).
+	Modify(func(u *entsql.UpdateBuilder) {
+		u.Set(emailchange.FieldAttempts, entsql.ExprFunc(func(b *entsql.Builder) {
+			b.Ident(emailchange.FieldAttempts).WriteString(" + 1")
+		}))
+		u.Set(emailchange.FieldConsumedAt, entsql.ExprFunc(func(b *entsql.Builder) {
+			b.WriteString("CASE WHEN ").
+				Ident(emailchange.FieldAttempts).
+				WriteString(" + 1 >= ").Arg(maxAttempts).
+				WriteString(" THEN ").Arg(now).
+				WriteString("::timestamptz ELSE ").
+				Ident(emailchange.FieldConsumedAt).
+				WriteString(" END")
+		}))
+	}).
+	Exec(ctx)
 ```
 
 Trzy szczegóły, które są nośne:
 
 1. każde wyrażenie `SET` czyta wiersz **sprzed** `UPDATE`, więc `attempts + 1`
    musi być powtórzone w `CASE`;
-2. rzutowanie `?::timestamptz` jest jawne;
+2. rzutowanie `::timestamptz` jest jawne;
 3. zero zmienionych wierszy **nie jest błędem** — wołający i tak zwróci błąd „zły kod".
 
 Pilnuje tego `TestFailPasswordResetUnderConcurrency` na prawdziwym Postgresie.
 
-## Hooki a `UPDATE` bez wiersza
+## Hooki a `UPDATE` jednego pola
 
-`Model(&T{}).Where(...).Updates(map)` uruchamia `BeforeSave` na **zerowej**
-strukturze. Walidacja w hooku zobaczy puste pola i odrzuci poprawną zmianę.
+Hook create woła `models.Validate()` na całym wierszu. Update, który rusza jedno pole, **nie** może tego zrobić — rename
+organizacji padłby jako „invalid slug". `schema/validate.go` sprawdza wtedy tylko ruszone pole. Serwis i tak waliduje
+wcześniej; ograniczenia kolumny są drugą siatką.
 
-Rozwiązanie: jawnie pomiń hooki i polegaj na walidacji w serwisie oraz na ograniczeniach kolumny.
-
-```go
-r.db.WithContext(ctx).
-Session(&gorm.Session{SkipHooks: true}).
-Model(&models.Organization{}).
-Where("id = ?", orgID).
-Update("name", name)
-```
-
-`SkipHooks` zachowuje `updated_at`, w przeciwieństwie do `UpdateColumns`.
-
-**Odwrotny przypadek:** gdy hook niesie regułę, której nie chcesz stracić (ochrona przed usunięciem), wczytaj wiersz i
-usuń **obiekt**:
-
-```go
-org, err := r.Organization(ctx, orgID) // BeforeDelete zobaczy IsProtected
-if err != nil {
-return err
-}
-
-return r.db.WithContext(ctx).Delete(org).Error
-```
+**Odwrotny przypadek:** gdy ochrona przed usunięciem musi zobaczyć `IsProtected` / `IsSystem`, wczytaj wiersz i dopiero
+wtedy wołaj `RefuseIfProtected` / `RefuseDelete`. Usunięcie po samym id tej wartości nie widzi.
 
 ## Transakcje
 
 Atomowość jest własnością jednej metody repozytorium:
 
 ```go
-err := r.db.WithContext(ctx).Transaction(func (tx *gorm.DB) error {
-if err := tx.Where("membership_id = ?", memberID).
-Delete(&models.MembershipRole{}).Error; err != nil {
-return err
-}
+err := r.withTx(ctx, func(tx *ent.Tx) error {
+	if _, err := tx.MembershipRole.Delete().
+		Where(membershiprole.MembershipID(memberID)).
+		Exec(ctx); err != nil {
+		return err
+	}
 
-if err := assignRoles(tx, orgID, memberID, roleIDs); err != nil {
-return err
-}
+	if err := assignMembershipRoles(ctx, tx, orgID, memberID, roleIDs); err != nil {
+		return err
+	}
 
-return record(ctx, tx, &models.AuthzEvent{ ... }) // audyt w tej samej transakcji
+	return recordEnt(ctx, tx, &models.AuthzEvent{ ... })
 })
 ```
 
-Wewnątrz używaj **`tx`**, nigdy `r.db`. Zapis poza transakcją to dokładnie ten audyt, który zostaje po cofniętej
+Wewnątrz używaj **`tx`**, nigdy `r.db.Ent()`. Zapis poza transakcją to dokładnie ten audyt, który zostaje po cofniętej
 zmianie.
 
 ## Zastępuj, nie doklejaj
@@ -120,29 +108,15 @@ Sama reguła nie mieszka jednak w SQL-u. Repozytorium przyjmuje **strażnika** z
 i pyta go o werdykt:
 
 ```go
-// domena decyduje
-func RefuseLastOwnerLoss(losing bool) OwnerGuard {
-    return func(state OwnerState) error {
-        if !losing || !state.SubjectHoldsOwner {
-            return nil
-        }
-        if state.Owners <= 1 {
-            return ErrLastOwner
-        }
-        return nil
-    }
-}
-
-// repozytorium tylko dostarcza fakty pod blokadą
-func applyOwnerGuard(tx *gorm.DB, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
-    if err := lockOrganization(tx, orgID); err != nil {
-        return err
-    }
-    state, err := ownerStateTx(tx, orgID, memberID)
-    if err != nil {
-        return err
-    }
-    return guard(state)
+func applyOwnerGuard(ctx context.Context, tx *ent.Tx, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
+	if err := lockOrganization(ctx, tx, orgID); err != nil {
+		return err
+	}
+	state, err := ownerStateTx(ctx, tx, orgID, memberID)
+	if err != nil {
+		return err
+	}
+	return guard(state)
 }
 ```
 
@@ -162,30 +136,24 @@ Kiedy piszesz nową regułę tego typu:
 
 ```go
 // dobrze — wiersz z cudzej organizacji nie zostaje znaleziony
-First(&role, "id = ? AND organization_id = ?", roleID, orgID)
+tx.Role.Query().Where(role.ID(roleID), role.OrganizationID(orgID)).Only(ctx)
 
 // źle — znaleziony i odrzucony; łatwo zapomnieć o drugim kroku
-First(&role, "id = ?", roleID)
-if role.OrganizationID != orgID { ... }
+row, _ := tx.Role.Get(ctx, roleID)
+if row.OrganizationID != orgID { ... }
 ```
 
 Klucz obcy **nie wystarcza** do sprawdzenia przynależności: mówi tylko, że wiersz gdzieś istnieje. Przypisanie roli z
-cudzej organizacji przechodzi walidację FK bez problemu, dlatego `assignRoles` liczy, ile z podanych identyfikatorów
-należy do tej organizacji, i odmawia, gdy nie wszystkie.
+cudzej organizacji przechodzi walidację FK bez problemu, dlatego `assignMembershipRoles` liczy, ile z podanych
+identyfikatorów należy do tej organizacji, i odmawia, gdy nie wszystkie.
 
-## Miękkie usuwanie i zapytania po nazwie tabeli
+## Miękkie usuwanie i krawędzie
 
-Zakres soft delete GORM-a działa tylko przy zapytaniu **przez model**. Zapytanie budowane przez `Table("...")` musi
-filtrować `deleted_at` samo:
+Interceptor filtruje odczyty encji z `deleted_at`. Nie filtruje `EXISTS` z krawędzi: `HasUser()` jest prawdą także dla
+usuniętego konta, a `WithUser` zwraca wtedy `nil`. Predykat to `HasUserWith(user.DeletedAtIsNil())` — ten sam warunek co
+`u.deleted_at IS NULL` w SQL.
 
-```go
-Table("memberships AS m").
-Joins("JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL").
-Joins("LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL")
-```
-
-Lista członków musi być `LEFT JOIN` do `users`: zaproszenie nie ma `user_id`, a `INNER JOIN` wyciąłby je z listy.
-Zaproszenie i tak nic nie nadaje — `GrantsPermissions` wymaga statusu `active`.
+Surowy SQL na puli (`r.db.SQL()`) interceptora nie widzi. Trzeba napisać filtr samemu, albo świadomie go pominąć.
 
 Pominięcie `deleted_at` na użytkowniku oznacza, że usunięte konto nadal ma uprawnienia.
 
@@ -219,9 +187,9 @@ się w N+1.
 ## Naruszenie unikalności zrywa transakcję
 
 W Postgresie `unique_violation` ustawia transakcję w stan aborted. Kolejne polecenie na tym samym `tx` kończy się
-`25P02`, nawet jeśli Go obsłużył błąd. Żeby po kolizji insertu zrobić jeszcze `SELECT` (na przykład przejąć
-zaległe zaproszenie), potrzebny jest savepoint: `tx.SavePoint(...)` przed insertem i `tx.RollbackTo(...)` po
-`gorm.ErrDuplicatedKey`. `SavePoint` i `RollbackTo` zwracają `*gorm.DB` — błąd jest w `.Error`.
+`25P02`, nawet jeśli Go obsłużył błąd. Dlatego `GrantSystemRole` jest
+`OnConflictColumns().DoNothing().ID(ctx)` — nie wolno wstawiać i łapać duplikatu wewnątrz transakcji, która ma jeszcze
+coś zrobić.
 
 ## Stronicowanie
 
@@ -229,7 +197,7 @@ Serwis **przycina** limit, zamiast ufać wołającemu:
 
 ```go
 if limit <= 0 || limit > MaxPage {
-limit = MaxPage
+	limit = MaxPage
 }
 ```
 

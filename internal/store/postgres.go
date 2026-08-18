@@ -5,16 +5,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
+
+	// pgx registers itself as database/sql driver "pgx". The DSN is a postgres://
+	// URL; sql.Open is lazy, so an unreachable host fails at Ping below rather than
+	// here, under DBConnectTimeout.
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	// The generated runtime wires the schema's defaults, hooks and interceptors into
 	// the client. Without it soft delete silently is not soft delete — ent refuses
@@ -25,76 +26,28 @@ import (
 	_ "github.com/wokacz/multi-tenant-go-service/internal/store/ent/runtime"
 )
 
-// DB owns the Postgres connection pool. The embedded *gorm.DB gives callers the
-// full GORM API; sql is kept alongside it so the pool can be closed and pinged
-// without re-deriving the handle and re-handling its error every time.
+// DB owns the Postgres connection pool and the ent client that runs on it.
 type DB struct {
-	*gorm.DB
-
 	sql *sql.DB
 
-	// ent is the client the repositories are moving to. It runs on the same pool as
-	// GORM — one set of connections, one set of limits — which is what lets the
-	// repositories move over one file at a time instead of all at once. See ENT.md.
 	ent *ent.Client
 
-	// entTrace wraps the ent driver's statements in spans. Instrument binds
-	// telemetry onto it after open, so OpenPostgres does not need to know whether
-	// this process is exporting anything.
+	// entTrace wraps the driver's statements in spans. Instrument binds telemetry
+	// onto it after open, so OpenPostgres does not need to know whether this process
+	// is exporting anything.
 	entTrace *tracedDriver
 }
 
 // OpenPostgres connects, configures the pool and verifies the connection is
 // actually usable before returning.
 //
-// It deliberately does not migrate anything: the schema belongs to Atlas
-// (migrations/), and AutoMigrate would quietly diverge from it — GORM guesses
-// at column changes and never drops anything, so the two would disagree in ways
-// nothing reports.
+// It deliberately does not migrate anything: the schema belongs to the files in
+// migrations/, and AutoMigrate would quietly diverge from them.
 func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*DB, error) {
-	gormCfg := &gorm.Config{
-		// Turns driver-specific constraint violations into gorm.ErrDuplicatedKey
-		// and friends. internal/api maps those onto a 409; without this the raw
-		// pgx error falls through and surfaces as a 500.
-		TranslateError: true,
-
-		// The models write time.Now().UTC() throughout. This keeps the
-		// timestamps GORM sets on its own consistent with them, instead of
-		// mixing in the host's local zone.
-		NowFunc: func() time.Time { return time.Now().UTC() },
-
-		// GORM otherwise pings on Open with no deadline of its own. Ping below
-		// instead, so an unreachable database fails in DBConnectTimeout rather
-		// than hanging on whatever the driver defaults to.
-		DisableAutomaticPing: true,
-
-		Logger: gormlogger.New(
-			slog.NewLogLogger(log.Handler(), slog.LevelWarn),
-			gormlogger.Config{
-				SlowThreshold: cfg.DBSlowQueryThreshold,
-				LogLevel:      gormlogger.Warn,
-
-				// ErrRecordNotFound is ordinary control flow here — the API
-				// turns it into a 404 — not something worth a warning per miss.
-				IgnoreRecordNotFoundError: true,
-
-				// Log placeholders rather than bound values, so password hashes,
-				// emails and IP addresses never reach the log through a slow
-				// query line.
-				ParameterizedQueries: true,
-			},
-		),
-	}
-
-	gormDB, err := gorm.Open(postgres.Open(cfg.DSN()), gormCfg)
+	sqlDB, err := sql.Open("pgx", cfg.DSN())
 	if err != nil {
 		// cfg.DSN() carries the password, so it stays out of the error.
 		return nil, fmt.Errorf("store: open postgres: %w", err)
-	}
-
-	sqlDB, err := gormDB.DB()
-	if err != nil {
-		return nil, fmt.Errorf("store: sql handle: %w", err)
 	}
 
 	sqlDB.SetMaxOpenConns(cfg.DBMaxOpenConns)
@@ -102,13 +55,8 @@ func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*D
 	sqlDB.SetConnMaxLifetime(cfg.DBConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(cfg.DBConnMaxIdleTime)
 
-	// One pool, two clients. entsql.OpenDB wraps the existing *sql.DB rather than
-	// dialling again: a second pool would double the connection count, and the two
-	// halves of a repository being migrated would sit in different transactions
-	// without anything saying so.
 	entTrace := newTracedDriver(entsql.OpenDB(dialect.Postgres, sqlDB))
 	db := &DB{
-		DB:       gormDB,
 		sql:      sqlDB,
 		ent:      ent.NewClient(ent.Driver(entTrace)),
 		entTrace: entTrace,
@@ -135,10 +83,7 @@ func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*D
 	return db, nil
 }
 
-// Ping checks that a connection can actually be obtained and used. The pool
-// opens lazily, so nothing before this has proved the credentials are right or
-// the host is reachable.
-// Ent is the ent client on this pool.
+// Ent is the client on this pool.
 //
 // It returns the client rather than exposing the field so that nothing outside the
 // store can hold one: ent's generated types are a persistence detail, and
@@ -150,14 +95,17 @@ func (db *DB) Ent() *ent.Client {
 // SQL is the pool underneath.
 //
 // It exists for the two things that cannot go through the ORM: the schema tests,
-// which have to read information_schema rather than trust a struct tag, and the
-// migration to ent, which builds its client on this same pool so both can run side
-// by side. Nothing else should reach for it — a query written here is a query no
-// repository owns.
+// which have to read information_schema rather than trust a struct, and the handful
+// of queries whose shape the client cannot express (a correlated subquery over four
+// tables, a scan that lands in a DTO). Nothing else should reach for it — a query
+// written here is a query no repository owns.
 func (db *DB) SQL() *sql.DB {
 	return db.sql
 }
 
+// Ping checks that a connection can actually be obtained and used. The pool
+// opens lazily, so nothing before this has proved the credentials are right or
+// the host is reachable.
 func (db *DB) Ping(ctx context.Context) error {
 	if err := db.sql.PingContext(ctx); err != nil {
 		return fmt.Errorf("store: ping: %w", err)

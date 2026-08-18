@@ -37,22 +37,26 @@ po pierwszym wdrożeniu: [instrukcja 003](../guides/003_models_and_migrations.md
 
 ```go
 type Model struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey"`
+	ID        uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
 type SoftDelete struct {
-	DeletedAt   gorm.DeletedAt `gorm:"index"`
+	DeletedAt   *time.Time
 	IsProtected bool
 }
 ```
 
-`BeforeCreate` nadaje **UUIDv7**, nie v4. v7 jest uporządkowane w czasie, więc kolejne wstawienia lądują obok siebie w
+Id, czasy i (gdzie trzeba) `deleted_at` / `is_protected` pochodzą z mixinów ent, nie z tagów na tej strukturze.
+`internal/store/models` to słownik, którym operuje domena; repozytorium mapuje encję ent na te pola.
+
+Domyślne `id` to **UUIDv7**, nie v4. v7 jest uporządkowane w czasie, więc kolejne wstawienia lądują obok siebie w
 indeksie klucza głównego zamiast rozsypywać się po całym B-drzewie. Skutek uboczny, z którego korzystają listowania:
 sortowanie po `id DESC` to sortowanie po czasie utworzenia, bez dodatkowego indeksu.
 
-`IsProtected` blokuje usunięcie w hooku `BeforeDelete`. Korzysta z tego organizacja domyślna i konta systemowe.
+`IsProtected` blokuje usunięcie w repozytorium (`RefuseIfProtected`), nie w mixinowym hooku DELETE — ten hook nie widzi
+kolumny bez osobnego SELECT-a. Korzysta z tego organizacja domyślna i konta systemowe.
 
 ## Kto ma miękkie usuwanie
 
@@ -82,16 +86,17 @@ służył do odgadywania, które adresy istnieją), osoba próbująca dostawała
 zalogować. Żaden błąd nigdzie tego nie wyjaśniał. Przy organizacji objawem było `409 slug_taken`, na które nie dało się
 zareagować.
 
-Wyrażone tagiem GORM-a, więc model zostaje źródłem prawdy:
+Wyrażone w schemacie ent, więc schemat zostaje źródłem prawdy:
 
 ```go
-Email string `gorm:"size:255;not null;index:idx_users_email,unique,where:deleted_at IS NULL"`
+field.String("email").NotEmpty().
+	Annotations(entsql.IndexWhere("deleted_at IS NULL"))
 ```
 
 Adres i slug **zostają na starym wierszu** — nie są anonimizowane — bo dziennik zmian rozwiązuje aktora `LEFT JOIN`-em do
 `users` i bez nich przestałby odpowiadać na pytanie „kto to zrobił". Konsekwencja, o której trzeba wiedzieć: po zwolnieniu
 adresu ktoś inny może go zarejestrować, więc dwa wiersze mogą mieć ten sam adres — jeden usunięty, jeden żywy. Zapytania
-szukające po adresie muszą przechodzić przez model (zakres soft delete GORM-a), nie przez `Table(...)`.
+szukające po adresie muszą iść przez klienta ent (interceptor miękkiego usuwania), nie przez surowy SQL bez filtra.
 
 Dla sluga jest to bezpieczne, bo **nic nie adresuje organizacji slugiem** — każda trasa bierze id. Gdyby kiedyś zaczęło,
 ponowne użycie sluga sprawiłoby, że stary link wskazuje innego najemcę, i ta decyzja wymagałaby ponownego rozważenia.
@@ -101,26 +106,13 @@ ponowne użycie sluga sprawiłoby, że stary link wskazuje innego najemcę, i ta
 ### Miękkie usuwanie nie odpala kaskady
 
 `ON DELETE CASCADE` działa wyłącznie przy twardym usunięciu. Dlatego
-`User.BeforeDelete` sam odwołuje urządzenia konta, a zapytania czytające przez relacje muszą filtrować `deleted_at`
-**jawnie**, jeśli budowane są przez
-`Table(...)` zamiast przez model — zakres soft delete GORM-a wtedy nie działa.
+`User.Delete` sam odwołuje urządzenia konta. Interceptor filtruje odczyty przez klienta ent; surowy SQL i krawędź
+`HasUser()` **nie** ukrywają usuniętego konta — trzeba `HasUserWith(DeletedAtIsNil())` albo jawnego `deleted_at`.
 
-### Indeks złożony wymaga przesłonięcia `CreatedAt`
+### Indeks złożony jest w schemacie, nie na strukturze domeny
 
-GORM tworzy indeks złożony tylko wtedy, gdy kilka pól dzieli tę samą nazwę indeksu, a osadzone `Model.CreatedAt` nie da
-się otagować per model. Trzeba je przesłonić na konkretnej strukturze:
-
-```go
-type AuthzEvent struct {
-	Model
-	CreatedAt time.Time `gorm:"index:idx_authz_org_time,priority:2"`
-	OrganizationID *uuid.UUID `gorm:"type:uuid;index:idx_authz_org_time,priority:1"`
-	...
-}
-```
-
-Bez tego indeks po cichu degraduje się do jednokolumnowego. `schema_test.go`
-sprawdza kształt indeksów przez `schema.Parse` — w pamięci, bez bazy.
+Indeksy żyją w `internal/store/ent/schema`. Test Postgresowy czyta `pg_indexes`; `schema:compare` pilnuje, że migracje
+i schemat mówią to samo. Nie ma już cichej degradacji do jednej kolumny przez tag, którego osadzany typ nie dziedziczy.
 
 ### `NULL` w indeksie unikalnym nie jest duplikatem
 
@@ -129,22 +121,21 @@ spodziewamy. Stąd
 `Role.OrganizationID` jest `NOT NULL`, a role platformowe nie są wierszami w
 `roles` — mieszkają w katalogu w kodzie.
 
-### Statement-level `UPDATE` nie widzi danych w hooku
+### Hook waliduje cały wiersz tylko przy Create
 
-`Model(&T{}).Where(...).Updates(map)` uruchamia `BeforeSave` na **zerowej**
-strukturze, więc walidacja w hooku odrzuci poprawną zmianę. Takie zapytania jawnie pomijają hooki i polegają na
-walidacji w serwisie oraz na ograniczeniach kolumny. Szczegóły: [praca z bazą](../guides/005_database_access.md).
+`models.Validate()` wymaga kompletnego wiersza. Update, który rusza jedno pole, sprawdza tylko to pole — rename nie może
+paść jako „invalid slug". Hooki są w `internal/store/ent/schema/validate.go` i wołają te same metody, których używa
+atrapa.
 
 ## Enumeracje
 
-Wartość enumeracyjna to typ stringowy z metodą `Valid()`, hookiem `BeforeSave`
-odrzucającym nieznaną wartość **i** ograniczeniem `check:` w tagu — reguła istnieje więc i w Go, i w Postgresie.
+Wartość enumeracyjna to typ stringowy z metodą `Valid()`, walidacją przy zapisie **i** ograniczeniem `CHECK` w bazie —
+reguła istnieje więc i w Go, i w Postgresie.
 
 ```go
 type MembershipStatus string
 
 const (
-	MembershipInvited   MembershipStatus = "invited"
 	MembershipActive    MembershipStatus = "active"
 	MembershipSuspended MembershipStatus = "suspended"
 )
@@ -155,12 +146,11 @@ func (s MembershipStatus) GrantsPermissions() bool { return s == MembershipActiv
 
 `GrantsPermissions` jest metodą, a nie porównaniem `== MembershipActive`
 rozsianym po kodzie — to właśnie takie porównania się rozjeżdżają, aż któreś zostanie zapisane jako
-`!= MembershipSuspended` i zaproszenie po cichu stanie się członkostwem.
+`!= MembershipSuspended` i nowy status po cichu zacznie nadawać uprawnienia.
 
-Zaproszenie trzyma tożsamość na kolumnie `email` i zostawia `user_id` puste, dopóki zaproszony nie przyjmie. Unikalność
-`(organization_id, email)` zamyka orakl rejestracji: zaproszenie nie musi najpierw szukać adresu w `users`. Indeks
-`(user_id, organization_id)` zostaje — dwa `NULL` w Postgresie się nie zderzają, więc wiele zaproszeń do jednej
-organizacji jest legalne.
+Zaproszenie **nie jest** członkostwem: mieszka we własnej tabeli, trzyma tożsamość na kolumnie `email` i nie ma
+`user_id`. Unikalność `(organization_id, email)` zamyka orakl rejestracji. Członkostwo zawsze ma konto — `user_id` jest
+`NOT NULL`.
 
 Wyjątkiem jest `AuthzAction`, która nie ma ograniczenia w bazie: lista rośnie z każdą operacją administracyjną, a
 `check` zamieniałby każde dopisanie w migrację. Tabela jest append-only i zapisywana z jednego miejsca, więc walidacja

@@ -27,8 +27,8 @@ jobs:
     # another tenant's role id — none of which any other test can see. Left out
     # of CI they run only when somebody remembers to, which is to say they rot.
     #
-    # 18-alpine matches docker-compose.yml and the dev database in atlas.hcl. A
-    # version skew between the three is how "works locally" starts.
+    # 18-alpine matches .docker/compose.yml. A version skew between CI and the
+    # local stack is how "works locally" starts.
     services:
       postgres:
         image: postgres:18-alpine
@@ -60,8 +60,8 @@ jobs:
       - name: Modules are tidy
         run: |
           go mod tidy
-          go mod tidy -C loader
-          git diff --exit-code -- go.mod go.sum loader/go.mod loader/go.sum
+          go mod tidy -C tools/entgen
+          git diff --exit-code -- go.mod go.sum tools/entgen/go.mod tools/entgen/go.sum
 
       - name: Lint
         # Installed rather than taken from golangci-lint-action, whose major
@@ -81,7 +81,7 @@ jobs:
       # builds it from .env, which does not exist here. It has to stay in step
       # with the defaults in internal/config that testDB also relies on.
       - name: Apply migrations
-        run: atlas migrate apply --env local --url "$DB_URL"
+        run: atlas migrate apply --dir "file://migrations" --url "$DB_URL"
         env:
           DB_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
 
@@ -97,21 +97,18 @@ jobs:
         env:
           POSTGRES_TEST: "1"
 
+      - name: Generated ent client is current
+        run: |
+          go build -C tools/entgen -o bin/entgen entgo.io/ent/cmd/ent
+          ./bin/entgen generate --feature intercept,sql/lock,sql/upsert,sql/modifier,sql/versioned-migration ./internal/store/ent/schema
+          git diff --exit-code -- internal/store/ent \
+            || { echo "::error::The ent client is stale. Run 'task ent:generate' and commit the result."; exit 1; }
+
       - name: OpenAPI document is current
         run: |
           go run ./cmd/openapi > api/openapi.yaml
           git diff --exit-code -- api/openapi.yaml \
             || { echo "::error::The API contract changed. Run 'task openapi' and commit api/openapi.yaml."; exit 1; }
 
-      - name: Migrations match the GORM models
-        run: |
-          atlas migrate validate --env local
-          atlas migrate diff ci_drift --env local
-          # A synced directory produces no file at all, so anything new here
-          # means a model changed without the migration that goes with it.
-          # git diff alone would miss it: the new file is untracked.
-          if [ -n "$(git status --porcelain -- migrations/)" ]; then
-            git status --porcelain -- migrations/
-            echo "::error::A GORM model changed without a migration. Run 'task migrate:diff NAME=<name>' and commit the result."
-            exit 1
-          fi
+      - name: Migration directory is intact
+        run: atlas migrate validate --dir "file://migrations"

@@ -19,10 +19,10 @@ import (
 // read.
 //
 // Two halves, and they are different mechanisms for a reason. The interceptor adds
-// "deleted_at IS NULL" to queries, so a read cannot forget it — under GORM that was
-// the scope on gorm.DeletedAt, and the one place it did not apply (a condition hanging
-// off a LEFT JOIN) is where deleted accounts stayed visible for months. The hook turns
-// a delete into an update, so nothing has to remember to write a timestamp instead of
+// "deleted_at IS NULL" to queries, so a read cannot forget it. The one place a filter
+// like that does not apply — a condition hanging off a LEFT JOIN, or an EXISTS from
+// an edge — is where deleted accounts stayed visible for months. The hook turns a
+// delete into an update, so nothing has to remember to write a timestamp instead of
 // issuing a DELETE.
 //
 // Neither is optional and both are escapable, through SkipSoftDelete. That escape is
@@ -33,8 +33,8 @@ import (
 //
 // What is *not* here: models.ErrProtected. A delete hook receives a predicate, not a
 // row, so it cannot see whether is_protected is set without a query of its own. The
-// repository loads the organization before deleting it — it already did under GORM, for
-// exactly this reason — and that is where the refusal belongs.
+// repository loads the organization before deleting it, and that is where the
+// refusal belongs.
 type SoftDelete struct {
 	mixin.Schema
 }

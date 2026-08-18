@@ -7,14 +7,14 @@ wymienia tylko to, czego domena naprawdę używa.
 
 ```
 internal/domain/widgets/repository.go       ← interfejs + błędy domenowe
-internal/store/repositories/widgets.go      ← implementacja GORM
+internal/store/repositories/widgets.go      ← implementacja ent
 internal/store/repositories/memory/…        ← fake do testów
 ```
 
 ## Lista kontrolna
 
 1. Interfejs i błędy w `internal/domain/<rzecz>/repository.go`
-2. Implementacja GORM z asercją `var _ <rzecz>.Repository = (*T)(nil)`
+2. Implementacja z asercją `var _ <rzecz>.Repository = (*T)(nil)`
 3. **Ten sam interfejs w fake'u** in-memory
 4. Mapowanie błędów w `problem`
 5. Test na fake'u; test na Postgresie tylko dla tego, co fake udaje w Go
@@ -45,7 +45,7 @@ Konwencje:
 
 - `ctx` zawsze pierwszy, `orgID` zawsze drugi,
 - `time.Time` przekazywany **do środka**, nie odczytywany w repozytorium — dzięki temu test steruje czasem,
-- „nie znaleziono" to zawsze błąd domenowy, nigdy `gorm.ErrRecordNotFound`,
+- „nie znaleziono" to zawsze błąd domenowy, nigdy `ent.NotFoundError`,
 - komentarz przy metodzie mówi, **kiedy** zwraca który błąd.
 
 `TestScopedRepositoryMethodsTakeAnOrganization` sprawdza refleksją, że drugi parametr faktycznie jest `uuid.UUID`.
@@ -108,7 +108,7 @@ To samo dotyczy atrapy w `memory`: jeśli sortuje inaczej niż SQL, po stronicow
 różnica przestaje być kosmetyczna i zmienia to, **które** wiersze są na stronie.
 Oba porządki są przypięte w `internal/store/repositories/contract`.
 
-## Implementacja GORM
+## Implementacja
 
 ```go
 type Widgets struct {
@@ -122,15 +122,16 @@ func NewWidgets(db *store.DB) *Widgets { return &Widgets{db: db} }
 var _ widgets.Repository = (*Widgets)(nil)
 
 func (r *Widgets) Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*models.Widget, error) {
-var widget models.Widget
+	row, err := r.db.Ent().Widget.Query().
+		Where(widget.ID(widgetID), widget.OrganizationID(orgID)).
+		Only(ctx)
+	if err != nil {
+		return nil, translateWidgetError("widget", err)
+	}
 
-err := r.db.WithContext(ctx).
-First(&widget, "id = ? AND organization_id = ?", widgetID, orgID).Error
-if err != nil {
-return nil, translateWidgetError("widget", err)
-}
+	out := widgetModel(row)
 
-return &widget, nil
+	return &out, nil
 }
 ```
 
@@ -139,17 +140,17 @@ znaleziony**, zamiast zostać znaleziony i odrzucony.
 
 ## Tłumaczenie błędów
 
-Tu kończy się GORM. Wzorzec:
+Tu kończy się sterownik. Wzorzec:
 
 ```go
 func translateWidgetError(op string, err error) error {
 switch {
 case err == nil:
 return nil
-case errors.Is(err, gorm.ErrRecordNotFound):
-return widgets.ErrNotFound
-case errors.Is(err, gorm.ErrDuplicatedKey):
-return widgets.ErrKeyTaken
+	case isNotFound(err):
+		return widgets.ErrNotFound
+	case isUniqueViolation(err):
+		return widgets.ErrKeyTaken
 case errors.Is(err, models.ErrWidgetLocked):
 return err // błąd modelu przechodzi dalej
 default:
@@ -158,8 +159,7 @@ return fmt.Errorf("store: %s: %w", op, err)
 }
 ```
 
-`gorm.ErrDuplicatedKey` pojawia się dzięki `TranslateError: true` w konfiguracji połączenia. Bez tego dostaniesz surowy
-błąd pgx.
+`isUniqueViolation` czyta kod Postgresa `23505` spod `ent.ConstraintError`. Bez tego dostaniesz surowy błąd pgx.
 
 Nieprzetłumaczony błąd dojdzie do `problem` i stanie się nieprzejrzystym `500` — bezpiecznie, ale bezużytecznie dla
 klienta.
@@ -192,12 +192,12 @@ Nie ma `WithTx` ani abstrakcji jednostki pracy. Atomowość jest własnością *
 składa domena:
 
 ```go
-err := r.db.WithContext(ctx).Transaction(func (tx *gorm.DB) error {
-if err := tx.Create(widget).Error; err != nil {
-return err
-}
+err := r.withTx(ctx, func(tx *ent.Tx) error {
+	if _, err := tx.Widget.Create().SetOrganizationID(orgID).Save(ctx); err != nil {
+		return err
+	}
 
-return record(ctx, tx, &models.AuthzEvent{ ... })
+	return recordEnt(ctx, tx, &models.AuthzEvent{ ... })
 })
 ```
 

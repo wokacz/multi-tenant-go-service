@@ -27,7 +27,7 @@ When you cannot establish something from the repository, **say so**. Do not gues
 
 These are enforced by tests, not by review, because every violation looks harmless in isolation.
 
-1. **huma only inside `internal/api`. gorm only inside `internal/store`.**
+1. **huma only inside `internal/api`. entgo.io only inside `internal/store`.**
    Enforced by `internal/architecture_test.go` (note: it lives at the root of
    `internal/`, not under `internal/api/`).
 2. **The consumer owns the repository interface.** It is declared in
@@ -38,7 +38,7 @@ These are enforced by tests, not by review, because every violation looks harmle
    `selfServiceOperations`, `operationAccess`.
 5. **Handlers read the organization from `authz.GrantFrom(ctx)`**, never from
    `in.OrgID`.
-6. **Storage errors are translated at the storage boundary.** `problem` maps domain vocabulary only; a gorm error
+6. **Storage errors are translated at the storage boundary.** `problem` maps domain vocabulary only; a driver error
    reaching it becomes an opaque 500.
 
 If a task seems to require breaking one of these, stop and explain the conflict instead of working around the test.
@@ -60,11 +60,12 @@ internal/
   i18n/                 language negotiation + embedded locale catalogs
   domain/               business rules; one directory per entity
     audit/ authz/ orgs/ user/
-  store/                the only place gorm appears
-    models/             GORM models — source of truth for the schema
+  store/                the only place entgo.io appears
+    ent/schema/         the source of truth for the schema
+    models/             domain structs; repositories map ent entities onto these
     repositories/       implementations
       memory/           in-memory fake, shared by every test package
-loader/                 SEPARATE Go module — prints model DDL for Atlas
+tools/entgen/           SEPARATE Go module — the ent code generator
 migrations/             Atlas migrations, generated
 compose.yml             include pointer so `docker compose up` works from the root
 .docker/                compose.yml, Dockerfile, air.toml — not a production image
@@ -98,10 +99,10 @@ Run `task check`. If you touched any of these, run the extra step too:
 | Touched                             | Also required                                                  |
 |-------------------------------------|----------------------------------------------------------------|
 | a handler, DTO, or `huma.Operation` | `task openapi` and commit `api/openapi.yaml`                   |
-| a model in `internal/store/models`  | add it to `loader/main.go`, then `task migrate:diff NAME=…`    |
+| a schema in `internal/store/ent/schema` | `task ent:generate`, then `task migrate:diff NAME=…`       |
 | a repository interface              | update the fake in `internal/store/repositories/memory`        |
 | a permission                        | translations in **every** `internal/i18n/locales/*.json`       |
-| `go.mod`                            | `task tidy` — a bare `go mod tidy` misses the `loader/` module |
+| `go.mod`                            | `task tidy` — a bare `go mod tidy` misses the `tools/entgen` module |
 
 `task check` fails on an uncommitted `api/openapi.yaml` regeneration and on a model changed without its migration. Both
 failures name the fix.
@@ -114,7 +115,8 @@ matters.
 | Test                                               | File                                  | Demands                                                      |
 |----------------------------------------------------|---------------------------------------|--------------------------------------------------------------|
 | `TestHumaStaysInsideTheAPIPackage`                 | `internal/architecture_test.go`       | no huma import outside `internal/api`                        |
-| `TestGormStaysInsideTheStore`                      | `internal/architecture_test.go`       | no gorm import outside `internal/store`                      |
+| `TestGormDoesNotAppear`                            | `internal/architecture_test.go`       | the previous ORM is not imported anywhere under `internal/`  |
+| `TestEntStaysInsideTheStore`                       | `internal/architecture_test.go`       | no entgo.io import outside `internal/store`                  |
 | `TestEveryOperationIsClassified`                   | `internal/api/middleware_test.go`     | `publicOperations` and the spec's `Security` agree both ways |
 | `TestEveryOperationHasExactlyOneAuthorizationRule` | `internal/api/authz_test.go`          | every operation in exactly one of the three sets             |
 | `TestOrgScopedRulesLiveOnOrgScopedPaths`           | `internal/api/authz_test.go`          | `ScopeOrganization` ⟺ `{orgID}` in the path                  |
@@ -155,25 +157,24 @@ iterating on failures.
 | `api/openapi.yaml`        | `task openapi`                                   |
 | `migrations/*.sql`        | `task migrate:diff NAME=…`                       |
 | `migrations/atlas.sum`    | regenerated by Atlas; a hand edit invalidates it |
-| `go.sum`, `loader/go.sum` | `task tidy`                                      |
+| `go.sum`, `tools/entgen/go.sum` | `task tidy`                          |
 
 Do not add a dependency without saying why in your response. The direct dependency list is short on purpose — see
 [design/001](docs/design/001_technology_stack.md) for what is deliberately absent.
 
 ## Traps
 
-| Trap                                                   | Consequence                                                                                                           |
-|--------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `go mod tidy` without `-C loader`                      | second module drifts; CI fails                                                                                        |
-| golangci-lint installed without the `/v2/` module path | silently installs v1, which cannot read `.golangci.yml`                                                               |
-| model missing from `loader/main.go`                    | Atlas proposes **dropping** its table                                                                                 |
-| `Model(&T{}).Where(...).Updates(map)`                  | runs `BeforeSave` on a zero struct; validation rejects a valid change — use `Session(&gorm.Session{SkipHooks: true})` |
-| `Where(...).Delete(...)`                               | hands `BeforeDelete` a zero receiver, so `IsProtected` / `IsSystem` protections do not apply — load the row first     |
-| read-modify-write on a counter                         | concurrent requests lose increments; use one conditional `UPDATE`                                                     |
-| query built with `Table("...")`                        | GORM's soft-delete scope does not apply; filter `deleted_at` yourself                                                 |
-| unique index on a nullable column                      | in Postgres two `NULL`s do not collide                                                                                |
-| composite index without shadowing `CreatedAt`          | silently degrades to single-column                                                                                    |
-| new route with a path variable                         | the rate limiter matches literal paths; see `isMembersPath`                                                           |
+| Trap                                                   | Consequence                                                                                         |
+|--------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `go mod tidy` without `-C tools/entgen`                | second module drifts; CI fails                                                                      |
+| golangci-lint installed without the `/v2/` module path | silently installs v1, which cannot read `.golangci.yml`                                             |
+| schema changed without `task ent:generate`             | `ent:check` fails; the committed client is stale                                                    |
+| `AddX(1)` plus a second statement for the cap          | concurrent attempts lose increments; keep the counter and the cap in one `UPDATE`                   |
+| delete by id without loading the row first             | `IsProtected` / `IsSystem` are never seen; load, then `RefuseIfProtected` / `RefuseDelete`          |
+| read-modify-write on a counter                         | concurrent requests lose increments; use one conditional `UPDATE`                                   |
+| query that bypasses the ent client                     | the soft-delete interceptor does not apply; filter `deleted_at` yourself                            |
+| unique index on a nullable column                      | in Postgres two `NULL`s do not collide                                                              |
+| new route with a path variable                         | the rate limiter matches literal paths; see `isMembersPath`                                         |
 
 ## Where to look
 

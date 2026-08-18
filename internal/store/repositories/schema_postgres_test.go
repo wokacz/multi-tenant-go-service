@@ -9,13 +9,11 @@ import (
 	"testing"
 )
 
-// The schema tests read the database, not the models.
+// The schema tests read the database, not the structs.
 //
-// internal/store/models/schema_test.go asserts the same properties by reflecting
-// over GORM's struct tags, which answers "did somebody write the tag" rather than
-// "is the index there". The two are the same thing only for as long as the tags are
-// what builds the schema — and the migration to ent moves that job elsewhere, at
-// which point a test reading tags proves nothing about the running database.
+// Indexes live in internal/store/ent/schema. A test that read Go tags would answer
+// "did somebody write the field" rather than "is the index there". These cases
+// query pg_indexes, which is what the running database actually has.
 //
 // These are also the properties nobody notices breaking. A unique index that quietly
 // became non-unique, or a partial index that lost its WHERE, produces no error: it

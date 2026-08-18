@@ -82,7 +82,7 @@ zawartości.
 Ostatni wiersz jest najważniejszy. Niezmapowany błąd trafia do logu przy identyfikatorze żądania, a klient dostaje
 nieprzejrzyste `500` — surowe błędy niosą nazwy tabel, fragmenty zapytań, a czasem poświadczenia.
 
-Zauważ, czego na tej liście nie ma: **GORM-a**. Repozytoria tłumaczą błędy sterownika na domenowe, więc `problem` mapuje
+Zauważ, czego na tej liście nie ma: **sterownika bazy**. Repozytoria tłumaczą błędy sterownika na domenowe, więc `problem` mapuje
 wyłącznie słownictwo domeny. Błąd sterownika, który tu dotarł, oznacza, że jakieś repozytorium zapomniało go
 przetłumaczyć — i słusznie staje się nieprzejrzystym `500`.
 
@@ -106,7 +106,7 @@ angielski napis z definicji w Go i jest tylko awaryjnym zapasem dla klucza, któ
 Te komunikaty były kompletne i przetestowane w obu językach na długo przed tym, jak cokolwiek zaczęło je czytać: każda
 odpowiedź niosła kolumnę. Utrzymywanie katalogu w porządku to nie to samo co używanie go.
 
-Była też tabela `role_translations` na drugą odpowiedź — z modelem, hookami i wpisem w loaderze, bez ani jednego
+Była też tabela `role_translations` na drugą odpowiedź — z modelem, hookami i wpisem w schemacie, bez ani jednego
 czytelnika i pisarza. Usunięta: nazwa, którą klient wpisał w ustawieniach, jest już w języku, w którym pracuje, a druga
 jej kopia w bazie kosztowała przy każdej migracji.
 

@@ -424,10 +424,10 @@ func TestLoginEventsRoundTrip(t *testing.T) {
 	}
 }
 
-// TestCreateTranslatesDuplicateEmail covers the branch that depends on GORM's
-// TranslateError flag being set in store.OpenPostgres. Without it the unique
-// violation arrives as a raw pgx error and registration answers 500 instead of
-// the deliberate 204, and no test that stubs the repository would notice.
+// TestCreateTranslatesDuplicateEmail covers the branch that maps Postgres 23505
+// onto user.ErrEmailTaken. Without it the unique violation arrives as a raw pgx
+// error and registration answers 500 instead of the deliberate 204, and no test
+// that stubs the repository would notice.
 func TestCreateTranslatesDuplicateEmail(t *testing.T) {
 	repo := repositories.NewUser(testDB(t))
 	ctx := context.Background()
@@ -666,10 +666,8 @@ func TestSetTwoFactorEnabled(t *testing.T) {
 
 // TestUpdateProfileWritesBothColumns covers the one statement behind PATCH /v1/me.
 //
-// It skips hooks, the same as UpdateOrganization, because GORM would run
-// User.BeforeSave against the zero-valued struct handed to Model and judge an
-// empty address. That makes this the kind of query where a wrong column name or a
-// missed WHERE is invisible until somebody's profile is somebody else's.
+// A wrong column name or a missed WHERE is invisible until somebody's profile is
+// somebody else's. SetLocale("") must write the empty string, not skip the column.
 func TestUpdateProfileWritesBothColumns(t *testing.T) {
 	repo := repositories.NewUser(testDB(t))
 	ctx := context.Background()
@@ -708,10 +706,9 @@ func TestUpdateProfileWritesBothColumns(t *testing.T) {
 		t.Error("the other account was renamed too")
 	}
 
-	// Clearing the locale has to reach the column. The update is built from a map
-	// for exactly this reason: GORM skips zero values when it is handed a struct,
-	// so a struct here would silently keep "pl" while the fake cleared it — and the
-	// only visible symptom would be a language nobody can switch off.
+	// Clearing the locale has to reach the column. SetLocale("") writes the empty
+	// string; a missed call would silently keep "pl", and the only visible symptom
+	// would be a language nobody can switch off.
 	if err := repo.UpdateProfile(ctx, u.ID, "Ada Lovelace", ""); err != nil {
 		t.Fatalf("UpdateProfile() clearing the locale = %v", err)
 	}
