@@ -4,6 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 )
@@ -25,14 +26,17 @@ func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("name").
 			MaxLen(100).
+			SchemaType(varchar(100)).
 			NotEmpty(),
 
 		field.String("email").
 			MaxLen(255).
+			SchemaType(varchar(255)).
 			NotEmpty(),
 
 		field.String("password_hash").
 			MaxLen(255).
+			SchemaType(varchar(255)).
 			NotEmpty().
 			Sensitive(),
 
@@ -41,6 +45,7 @@ func (User) Fields() []ent.Field {
 		// guess into a permanent decision.
 		field.String("locale").
 			MaxLen(10).
+			SchemaType(varchar(10)).
 			Optional(),
 
 		field.Int("session_epoch").
@@ -59,6 +64,18 @@ func (User) Fields() []ent.Field {
 	}
 }
 
+func (User) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("memberships", Membership.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("devices", Device.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("login_events", LoginEvent.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("password_resets", PasswordReset.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("email_changes", EmailChange.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("challenges", TwoFactorChallenge.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("system_roles", UserSystemRole.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+	}
+}
+
 func (User) Indexes() []ent.Index {
 	return []ent.Index{
 		// Partial, and this is the M9 property: unique among live rows only, so a
@@ -69,6 +86,11 @@ func (User) Indexes() []ent.Index {
 			Unique().
 			Annotations(entsql.IndexWhere("deleted_at IS NULL")).
 			StorageKey("idx_users_email"),
+
+		// Every read on this table carries "deleted_at IS NULL"; without this the
+		// predicate is a sequential scan.
+		index.Fields("deleted_at").
+			StorageKey("idx_users_deleted_at"),
 	}
 }
 

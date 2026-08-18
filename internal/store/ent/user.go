@@ -39,8 +39,95 @@ type User struct {
 	// TwoFactorEnabled holds the value of the "two_factor_enabled" field.
 	TwoFactorEnabled bool `json:"two_factor_enabled,omitempty"`
 	// SuspendedAt holds the value of the "suspended_at" field.
-	SuspendedAt  *time.Time `json:"suspended_at,omitempty"`
+	SuspendedAt *time.Time `json:"suspended_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the UserQuery when eager-loading is set.
+	Edges        UserEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// UserEdges holds the relations/edges for other nodes in the graph.
+type UserEdges struct {
+	// Memberships holds the value of the memberships edge.
+	Memberships []*Membership `json:"memberships,omitempty"`
+	// Devices holds the value of the devices edge.
+	Devices []*Device `json:"devices,omitempty"`
+	// LoginEvents holds the value of the login_events edge.
+	LoginEvents []*LoginEvent `json:"login_events,omitempty"`
+	// PasswordResets holds the value of the password_resets edge.
+	PasswordResets []*PasswordReset `json:"password_resets,omitempty"`
+	// EmailChanges holds the value of the email_changes edge.
+	EmailChanges []*EmailChange `json:"email_changes,omitempty"`
+	// Challenges holds the value of the challenges edge.
+	Challenges []*TwoFactorChallenge `json:"challenges,omitempty"`
+	// SystemRoles holds the value of the system_roles edge.
+	SystemRoles []*UserSystemRole `json:"system_roles,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [7]bool
+}
+
+// MembershipsOrErr returns the Memberships value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) MembershipsOrErr() ([]*Membership, error) {
+	if e.loadedTypes[0] {
+		return e.Memberships, nil
+	}
+	return nil, &NotLoadedError{edge: "memberships"}
+}
+
+// DevicesOrErr returns the Devices value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) DevicesOrErr() ([]*Device, error) {
+	if e.loadedTypes[1] {
+		return e.Devices, nil
+	}
+	return nil, &NotLoadedError{edge: "devices"}
+}
+
+// LoginEventsOrErr returns the LoginEvents value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) LoginEventsOrErr() ([]*LoginEvent, error) {
+	if e.loadedTypes[2] {
+		return e.LoginEvents, nil
+	}
+	return nil, &NotLoadedError{edge: "login_events"}
+}
+
+// PasswordResetsOrErr returns the PasswordResets value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) PasswordResetsOrErr() ([]*PasswordReset, error) {
+	if e.loadedTypes[3] {
+		return e.PasswordResets, nil
+	}
+	return nil, &NotLoadedError{edge: "password_resets"}
+}
+
+// EmailChangesOrErr returns the EmailChanges value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) EmailChangesOrErr() ([]*EmailChange, error) {
+	if e.loadedTypes[4] {
+		return e.EmailChanges, nil
+	}
+	return nil, &NotLoadedError{edge: "email_changes"}
+}
+
+// ChallengesOrErr returns the Challenges value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) ChallengesOrErr() ([]*TwoFactorChallenge, error) {
+	if e.loadedTypes[5] {
+		return e.Challenges, nil
+	}
+	return nil, &NotLoadedError{edge: "challenges"}
+}
+
+// SystemRolesOrErr returns the SystemRoles value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) SystemRolesOrErr() ([]*UserSystemRole, error) {
+	if e.loadedTypes[6] {
+		return e.SystemRoles, nil
+	}
+	return nil, &NotLoadedError{edge: "system_roles"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -158,6 +245,41 @@ func (_m *User) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *User) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryMemberships queries the "memberships" edge of the User entity.
+func (_m *User) QueryMemberships() *MembershipQuery {
+	return NewUserClient(_m.config).QueryMemberships(_m)
+}
+
+// QueryDevices queries the "devices" edge of the User entity.
+func (_m *User) QueryDevices() *DeviceQuery {
+	return NewUserClient(_m.config).QueryDevices(_m)
+}
+
+// QueryLoginEvents queries the "login_events" edge of the User entity.
+func (_m *User) QueryLoginEvents() *LoginEventQuery {
+	return NewUserClient(_m.config).QueryLoginEvents(_m)
+}
+
+// QueryPasswordResets queries the "password_resets" edge of the User entity.
+func (_m *User) QueryPasswordResets() *PasswordResetQuery {
+	return NewUserClient(_m.config).QueryPasswordResets(_m)
+}
+
+// QueryEmailChanges queries the "email_changes" edge of the User entity.
+func (_m *User) QueryEmailChanges() *EmailChangeQuery {
+	return NewUserClient(_m.config).QueryEmailChanges(_m)
+}
+
+// QueryChallenges queries the "challenges" edge of the User entity.
+func (_m *User) QueryChallenges() *TwoFactorChallengeQuery {
+	return NewUserClient(_m.config).QueryChallenges(_m)
+}
+
+// QuerySystemRoles queries the "system_roles" edge of the User entity.
+func (_m *User) QuerySystemRoles() *UserSystemRoleQuery {
+	return NewUserClient(_m.config).QuerySystemRoles(_m)
 }
 
 // Update returns a builder for updating this User.

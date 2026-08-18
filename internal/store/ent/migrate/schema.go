@@ -9,6 +9,495 @@ import (
 )
 
 var (
+	// AuthzEventsColumns holds the columns for the "authz_events" table.
+	AuthzEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "organization_id", Type: field.TypeUUID, Nullable: true},
+		{Name: "actor_id", Type: field.TypeUUID},
+		{Name: "subject_id", Type: field.TypeUUID, Nullable: true},
+		{Name: "action", Type: field.TypeString, Size: 40, SchemaType: map[string]string{"postgres": "character varying(40)"}},
+		{Name: "role_id", Type: field.TypeUUID, Nullable: true},
+		{Name: "permission_key", Type: field.TypeString, Nullable: true, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "ip", Type: field.TypeString, SchemaType: map[string]string{"postgres": "inet"}},
+		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512, SchemaType: map[string]string{"postgres": "character varying(512)"}},
+		{Name: "detail", Type: field.TypeString, Nullable: true, Size: 500, SchemaType: map[string]string{"postgres": "character varying(500)"}},
+	}
+	// AuthzEventsTable holds the schema information for the "authz_events" table.
+	AuthzEventsTable = &schema.Table{
+		Name:       "authz_events",
+		Columns:    AuthzEventsColumns,
+		PrimaryKey: []*schema.Column{AuthzEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_authz_org_time",
+				Unique:  false,
+				Columns: []*schema.Column{AuthzEventsColumns[3], AuthzEventsColumns[1]},
+			},
+			{
+				Name:    "idx_authz_actor_time",
+				Unique:  false,
+				Columns: []*schema.Column{AuthzEventsColumns[4], AuthzEventsColumns[1]},
+			},
+			{
+				Name:    "idx_authz_events_subject_id",
+				Unique:  false,
+				Columns: []*schema.Column{AuthzEventsColumns[5]},
+			},
+		},
+	}
+	// DevicesColumns holds the columns for the "devices" table.
+	DevicesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "fingerprint", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "label", Type: field.TypeString, Nullable: true, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512, SchemaType: map[string]string{"postgres": "character varying(512)"}},
+		{Name: "last_seen_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_ip", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "inet"}},
+		{Name: "trusted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// DevicesTable holds the schema information for the "devices" table.
+	DevicesTable = &schema.Table{
+		Name:       "devices",
+		Columns:    DevicesColumns,
+		PrimaryKey: []*schema.Column{DevicesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "devices_users_devices",
+				Columns:    []*schema.Column{DevicesColumns[10]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_device_user_fp",
+				Unique:  true,
+				Columns: []*schema.Column{DevicesColumns[10], DevicesColumns[3]},
+			},
+			{
+				Name:    "idx_devices_last_seen_at",
+				Unique:  false,
+				Columns: []*schema.Column{DevicesColumns[6]},
+			},
+		},
+	}
+	// EmailChangesColumns holds the columns for the "email_changes" table.
+	EmailChangesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "new_email", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
+		{Name: "code_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "attempts", Type: field.TypeInt},
+		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// EmailChangesTable holds the schema information for the "email_changes" table.
+	EmailChangesTable = &schema.Table{
+		Name:       "email_changes",
+		Columns:    EmailChangesColumns,
+		PrimaryKey: []*schema.Column{EmailChangesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "email_changes_users_email_changes",
+				Columns:    []*schema.Column{EmailChangesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_email_changes_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{EmailChangesColumns[8]},
+			},
+			{
+				Name:    "idx_email_changes_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{EmailChangesColumns[5]},
+			},
+		},
+	}
+	// InvitationsColumns holds the columns for the "invitations" table.
+	InvitationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "email", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
+		{Name: "token_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "invited_by", Type: field.TypeUUID, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "accepted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "organization_id", Type: field.TypeUUID},
+	}
+	// InvitationsTable holds the schema information for the "invitations" table.
+	InvitationsTable = &schema.Table{
+		Name:       "invitations",
+		Columns:    InvitationsColumns,
+		PrimaryKey: []*schema.Column{InvitationsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "invitations_organizations_invitations",
+				Columns:    []*schema.Column{InvitationsColumns[8]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_invitation_org_email",
+				Unique:  true,
+				Columns: []*schema.Column{InvitationsColumns[8], InvitationsColumns[3]},
+			},
+			{
+				Name:    "idx_invitations_token_hash",
+				Unique:  true,
+				Columns: []*schema.Column{InvitationsColumns[4]},
+			},
+			{
+				Name:    "idx_invitations_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{InvitationsColumns[6]},
+			},
+		},
+	}
+	// InvitationRolesColumns holds the columns for the "invitation_roles" table.
+	InvitationRolesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "invitation_id", Type: field.TypeUUID},
+		{Name: "role_id", Type: field.TypeUUID},
+	}
+	// InvitationRolesTable holds the schema information for the "invitation_roles" table.
+	InvitationRolesTable = &schema.Table{
+		Name:       "invitation_roles",
+		Columns:    InvitationRolesColumns,
+		PrimaryKey: []*schema.Column{InvitationRolesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "invitation_roles_invitations_roles",
+				Columns:    []*schema.Column{InvitationRolesColumns[3]},
+				RefColumns: []*schema.Column{InvitationsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "invitation_roles_roles_invitation_roles",
+				Columns:    []*schema.Column{InvitationRolesColumns[4]},
+				RefColumns: []*schema.Column{RolesColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_invitation_role",
+				Unique:  true,
+				Columns: []*schema.Column{InvitationRolesColumns[3], InvitationRolesColumns[4]},
+			},
+		},
+	}
+	// LoginEventsColumns holds the columns for the "login_events" table.
+	LoginEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "device_id", Type: field.TypeUUID, Nullable: true},
+		{Name: "ip", Type: field.TypeString, SchemaType: map[string]string{"postgres": "inet"}},
+		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512, SchemaType: map[string]string{"postgres": "character varying(512)"}},
+		{Name: "outcome", Type: field.TypeEnum, Enums: []string{"success", "bad_password", "mfa_failed", "locked"}, SchemaType: map[string]string{"postgres": "character varying(20)"}},
+		{Name: "country", Type: field.TypeString, Nullable: true, Size: 2, SchemaType: map[string]string{"postgres": "character varying(2)"}},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// LoginEventsTable holds the schema information for the "login_events" table.
+	LoginEventsTable = &schema.Table{
+		Name:       "login_events",
+		Columns:    LoginEventsColumns,
+		PrimaryKey: []*schema.Column{LoginEventsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "login_events_users_login_events",
+				Columns:    []*schema.Column{LoginEventsColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_login_user_time",
+				Unique:  false,
+				Columns: []*schema.Column{LoginEventsColumns[8], LoginEventsColumns[1]},
+			},
+			{
+				Name:    "idx_login_device_time",
+				Unique:  false,
+				Columns: []*schema.Column{LoginEventsColumns[3], LoginEventsColumns[1]},
+			},
+			{
+				Name:    "idx_login_events_ip",
+				Unique:  false,
+				Columns: []*schema.Column{LoginEventsColumns[4]},
+			},
+		},
+	}
+	// MembershipsColumns holds the columns for the "memberships" table.
+	MembershipsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "suspended"}, SchemaType: map[string]string{"postgres": "character varying(20)"}},
+		{Name: "invited_by", Type: field.TypeUUID, Nullable: true},
+		{Name: "joined_at", Type: field.TypeTime, Nullable: true},
+		{Name: "organization_id", Type: field.TypeUUID},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// MembershipsTable holds the schema information for the "memberships" table.
+	MembershipsTable = &schema.Table{
+		Name:       "memberships",
+		Columns:    MembershipsColumns,
+		PrimaryKey: []*schema.Column{MembershipsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "memberships_organizations_memberships",
+				Columns:    []*schema.Column{MembershipsColumns[6]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "memberships_users_memberships",
+				Columns:    []*schema.Column{MembershipsColumns[7]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_membership_user_org",
+				Unique:  true,
+				Columns: []*schema.Column{MembershipsColumns[7], MembershipsColumns[6]},
+			},
+		},
+	}
+	// MembershipRolesColumns holds the columns for the "membership_roles" table.
+	MembershipRolesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "granted_by", Type: field.TypeUUID, Nullable: true},
+		{Name: "membership_id", Type: field.TypeUUID},
+		{Name: "role_id", Type: field.TypeUUID},
+	}
+	// MembershipRolesTable holds the schema information for the "membership_roles" table.
+	MembershipRolesTable = &schema.Table{
+		Name:       "membership_roles",
+		Columns:    MembershipRolesColumns,
+		PrimaryKey: []*schema.Column{MembershipRolesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "membership_roles_memberships_roles",
+				Columns:    []*schema.Column{MembershipRolesColumns[4]},
+				RefColumns: []*schema.Column{MembershipsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "membership_roles_roles_membership_roles",
+				Columns:    []*schema.Column{MembershipRolesColumns[5]},
+				RefColumns: []*schema.Column{RolesColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_membership_role",
+				Unique:  true,
+				Columns: []*schema.Column{MembershipRolesColumns[4], MembershipRolesColumns[5]},
+			},
+		},
+	}
+	// OrganizationsColumns holds the columns for the "organizations" table.
+	OrganizationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "is_protected", Type: field.TypeBool, Nullable: true},
+		{Name: "slug", Type: field.TypeString, Size: 63, SchemaType: map[string]string{"postgres": "character varying(63)"}},
+		{Name: "name", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+	}
+	// OrganizationsTable holds the schema information for the "organizations" table.
+	OrganizationsTable = &schema.Table{
+		Name:       "organizations",
+		Columns:    OrganizationsColumns,
+		PrimaryKey: []*schema.Column{OrganizationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_organizations_slug",
+				Unique:  true,
+				Columns: []*schema.Column{OrganizationsColumns[5]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "deleted_at IS NULL",
+				},
+			},
+			{
+				Name:    "idx_organizations_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{OrganizationsColumns[3]},
+			},
+		},
+	}
+	// PasswordResetsColumns holds the columns for the "password_resets" table.
+	PasswordResetsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "code_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "attempts", Type: field.TypeInt},
+		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// PasswordResetsTable holds the schema information for the "password_resets" table.
+	PasswordResetsTable = &schema.Table{
+		Name:       "password_resets",
+		Columns:    PasswordResetsColumns,
+		PrimaryKey: []*schema.Column{PasswordResetsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "password_resets_users_password_resets",
+				Columns:    []*schema.Column{PasswordResetsColumns[7]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_password_resets_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{PasswordResetsColumns[7]},
+			},
+			{
+				Name:    "idx_password_resets_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{PasswordResetsColumns[4]},
+			},
+		},
+	}
+	// RolesColumns holds the columns for the "roles" table.
+	RolesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "key", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "name", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "description", Type: field.TypeString, Nullable: true, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
+		{Name: "is_system", Type: field.TypeBool, Default: false},
+		{Name: "organization_id", Type: field.TypeUUID},
+	}
+	// RolesTable holds the schema information for the "roles" table.
+	RolesTable = &schema.Table{
+		Name:       "roles",
+		Columns:    RolesColumns,
+		PrimaryKey: []*schema.Column{RolesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "roles_organizations_roles",
+				Columns:    []*schema.Column{RolesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_role_org_key",
+				Unique:  true,
+				Columns: []*schema.Column{RolesColumns[7], RolesColumns[3]},
+			},
+		},
+	}
+	// RolePermissionsColumns holds the columns for the "role_permissions" table.
+	RolePermissionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "permission_key", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "role_id", Type: field.TypeUUID},
+	}
+	// RolePermissionsTable holds the schema information for the "role_permissions" table.
+	RolePermissionsTable = &schema.Table{
+		Name:       "role_permissions",
+		Columns:    RolePermissionsColumns,
+		PrimaryKey: []*schema.Column{RolePermissionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "role_permissions_roles_permissions",
+				Columns:    []*schema.Column{RolePermissionsColumns[4]},
+				RefColumns: []*schema.Column{RolesColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_role_permission",
+				Unique:  true,
+				Columns: []*schema.Column{RolePermissionsColumns[4], RolePermissionsColumns[3]},
+			},
+		},
+	}
+	// TwoFactorChallengesColumns holds the columns for the "two_factor_challenges" table.
+	TwoFactorChallengesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "code_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "attempts", Type: field.TypeInt},
+		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "device_id", Type: field.TypeUUID},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// TwoFactorChallengesTable holds the schema information for the "two_factor_challenges" table.
+	TwoFactorChallengesTable = &schema.Table{
+		Name:       "two_factor_challenges",
+		Columns:    TwoFactorChallengesColumns,
+		PrimaryKey: []*schema.Column{TwoFactorChallengesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "two_factor_challenges_devices_challenges",
+				Columns:    []*schema.Column{TwoFactorChallengesColumns[7]},
+				RefColumns: []*schema.Column{DevicesColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "two_factor_challenges_users_challenges",
+				Columns:    []*schema.Column{TwoFactorChallengesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_two_factor_challenges_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{TwoFactorChallengesColumns[8]},
+			},
+			{
+				Name:    "idx_two_factor_challenges_device_id",
+				Unique:  false,
+				Columns: []*schema.Column{TwoFactorChallengesColumns[7]},
+			},
+			{
+				Name:    "idx_two_factor_challenges_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{TwoFactorChallengesColumns[4]},
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -16,10 +505,10 @@ var (
 		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
 		{Name: "is_protected", Type: field.TypeBool, Nullable: true},
-		{Name: "name", Type: field.TypeString, Size: 100},
-		{Name: "email", Type: field.TypeString, Size: 255},
-		{Name: "password_hash", Type: field.TypeString, Size: 255},
-		{Name: "locale", Type: field.TypeString, Nullable: true, Size: 10},
+		{Name: "name", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "email", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
+		{Name: "password_hash", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
+		{Name: "locale", Type: field.TypeString, Nullable: true, Size: 10, SchemaType: map[string]string{"postgres": "character varying(10)"}},
 		{Name: "session_epoch", Type: field.TypeInt, Default: 0},
 		{Name: "two_factor_enabled", Type: field.TypeBool, Default: false},
 		{Name: "suspended_at", Type: field.TypeTime, Nullable: true},
@@ -38,16 +527,129 @@ var (
 					Where: "deleted_at IS NULL",
 				},
 			},
+			{
+				Name:    "idx_users_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[3]},
+			},
+		},
+	}
+	// UserSystemRolesColumns holds the columns for the "user_system_roles" table.
+	UserSystemRolesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "role_key", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "granted_by", Type: field.TypeUUID, Nullable: true},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// UserSystemRolesTable holds the schema information for the "user_system_roles" table.
+	UserSystemRolesTable = &schema.Table{
+		Name:       "user_system_roles",
+		Columns:    UserSystemRolesColumns,
+		PrimaryKey: []*schema.Column{UserSystemRolesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_system_roles_users_system_roles",
+				Columns:    []*schema.Column{UserSystemRolesColumns[5]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_user_system_role",
+				Unique:  true,
+				Columns: []*schema.Column{UserSystemRolesColumns[5], UserSystemRolesColumns[3]},
+			},
 		},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AuthzEventsTable,
+		DevicesTable,
+		EmailChangesTable,
+		InvitationsTable,
+		InvitationRolesTable,
+		LoginEventsTable,
+		MembershipsTable,
+		MembershipRolesTable,
+		OrganizationsTable,
+		PasswordResetsTable,
+		RolesTable,
+		RolePermissionsTable,
+		TwoFactorChallengesTable,
 		UsersTable,
+		UserSystemRolesTable,
 	}
 )
 
 func init() {
+	AuthzEventsTable.Annotation = &entsql.Annotation{
+		Table: "authz_events",
+	}
+	DevicesTable.ForeignKeys[0].RefTable = UsersTable
+	DevicesTable.Annotation = &entsql.Annotation{
+		Table: "devices",
+	}
+	EmailChangesTable.ForeignKeys[0].RefTable = UsersTable
+	EmailChangesTable.Annotation = &entsql.Annotation{
+		Table: "email_changes",
+	}
+	InvitationsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	InvitationsTable.Annotation = &entsql.Annotation{
+		Table: "invitations",
+	}
+	InvitationRolesTable.ForeignKeys[0].RefTable = InvitationsTable
+	InvitationRolesTable.ForeignKeys[1].RefTable = RolesTable
+	InvitationRolesTable.Annotation = &entsql.Annotation{
+		Table: "invitation_roles",
+	}
+	LoginEventsTable.ForeignKeys[0].RefTable = UsersTable
+	LoginEventsTable.Annotation = &entsql.Annotation{
+		Table: "login_events",
+	}
+	LoginEventsTable.Annotation.Checks = map[string]string{
+		"chk_login_events_outcome": "(outcome)::text = ANY ((ARRAY['success'::character varying, 'bad_password'::character varying, 'mfa_failed'::character varying, 'locked'::character varying])::text[])",
+	}
+	MembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	MembershipsTable.ForeignKeys[1].RefTable = UsersTable
+	MembershipsTable.Annotation = &entsql.Annotation{
+		Table: "memberships",
+	}
+	MembershipsTable.Annotation.Checks = map[string]string{
+		"chk_memberships_status": "(status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[])",
+	}
+	MembershipRolesTable.ForeignKeys[0].RefTable = MembershipsTable
+	MembershipRolesTable.ForeignKeys[1].RefTable = RolesTable
+	MembershipRolesTable.Annotation = &entsql.Annotation{
+		Table: "membership_roles",
+	}
+	OrganizationsTable.Annotation = &entsql.Annotation{
+		Table: "organizations",
+	}
+	PasswordResetsTable.ForeignKeys[0].RefTable = UsersTable
+	PasswordResetsTable.Annotation = &entsql.Annotation{
+		Table: "password_resets",
+	}
+	RolesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	RolesTable.Annotation = &entsql.Annotation{
+		Table: "roles",
+	}
+	RolePermissionsTable.ForeignKeys[0].RefTable = RolesTable
+	RolePermissionsTable.Annotation = &entsql.Annotation{
+		Table: "role_permissions",
+	}
+	TwoFactorChallengesTable.ForeignKeys[0].RefTable = DevicesTable
+	TwoFactorChallengesTable.ForeignKeys[1].RefTable = UsersTable
+	TwoFactorChallengesTable.Annotation = &entsql.Annotation{
+		Table: "two_factor_challenges",
+	}
 	UsersTable.Annotation = &entsql.Annotation{
 		Table: "users",
+	}
+	UserSystemRolesTable.ForeignKeys[0].RefTable = UsersTable
+	UserSystemRolesTable.Annotation = &entsql.Annotation{
+		Table: "user_system_roles",
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/google/uuid"
 )
 
@@ -36,8 +37,71 @@ const (
 	FieldTwoFactorEnabled = "two_factor_enabled"
 	// FieldSuspendedAt holds the string denoting the suspended_at field in the database.
 	FieldSuspendedAt = "suspended_at"
+	// EdgeMemberships holds the string denoting the memberships edge name in mutations.
+	EdgeMemberships = "memberships"
+	// EdgeDevices holds the string denoting the devices edge name in mutations.
+	EdgeDevices = "devices"
+	// EdgeLoginEvents holds the string denoting the login_events edge name in mutations.
+	EdgeLoginEvents = "login_events"
+	// EdgePasswordResets holds the string denoting the password_resets edge name in mutations.
+	EdgePasswordResets = "password_resets"
+	// EdgeEmailChanges holds the string denoting the email_changes edge name in mutations.
+	EdgeEmailChanges = "email_changes"
+	// EdgeChallenges holds the string denoting the challenges edge name in mutations.
+	EdgeChallenges = "challenges"
+	// EdgeSystemRoles holds the string denoting the system_roles edge name in mutations.
+	EdgeSystemRoles = "system_roles"
 	// Table holds the table name of the user in the database.
 	Table = "users"
+	// MembershipsTable is the table that holds the memberships relation/edge.
+	MembershipsTable = "memberships"
+	// MembershipsInverseTable is the table name for the Membership entity.
+	// It exists in this package in order to avoid circular dependency with the "membership" package.
+	MembershipsInverseTable = "memberships"
+	// MembershipsColumn is the table column denoting the memberships relation/edge.
+	MembershipsColumn = "user_id"
+	// DevicesTable is the table that holds the devices relation/edge.
+	DevicesTable = "devices"
+	// DevicesInverseTable is the table name for the Device entity.
+	// It exists in this package in order to avoid circular dependency with the "device" package.
+	DevicesInverseTable = "devices"
+	// DevicesColumn is the table column denoting the devices relation/edge.
+	DevicesColumn = "user_id"
+	// LoginEventsTable is the table that holds the login_events relation/edge.
+	LoginEventsTable = "login_events"
+	// LoginEventsInverseTable is the table name for the LoginEvent entity.
+	// It exists in this package in order to avoid circular dependency with the "loginevent" package.
+	LoginEventsInverseTable = "login_events"
+	// LoginEventsColumn is the table column denoting the login_events relation/edge.
+	LoginEventsColumn = "user_id"
+	// PasswordResetsTable is the table that holds the password_resets relation/edge.
+	PasswordResetsTable = "password_resets"
+	// PasswordResetsInverseTable is the table name for the PasswordReset entity.
+	// It exists in this package in order to avoid circular dependency with the "passwordreset" package.
+	PasswordResetsInverseTable = "password_resets"
+	// PasswordResetsColumn is the table column denoting the password_resets relation/edge.
+	PasswordResetsColumn = "user_id"
+	// EmailChangesTable is the table that holds the email_changes relation/edge.
+	EmailChangesTable = "email_changes"
+	// EmailChangesInverseTable is the table name for the EmailChange entity.
+	// It exists in this package in order to avoid circular dependency with the "emailchange" package.
+	EmailChangesInverseTable = "email_changes"
+	// EmailChangesColumn is the table column denoting the email_changes relation/edge.
+	EmailChangesColumn = "user_id"
+	// ChallengesTable is the table that holds the challenges relation/edge.
+	ChallengesTable = "two_factor_challenges"
+	// ChallengesInverseTable is the table name for the TwoFactorChallenge entity.
+	// It exists in this package in order to avoid circular dependency with the "twofactorchallenge" package.
+	ChallengesInverseTable = "two_factor_challenges"
+	// ChallengesColumn is the table column denoting the challenges relation/edge.
+	ChallengesColumn = "user_id"
+	// SystemRolesTable is the table that holds the system_roles relation/edge.
+	SystemRolesTable = "user_system_roles"
+	// SystemRolesInverseTable is the table name for the UserSystemRole entity.
+	// It exists in this package in order to avoid circular dependency with the "usersystemrole" package.
+	SystemRolesInverseTable = "user_system_roles"
+	// SystemRolesColumn is the table column denoting the system_roles relation/edge.
+	SystemRolesColumn = "user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -150,4 +214,151 @@ func ByTwoFactorEnabled(opts ...sql.OrderTermOption) OrderOption {
 // BySuspendedAt orders the results by the suspended_at field.
 func BySuspendedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSuspendedAt, opts...).ToFunc()
+}
+
+// ByMembershipsCount orders the results by memberships count.
+func ByMembershipsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newMembershipsStep(), opts...)
+	}
+}
+
+// ByMemberships orders the results by memberships terms.
+func ByMemberships(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newMembershipsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByDevicesCount orders the results by devices count.
+func ByDevicesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newDevicesStep(), opts...)
+	}
+}
+
+// ByDevices orders the results by devices terms.
+func ByDevices(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newDevicesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByLoginEventsCount orders the results by login_events count.
+func ByLoginEventsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newLoginEventsStep(), opts...)
+	}
+}
+
+// ByLoginEvents orders the results by login_events terms.
+func ByLoginEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newLoginEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByPasswordResetsCount orders the results by password_resets count.
+func ByPasswordResetsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPasswordResetsStep(), opts...)
+	}
+}
+
+// ByPasswordResets orders the results by password_resets terms.
+func ByPasswordResets(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPasswordResetsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByEmailChangesCount orders the results by email_changes count.
+func ByEmailChangesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newEmailChangesStep(), opts...)
+	}
+}
+
+// ByEmailChanges orders the results by email_changes terms.
+func ByEmailChanges(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newEmailChangesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByChallengesCount orders the results by challenges count.
+func ByChallengesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newChallengesStep(), opts...)
+	}
+}
+
+// ByChallenges orders the results by challenges terms.
+func ByChallenges(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newChallengesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// BySystemRolesCount orders the results by system_roles count.
+func BySystemRolesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSystemRolesStep(), opts...)
+	}
+}
+
+// BySystemRoles orders the results by system_roles terms.
+func BySystemRoles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSystemRolesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newMembershipsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(MembershipsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, MembershipsTable, MembershipsColumn),
+	)
+}
+func newDevicesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(DevicesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, DevicesTable, DevicesColumn),
+	)
+}
+func newLoginEventsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(LoginEventsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, LoginEventsTable, LoginEventsColumn),
+	)
+}
+func newPasswordResetsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PasswordResetsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PasswordResetsTable, PasswordResetsColumn),
+	)
+}
+func newEmailChangesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(EmailChangesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, EmailChangesTable, EmailChangesColumn),
+	)
+}
+func newChallengesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ChallengesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ChallengesTable, ChallengesColumn),
+	)
+}
+func newSystemRolesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SystemRolesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SystemRolesTable, SystemRolesColumn),
+	)
 }

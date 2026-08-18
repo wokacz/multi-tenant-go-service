@@ -6,5 +6,47 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// AuthzEvent is the predicate function for authzevent builders.
+type AuthzEvent func(*sql.Selector)
+
+// Device is the predicate function for device builders.
+type Device func(*sql.Selector)
+
+// EmailChange is the predicate function for emailchange builders.
+type EmailChange func(*sql.Selector)
+
+// Invitation is the predicate function for invitation builders.
+type Invitation func(*sql.Selector)
+
+// InvitationRole is the predicate function for invitationrole builders.
+type InvitationRole func(*sql.Selector)
+
+// LoginEvent is the predicate function for loginevent builders.
+type LoginEvent func(*sql.Selector)
+
+// Membership is the predicate function for membership builders.
+type Membership func(*sql.Selector)
+
+// MembershipRole is the predicate function for membershiprole builders.
+type MembershipRole func(*sql.Selector)
+
+// Organization is the predicate function for organization builders.
+type Organization func(*sql.Selector)
+
+// PasswordReset is the predicate function for passwordreset builders.
+type PasswordReset func(*sql.Selector)
+
+// Role is the predicate function for role builders.
+type Role func(*sql.Selector)
+
+// RolePermission is the predicate function for rolepermission builders.
+type RolePermission func(*sql.Selector)
+
+// TwoFactorChallenge is the predicate function for twofactorchallenge builders.
+type TwoFactorChallenge func(*sql.Selector)
+
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
+
+// UserSystemRole is the predicate function for usersystemrole builders.
+type UserSystemRole func(*sql.Selector)

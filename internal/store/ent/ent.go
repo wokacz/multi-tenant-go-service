@@ -12,7 +12,21 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/authzevent"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitation"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitationrole"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membershiprole"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/organization"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/role"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/rolepermission"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/twofactorchallenge"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/usersystemrole"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -73,7 +87,21 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			user.Table: user.ValidColumn,
+			authzevent.Table:         authzevent.ValidColumn,
+			device.Table:             device.ValidColumn,
+			emailchange.Table:        emailchange.ValidColumn,
+			invitation.Table:         invitation.ValidColumn,
+			invitationrole.Table:     invitationrole.ValidColumn,
+			loginevent.Table:         loginevent.ValidColumn,
+			membership.Table:         membership.ValidColumn,
+			membershiprole.Table:     membershiprole.ValidColumn,
+			organization.Table:       organization.ValidColumn,
+			passwordreset.Table:      passwordreset.ValidColumn,
+			role.Table:               role.ValidColumn,
+			rolepermission.Table:     rolepermission.ValidColumn,
+			twofactorchallenge.Table: twofactorchallenge.ValidColumn,
+			user.Table:               user.ValidColumn,
+			usersystemrole.Table:     usersystemrole.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

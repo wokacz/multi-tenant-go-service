@@ -23,6 +23,11 @@ type SoftDelete struct {
 	mixin.Schema
 }
 
+// Indexes cannot be declared by a mixin with a per-table name, so the two tables that
+// embed this declare their own index on deleted_at — see User and Organization. GORM
+// created it from the `index` tag on the embedded field, and it is what keeps the
+// soft-delete predicate on every read from being a sequential scan.
+
 func (SoftDelete) Fields() []ent.Field {
 	return []ent.Field{
 		field.Time("deleted_at").

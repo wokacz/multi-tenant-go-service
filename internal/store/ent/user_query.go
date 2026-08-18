@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -13,18 +14,32 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/predicate"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/twofactorchallenge"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/usersystemrole"
 )
 
 // UserQuery is the builder for querying User entities.
 type UserQuery struct {
 	config
-	ctx        *QueryContext
-	order      []user.OrderOption
-	inters     []Interceptor
-	predicates []predicate.User
-	modifiers  []func(*sql.Selector)
+	ctx                *QueryContext
+	order              []user.OrderOption
+	inters             []Interceptor
+	predicates         []predicate.User
+	withMemberships    *MembershipQuery
+	withDevices        *DeviceQuery
+	withLoginEvents    *LoginEventQuery
+	withPasswordResets *PasswordResetQuery
+	withEmailChanges   *EmailChangeQuery
+	withChallenges     *TwoFactorChallengeQuery
+	withSystemRoles    *UserSystemRoleQuery
+	modifiers          []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -59,6 +74,160 @@ func (_q *UserQuery) Unique(unique bool) *UserQuery {
 func (_q *UserQuery) Order(o ...user.OrderOption) *UserQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryMemberships chains the current query on the "memberships" edge.
+func (_q *UserQuery) QueryMemberships() *MembershipQuery {
+	query := (&MembershipClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(membership.Table, membership.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.MembershipsTable, user.MembershipsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryDevices chains the current query on the "devices" edge.
+func (_q *UserQuery) QueryDevices() *DeviceQuery {
+	query := (&DeviceClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(device.Table, device.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.DevicesTable, user.DevicesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryLoginEvents chains the current query on the "login_events" edge.
+func (_q *UserQuery) QueryLoginEvents() *LoginEventQuery {
+	query := (&LoginEventClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(loginevent.Table, loginevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.LoginEventsTable, user.LoginEventsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryPasswordResets chains the current query on the "password_resets" edge.
+func (_q *UserQuery) QueryPasswordResets() *PasswordResetQuery {
+	query := (&PasswordResetClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(passwordreset.Table, passwordreset.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PasswordResetsTable, user.PasswordResetsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryEmailChanges chains the current query on the "email_changes" edge.
+func (_q *UserQuery) QueryEmailChanges() *EmailChangeQuery {
+	query := (&EmailChangeClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(emailchange.Table, emailchange.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.EmailChangesTable, user.EmailChangesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryChallenges chains the current query on the "challenges" edge.
+func (_q *UserQuery) QueryChallenges() *TwoFactorChallengeQuery {
+	query := (&TwoFactorChallengeClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(twofactorchallenge.Table, twofactorchallenge.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ChallengesTable, user.ChallengesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QuerySystemRoles chains the current query on the "system_roles" edge.
+func (_q *UserQuery) QuerySystemRoles() *UserSystemRoleQuery {
+	query := (&UserSystemRoleClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(usersystemrole.Table, usersystemrole.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.SystemRolesTable, user.SystemRolesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first User entity from the query.
@@ -248,16 +417,100 @@ func (_q *UserQuery) Clone() *UserQuery {
 		return nil
 	}
 	return &UserQuery{
-		config:     _q.config,
-		ctx:        _q.ctx.Clone(),
-		order:      append([]user.OrderOption{}, _q.order...),
-		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.User{}, _q.predicates...),
+		config:             _q.config,
+		ctx:                _q.ctx.Clone(),
+		order:              append([]user.OrderOption{}, _q.order...),
+		inters:             append([]Interceptor{}, _q.inters...),
+		predicates:         append([]predicate.User{}, _q.predicates...),
+		withMemberships:    _q.withMemberships.Clone(),
+		withDevices:        _q.withDevices.Clone(),
+		withLoginEvents:    _q.withLoginEvents.Clone(),
+		withPasswordResets: _q.withPasswordResets.Clone(),
+		withEmailChanges:   _q.withEmailChanges.Clone(),
+		withChallenges:     _q.withChallenges.Clone(),
+		withSystemRoles:    _q.withSystemRoles.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
 		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
+}
+
+// WithMemberships tells the query-builder to eager-load the nodes that are connected to
+// the "memberships" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithMemberships(opts ...func(*MembershipQuery)) *UserQuery {
+	query := (&MembershipClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withMemberships = query
+	return _q
+}
+
+// WithDevices tells the query-builder to eager-load the nodes that are connected to
+// the "devices" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithDevices(opts ...func(*DeviceQuery)) *UserQuery {
+	query := (&DeviceClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withDevices = query
+	return _q
+}
+
+// WithLoginEvents tells the query-builder to eager-load the nodes that are connected to
+// the "login_events" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithLoginEvents(opts ...func(*LoginEventQuery)) *UserQuery {
+	query := (&LoginEventClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withLoginEvents = query
+	return _q
+}
+
+// WithPasswordResets tells the query-builder to eager-load the nodes that are connected to
+// the "password_resets" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithPasswordResets(opts ...func(*PasswordResetQuery)) *UserQuery {
+	query := (&PasswordResetClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withPasswordResets = query
+	return _q
+}
+
+// WithEmailChanges tells the query-builder to eager-load the nodes that are connected to
+// the "email_changes" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithEmailChanges(opts ...func(*EmailChangeQuery)) *UserQuery {
+	query := (&EmailChangeClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withEmailChanges = query
+	return _q
+}
+
+// WithChallenges tells the query-builder to eager-load the nodes that are connected to
+// the "challenges" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithChallenges(opts ...func(*TwoFactorChallengeQuery)) *UserQuery {
+	query := (&TwoFactorChallengeClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withChallenges = query
+	return _q
+}
+
+// WithSystemRoles tells the query-builder to eager-load the nodes that are connected to
+// the "system_roles" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithSystemRoles(opts ...func(*UserSystemRoleQuery)) *UserQuery {
+	query := (&UserSystemRoleClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSystemRoles = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -336,8 +589,17 @@ func (_q *UserQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, error) {
 	var (
-		nodes = []*User{}
-		_spec = _q.querySpec()
+		nodes       = []*User{}
+		_spec       = _q.querySpec()
+		loadedTypes = [7]bool{
+			_q.withMemberships != nil,
+			_q.withDevices != nil,
+			_q.withLoginEvents != nil,
+			_q.withPasswordResets != nil,
+			_q.withEmailChanges != nil,
+			_q.withChallenges != nil,
+			_q.withSystemRoles != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*User).scanValues(nil, columns)
@@ -345,6 +607,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &User{config: _q.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	if len(_q.modifiers) > 0 {
@@ -359,7 +622,267 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withMemberships; query != nil {
+		if err := _q.loadMemberships(ctx, query, nodes,
+			func(n *User) { n.Edges.Memberships = []*Membership{} },
+			func(n *User, e *Membership) { n.Edges.Memberships = append(n.Edges.Memberships, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withDevices; query != nil {
+		if err := _q.loadDevices(ctx, query, nodes,
+			func(n *User) { n.Edges.Devices = []*Device{} },
+			func(n *User, e *Device) { n.Edges.Devices = append(n.Edges.Devices, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withLoginEvents; query != nil {
+		if err := _q.loadLoginEvents(ctx, query, nodes,
+			func(n *User) { n.Edges.LoginEvents = []*LoginEvent{} },
+			func(n *User, e *LoginEvent) { n.Edges.LoginEvents = append(n.Edges.LoginEvents, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withPasswordResets; query != nil {
+		if err := _q.loadPasswordResets(ctx, query, nodes,
+			func(n *User) { n.Edges.PasswordResets = []*PasswordReset{} },
+			func(n *User, e *PasswordReset) { n.Edges.PasswordResets = append(n.Edges.PasswordResets, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withEmailChanges; query != nil {
+		if err := _q.loadEmailChanges(ctx, query, nodes,
+			func(n *User) { n.Edges.EmailChanges = []*EmailChange{} },
+			func(n *User, e *EmailChange) { n.Edges.EmailChanges = append(n.Edges.EmailChanges, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withChallenges; query != nil {
+		if err := _q.loadChallenges(ctx, query, nodes,
+			func(n *User) { n.Edges.Challenges = []*TwoFactorChallenge{} },
+			func(n *User, e *TwoFactorChallenge) { n.Edges.Challenges = append(n.Edges.Challenges, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSystemRoles; query != nil {
+		if err := _q.loadSystemRoles(ctx, query, nodes,
+			func(n *User) { n.Edges.SystemRoles = []*UserSystemRole{} },
+			func(n *User, e *UserSystemRole) { n.Edges.SystemRoles = append(n.Edges.SystemRoles, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (_q *UserQuery) loadMemberships(ctx context.Context, query *MembershipQuery, nodes []*User, init func(*User), assign func(*User, *Membership)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(membership.FieldUserID)
+	}
+	query.Where(predicate.Membership(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.MembershipsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadDevices(ctx context.Context, query *DeviceQuery, nodes []*User, init func(*User), assign func(*User, *Device)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(device.FieldUserID)
+	}
+	query.Where(predicate.Device(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.DevicesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadLoginEvents(ctx context.Context, query *LoginEventQuery, nodes []*User, init func(*User), assign func(*User, *LoginEvent)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(loginevent.FieldUserID)
+	}
+	query.Where(predicate.LoginEvent(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.LoginEventsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadPasswordResets(ctx context.Context, query *PasswordResetQuery, nodes []*User, init func(*User), assign func(*User, *PasswordReset)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(passwordreset.FieldUserID)
+	}
+	query.Where(predicate.PasswordReset(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.PasswordResetsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadEmailChanges(ctx context.Context, query *EmailChangeQuery, nodes []*User, init func(*User), assign func(*User, *EmailChange)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(emailchange.FieldUserID)
+	}
+	query.Where(predicate.EmailChange(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.EmailChangesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadChallenges(ctx context.Context, query *TwoFactorChallengeQuery, nodes []*User, init func(*User), assign func(*User, *TwoFactorChallenge)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(twofactorchallenge.FieldUserID)
+	}
+	query.Where(predicate.TwoFactorChallenge(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.ChallengesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadSystemRoles(ctx context.Context, query *UserSystemRoleQuery, nodes []*User, init func(*User), assign func(*User, *UserSystemRole)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(usersystemrole.FieldUserID)
+	}
+	query.Where(predicate.UserSystemRole(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.SystemRolesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (_q *UserQuery) sqlCount(ctx context.Context) (int, error) {

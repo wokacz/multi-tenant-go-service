@@ -12,8 +12,36 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// AuthzEvent is the client for interacting with the AuthzEvent builders.
+	AuthzEvent *AuthzEventClient
+	// Device is the client for interacting with the Device builders.
+	Device *DeviceClient
+	// EmailChange is the client for interacting with the EmailChange builders.
+	EmailChange *EmailChangeClient
+	// Invitation is the client for interacting with the Invitation builders.
+	Invitation *InvitationClient
+	// InvitationRole is the client for interacting with the InvitationRole builders.
+	InvitationRole *InvitationRoleClient
+	// LoginEvent is the client for interacting with the LoginEvent builders.
+	LoginEvent *LoginEventClient
+	// Membership is the client for interacting with the Membership builders.
+	Membership *MembershipClient
+	// MembershipRole is the client for interacting with the MembershipRole builders.
+	MembershipRole *MembershipRoleClient
+	// Organization is the client for interacting with the Organization builders.
+	Organization *OrganizationClient
+	// PasswordReset is the client for interacting with the PasswordReset builders.
+	PasswordReset *PasswordResetClient
+	// Role is the client for interacting with the Role builders.
+	Role *RoleClient
+	// RolePermission is the client for interacting with the RolePermission builders.
+	RolePermission *RolePermissionClient
+	// TwoFactorChallenge is the client for interacting with the TwoFactorChallenge builders.
+	TwoFactorChallenge *TwoFactorChallengeClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// UserSystemRole is the client for interacting with the UserSystemRole builders.
+	UserSystemRole *UserSystemRoleClient
 
 	// lazily loaded.
 	client     *Client
@@ -145,7 +173,21 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.AuthzEvent = NewAuthzEventClient(tx.config)
+	tx.Device = NewDeviceClient(tx.config)
+	tx.EmailChange = NewEmailChangeClient(tx.config)
+	tx.Invitation = NewInvitationClient(tx.config)
+	tx.InvitationRole = NewInvitationRoleClient(tx.config)
+	tx.LoginEvent = NewLoginEventClient(tx.config)
+	tx.Membership = NewMembershipClient(tx.config)
+	tx.MembershipRole = NewMembershipRoleClient(tx.config)
+	tx.Organization = NewOrganizationClient(tx.config)
+	tx.PasswordReset = NewPasswordResetClient(tx.config)
+	tx.Role = NewRoleClient(tx.config)
+	tx.RolePermission = NewRolePermissionClient(tx.config)
+	tx.TwoFactorChallenge = NewTwoFactorChallengeClient(tx.config)
 	tx.User = NewUserClient(tx.config)
+	tx.UserSystemRole = NewUserSystemRoleClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -155,7 +197,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: User.QueryXXX(), the query will be executed
+// applies a query, for example: AuthzEvent.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

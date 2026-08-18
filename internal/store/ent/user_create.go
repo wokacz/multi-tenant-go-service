@@ -13,7 +13,14 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/twofactorchallenge"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/usersystemrole"
 )
 
 // UserCreate is the builder for creating a User entity.
@@ -166,6 +173,111 @@ func (_c *UserCreate) SetNillableID(v *uuid.UUID) *UserCreate {
 		_c.SetID(*v)
 	}
 	return _c
+}
+
+// AddMembershipIDs adds the "memberships" edge to the Membership entity by IDs.
+func (_c *UserCreate) AddMembershipIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddMembershipIDs(ids...)
+	return _c
+}
+
+// AddMemberships adds the "memberships" edges to the Membership entity.
+func (_c *UserCreate) AddMemberships(v ...*Membership) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddMembershipIDs(ids...)
+}
+
+// AddDeviceIDs adds the "devices" edge to the Device entity by IDs.
+func (_c *UserCreate) AddDeviceIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddDeviceIDs(ids...)
+	return _c
+}
+
+// AddDevices adds the "devices" edges to the Device entity.
+func (_c *UserCreate) AddDevices(v ...*Device) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddDeviceIDs(ids...)
+}
+
+// AddLoginEventIDs adds the "login_events" edge to the LoginEvent entity by IDs.
+func (_c *UserCreate) AddLoginEventIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddLoginEventIDs(ids...)
+	return _c
+}
+
+// AddLoginEvents adds the "login_events" edges to the LoginEvent entity.
+func (_c *UserCreate) AddLoginEvents(v ...*LoginEvent) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddLoginEventIDs(ids...)
+}
+
+// AddPasswordResetIDs adds the "password_resets" edge to the PasswordReset entity by IDs.
+func (_c *UserCreate) AddPasswordResetIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddPasswordResetIDs(ids...)
+	return _c
+}
+
+// AddPasswordResets adds the "password_resets" edges to the PasswordReset entity.
+func (_c *UserCreate) AddPasswordResets(v ...*PasswordReset) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPasswordResetIDs(ids...)
+}
+
+// AddEmailChangeIDs adds the "email_changes" edge to the EmailChange entity by IDs.
+func (_c *UserCreate) AddEmailChangeIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddEmailChangeIDs(ids...)
+	return _c
+}
+
+// AddEmailChanges adds the "email_changes" edges to the EmailChange entity.
+func (_c *UserCreate) AddEmailChanges(v ...*EmailChange) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddEmailChangeIDs(ids...)
+}
+
+// AddChallengeIDs adds the "challenges" edge to the TwoFactorChallenge entity by IDs.
+func (_c *UserCreate) AddChallengeIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddChallengeIDs(ids...)
+	return _c
+}
+
+// AddChallenges adds the "challenges" edges to the TwoFactorChallenge entity.
+func (_c *UserCreate) AddChallenges(v ...*TwoFactorChallenge) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddChallengeIDs(ids...)
+}
+
+// AddSystemRoleIDs adds the "system_roles" edge to the UserSystemRole entity by IDs.
+func (_c *UserCreate) AddSystemRoleIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddSystemRoleIDs(ids...)
+	return _c
+}
+
+// AddSystemRoles adds the "system_roles" edges to the UserSystemRole entity.
+func (_c *UserCreate) AddSystemRoles(v ...*UserSystemRole) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSystemRoleIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -341,6 +453,118 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SuspendedAt(); ok {
 		_spec.SetField(user.FieldSuspendedAt, field.TypeTime, value)
 		_node.SuspendedAt = &value
+	}
+	if nodes := _c.mutation.MembershipsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MembershipsTable,
+			Columns: []string{user.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(membership.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.DevicesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.DevicesTable,
+			Columns: []string{user.DevicesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(device.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.LoginEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginEventsTable,
+			Columns: []string{user.LoginEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginevent.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PasswordResetsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.EmailChangesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.EmailChangesTable,
+			Columns: []string{user.EmailChangesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(emailchange.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ChallengesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ChallengesTable,
+			Columns: []string{user.ChallengesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(twofactorchallenge.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SystemRolesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SystemRolesTable,
+			Columns: []string{user.SystemRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

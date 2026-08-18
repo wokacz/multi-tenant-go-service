@@ -11,8 +11,16 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/google/uuid"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/predicate"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/twofactorchallenge"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/usersystemrole"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -198,9 +206,261 @@ func (_u *UserUpdate) ClearSuspendedAt() *UserUpdate {
 	return _u
 }
 
+// AddMembershipIDs adds the "memberships" edge to the Membership entity by IDs.
+func (_u *UserUpdate) AddMembershipIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddMembershipIDs(ids...)
+	return _u
+}
+
+// AddMemberships adds the "memberships" edges to the Membership entity.
+func (_u *UserUpdate) AddMemberships(v ...*Membership) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMembershipIDs(ids...)
+}
+
+// AddDeviceIDs adds the "devices" edge to the Device entity by IDs.
+func (_u *UserUpdate) AddDeviceIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddDeviceIDs(ids...)
+	return _u
+}
+
+// AddDevices adds the "devices" edges to the Device entity.
+func (_u *UserUpdate) AddDevices(v ...*Device) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddDeviceIDs(ids...)
+}
+
+// AddLoginEventIDs adds the "login_events" edge to the LoginEvent entity by IDs.
+func (_u *UserUpdate) AddLoginEventIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddLoginEventIDs(ids...)
+	return _u
+}
+
+// AddLoginEvents adds the "login_events" edges to the LoginEvent entity.
+func (_u *UserUpdate) AddLoginEvents(v ...*LoginEvent) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLoginEventIDs(ids...)
+}
+
+// AddPasswordResetIDs adds the "password_resets" edge to the PasswordReset entity by IDs.
+func (_u *UserUpdate) AddPasswordResetIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddPasswordResetIDs(ids...)
+	return _u
+}
+
+// AddPasswordResets adds the "password_resets" edges to the PasswordReset entity.
+func (_u *UserUpdate) AddPasswordResets(v ...*PasswordReset) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPasswordResetIDs(ids...)
+}
+
+// AddEmailChangeIDs adds the "email_changes" edge to the EmailChange entity by IDs.
+func (_u *UserUpdate) AddEmailChangeIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddEmailChangeIDs(ids...)
+	return _u
+}
+
+// AddEmailChanges adds the "email_changes" edges to the EmailChange entity.
+func (_u *UserUpdate) AddEmailChanges(v ...*EmailChange) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddEmailChangeIDs(ids...)
+}
+
+// AddChallengeIDs adds the "challenges" edge to the TwoFactorChallenge entity by IDs.
+func (_u *UserUpdate) AddChallengeIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddChallengeIDs(ids...)
+	return _u
+}
+
+// AddChallenges adds the "challenges" edges to the TwoFactorChallenge entity.
+func (_u *UserUpdate) AddChallenges(v ...*TwoFactorChallenge) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddChallengeIDs(ids...)
+}
+
+// AddSystemRoleIDs adds the "system_roles" edge to the UserSystemRole entity by IDs.
+func (_u *UserUpdate) AddSystemRoleIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddSystemRoleIDs(ids...)
+	return _u
+}
+
+// AddSystemRoles adds the "system_roles" edges to the UserSystemRole entity.
+func (_u *UserUpdate) AddSystemRoles(v ...*UserSystemRole) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSystemRoleIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
+}
+
+// ClearMemberships clears all "memberships" edges to the Membership entity.
+func (_u *UserUpdate) ClearMemberships() *UserUpdate {
+	_u.mutation.ClearMemberships()
+	return _u
+}
+
+// RemoveMembershipIDs removes the "memberships" edge to Membership entities by IDs.
+func (_u *UserUpdate) RemoveMembershipIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveMembershipIDs(ids...)
+	return _u
+}
+
+// RemoveMemberships removes "memberships" edges to Membership entities.
+func (_u *UserUpdate) RemoveMemberships(v ...*Membership) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMembershipIDs(ids...)
+}
+
+// ClearDevices clears all "devices" edges to the Device entity.
+func (_u *UserUpdate) ClearDevices() *UserUpdate {
+	_u.mutation.ClearDevices()
+	return _u
+}
+
+// RemoveDeviceIDs removes the "devices" edge to Device entities by IDs.
+func (_u *UserUpdate) RemoveDeviceIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveDeviceIDs(ids...)
+	return _u
+}
+
+// RemoveDevices removes "devices" edges to Device entities.
+func (_u *UserUpdate) RemoveDevices(v ...*Device) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveDeviceIDs(ids...)
+}
+
+// ClearLoginEvents clears all "login_events" edges to the LoginEvent entity.
+func (_u *UserUpdate) ClearLoginEvents() *UserUpdate {
+	_u.mutation.ClearLoginEvents()
+	return _u
+}
+
+// RemoveLoginEventIDs removes the "login_events" edge to LoginEvent entities by IDs.
+func (_u *UserUpdate) RemoveLoginEventIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveLoginEventIDs(ids...)
+	return _u
+}
+
+// RemoveLoginEvents removes "login_events" edges to LoginEvent entities.
+func (_u *UserUpdate) RemoveLoginEvents(v ...*LoginEvent) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLoginEventIDs(ids...)
+}
+
+// ClearPasswordResets clears all "password_resets" edges to the PasswordReset entity.
+func (_u *UserUpdate) ClearPasswordResets() *UserUpdate {
+	_u.mutation.ClearPasswordResets()
+	return _u
+}
+
+// RemovePasswordResetIDs removes the "password_resets" edge to PasswordReset entities by IDs.
+func (_u *UserUpdate) RemovePasswordResetIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemovePasswordResetIDs(ids...)
+	return _u
+}
+
+// RemovePasswordResets removes "password_resets" edges to PasswordReset entities.
+func (_u *UserUpdate) RemovePasswordResets(v ...*PasswordReset) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePasswordResetIDs(ids...)
+}
+
+// ClearEmailChanges clears all "email_changes" edges to the EmailChange entity.
+func (_u *UserUpdate) ClearEmailChanges() *UserUpdate {
+	_u.mutation.ClearEmailChanges()
+	return _u
+}
+
+// RemoveEmailChangeIDs removes the "email_changes" edge to EmailChange entities by IDs.
+func (_u *UserUpdate) RemoveEmailChangeIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveEmailChangeIDs(ids...)
+	return _u
+}
+
+// RemoveEmailChanges removes "email_changes" edges to EmailChange entities.
+func (_u *UserUpdate) RemoveEmailChanges(v ...*EmailChange) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveEmailChangeIDs(ids...)
+}
+
+// ClearChallenges clears all "challenges" edges to the TwoFactorChallenge entity.
+func (_u *UserUpdate) ClearChallenges() *UserUpdate {
+	_u.mutation.ClearChallenges()
+	return _u
+}
+
+// RemoveChallengeIDs removes the "challenges" edge to TwoFactorChallenge entities by IDs.
+func (_u *UserUpdate) RemoveChallengeIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveChallengeIDs(ids...)
+	return _u
+}
+
+// RemoveChallenges removes "challenges" edges to TwoFactorChallenge entities.
+func (_u *UserUpdate) RemoveChallenges(v ...*TwoFactorChallenge) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveChallengeIDs(ids...)
+}
+
+// ClearSystemRoles clears all "system_roles" edges to the UserSystemRole entity.
+func (_u *UserUpdate) ClearSystemRoles() *UserUpdate {
+	_u.mutation.ClearSystemRoles()
+	return _u
+}
+
+// RemoveSystemRoleIDs removes the "system_roles" edge to UserSystemRole entities by IDs.
+func (_u *UserUpdate) RemoveSystemRoleIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveSystemRoleIDs(ids...)
+	return _u
+}
+
+// RemoveSystemRoles removes "system_roles" edges to UserSystemRole entities.
+func (_u *UserUpdate) RemoveSystemRoles(v ...*UserSystemRole) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSystemRoleIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -332,6 +592,321 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.SuspendedAtCleared() {
 		_spec.ClearField(user.FieldSuspendedAt, field.TypeTime)
+	}
+	if _u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MembershipsTable,
+			Columns: []string{user.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(membership.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMembershipsIDs(); len(nodes) > 0 && !_u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MembershipsTable,
+			Columns: []string{user.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(membership.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MembershipsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MembershipsTable,
+			Columns: []string{user.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(membership.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.DevicesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.DevicesTable,
+			Columns: []string{user.DevicesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(device.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedDevicesIDs(); len(nodes) > 0 && !_u.mutation.DevicesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.DevicesTable,
+			Columns: []string{user.DevicesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(device.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.DevicesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.DevicesTable,
+			Columns: []string{user.DevicesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(device.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.LoginEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginEventsTable,
+			Columns: []string{user.LoginEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginevent.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLoginEventsIDs(); len(nodes) > 0 && !_u.mutation.LoginEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginEventsTable,
+			Columns: []string{user.LoginEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginevent.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LoginEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginEventsTable,
+			Columns: []string{user.LoginEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginevent.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PasswordResetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPasswordResetsIDs(); len(nodes) > 0 && !_u.mutation.PasswordResetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PasswordResetsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.EmailChangesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.EmailChangesTable,
+			Columns: []string{user.EmailChangesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(emailchange.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedEmailChangesIDs(); len(nodes) > 0 && !_u.mutation.EmailChangesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.EmailChangesTable,
+			Columns: []string{user.EmailChangesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(emailchange.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.EmailChangesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.EmailChangesTable,
+			Columns: []string{user.EmailChangesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(emailchange.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ChallengesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ChallengesTable,
+			Columns: []string{user.ChallengesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(twofactorchallenge.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedChallengesIDs(); len(nodes) > 0 && !_u.mutation.ChallengesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ChallengesTable,
+			Columns: []string{user.ChallengesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(twofactorchallenge.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ChallengesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ChallengesTable,
+			Columns: []string{user.ChallengesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(twofactorchallenge.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SystemRolesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SystemRolesTable,
+			Columns: []string{user.SystemRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSystemRolesIDs(); len(nodes) > 0 && !_u.mutation.SystemRolesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SystemRolesTable,
+			Columns: []string{user.SystemRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SystemRolesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SystemRolesTable,
+			Columns: []string{user.SystemRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
@@ -524,9 +1099,261 @@ func (_u *UserUpdateOne) ClearSuspendedAt() *UserUpdateOne {
 	return _u
 }
 
+// AddMembershipIDs adds the "memberships" edge to the Membership entity by IDs.
+func (_u *UserUpdateOne) AddMembershipIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddMembershipIDs(ids...)
+	return _u
+}
+
+// AddMemberships adds the "memberships" edges to the Membership entity.
+func (_u *UserUpdateOne) AddMemberships(v ...*Membership) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMembershipIDs(ids...)
+}
+
+// AddDeviceIDs adds the "devices" edge to the Device entity by IDs.
+func (_u *UserUpdateOne) AddDeviceIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddDeviceIDs(ids...)
+	return _u
+}
+
+// AddDevices adds the "devices" edges to the Device entity.
+func (_u *UserUpdateOne) AddDevices(v ...*Device) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddDeviceIDs(ids...)
+}
+
+// AddLoginEventIDs adds the "login_events" edge to the LoginEvent entity by IDs.
+func (_u *UserUpdateOne) AddLoginEventIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddLoginEventIDs(ids...)
+	return _u
+}
+
+// AddLoginEvents adds the "login_events" edges to the LoginEvent entity.
+func (_u *UserUpdateOne) AddLoginEvents(v ...*LoginEvent) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddLoginEventIDs(ids...)
+}
+
+// AddPasswordResetIDs adds the "password_resets" edge to the PasswordReset entity by IDs.
+func (_u *UserUpdateOne) AddPasswordResetIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddPasswordResetIDs(ids...)
+	return _u
+}
+
+// AddPasswordResets adds the "password_resets" edges to the PasswordReset entity.
+func (_u *UserUpdateOne) AddPasswordResets(v ...*PasswordReset) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPasswordResetIDs(ids...)
+}
+
+// AddEmailChangeIDs adds the "email_changes" edge to the EmailChange entity by IDs.
+func (_u *UserUpdateOne) AddEmailChangeIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddEmailChangeIDs(ids...)
+	return _u
+}
+
+// AddEmailChanges adds the "email_changes" edges to the EmailChange entity.
+func (_u *UserUpdateOne) AddEmailChanges(v ...*EmailChange) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddEmailChangeIDs(ids...)
+}
+
+// AddChallengeIDs adds the "challenges" edge to the TwoFactorChallenge entity by IDs.
+func (_u *UserUpdateOne) AddChallengeIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddChallengeIDs(ids...)
+	return _u
+}
+
+// AddChallenges adds the "challenges" edges to the TwoFactorChallenge entity.
+func (_u *UserUpdateOne) AddChallenges(v ...*TwoFactorChallenge) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddChallengeIDs(ids...)
+}
+
+// AddSystemRoleIDs adds the "system_roles" edge to the UserSystemRole entity by IDs.
+func (_u *UserUpdateOne) AddSystemRoleIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddSystemRoleIDs(ids...)
+	return _u
+}
+
+// AddSystemRoles adds the "system_roles" edges to the UserSystemRole entity.
+func (_u *UserUpdateOne) AddSystemRoles(v ...*UserSystemRole) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSystemRoleIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
+}
+
+// ClearMemberships clears all "memberships" edges to the Membership entity.
+func (_u *UserUpdateOne) ClearMemberships() *UserUpdateOne {
+	_u.mutation.ClearMemberships()
+	return _u
+}
+
+// RemoveMembershipIDs removes the "memberships" edge to Membership entities by IDs.
+func (_u *UserUpdateOne) RemoveMembershipIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveMembershipIDs(ids...)
+	return _u
+}
+
+// RemoveMemberships removes "memberships" edges to Membership entities.
+func (_u *UserUpdateOne) RemoveMemberships(v ...*Membership) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMembershipIDs(ids...)
+}
+
+// ClearDevices clears all "devices" edges to the Device entity.
+func (_u *UserUpdateOne) ClearDevices() *UserUpdateOne {
+	_u.mutation.ClearDevices()
+	return _u
+}
+
+// RemoveDeviceIDs removes the "devices" edge to Device entities by IDs.
+func (_u *UserUpdateOne) RemoveDeviceIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveDeviceIDs(ids...)
+	return _u
+}
+
+// RemoveDevices removes "devices" edges to Device entities.
+func (_u *UserUpdateOne) RemoveDevices(v ...*Device) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveDeviceIDs(ids...)
+}
+
+// ClearLoginEvents clears all "login_events" edges to the LoginEvent entity.
+func (_u *UserUpdateOne) ClearLoginEvents() *UserUpdateOne {
+	_u.mutation.ClearLoginEvents()
+	return _u
+}
+
+// RemoveLoginEventIDs removes the "login_events" edge to LoginEvent entities by IDs.
+func (_u *UserUpdateOne) RemoveLoginEventIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveLoginEventIDs(ids...)
+	return _u
+}
+
+// RemoveLoginEvents removes "login_events" edges to LoginEvent entities.
+func (_u *UserUpdateOne) RemoveLoginEvents(v ...*LoginEvent) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveLoginEventIDs(ids...)
+}
+
+// ClearPasswordResets clears all "password_resets" edges to the PasswordReset entity.
+func (_u *UserUpdateOne) ClearPasswordResets() *UserUpdateOne {
+	_u.mutation.ClearPasswordResets()
+	return _u
+}
+
+// RemovePasswordResetIDs removes the "password_resets" edge to PasswordReset entities by IDs.
+func (_u *UserUpdateOne) RemovePasswordResetIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemovePasswordResetIDs(ids...)
+	return _u
+}
+
+// RemovePasswordResets removes "password_resets" edges to PasswordReset entities.
+func (_u *UserUpdateOne) RemovePasswordResets(v ...*PasswordReset) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePasswordResetIDs(ids...)
+}
+
+// ClearEmailChanges clears all "email_changes" edges to the EmailChange entity.
+func (_u *UserUpdateOne) ClearEmailChanges() *UserUpdateOne {
+	_u.mutation.ClearEmailChanges()
+	return _u
+}
+
+// RemoveEmailChangeIDs removes the "email_changes" edge to EmailChange entities by IDs.
+func (_u *UserUpdateOne) RemoveEmailChangeIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveEmailChangeIDs(ids...)
+	return _u
+}
+
+// RemoveEmailChanges removes "email_changes" edges to EmailChange entities.
+func (_u *UserUpdateOne) RemoveEmailChanges(v ...*EmailChange) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveEmailChangeIDs(ids...)
+}
+
+// ClearChallenges clears all "challenges" edges to the TwoFactorChallenge entity.
+func (_u *UserUpdateOne) ClearChallenges() *UserUpdateOne {
+	_u.mutation.ClearChallenges()
+	return _u
+}
+
+// RemoveChallengeIDs removes the "challenges" edge to TwoFactorChallenge entities by IDs.
+func (_u *UserUpdateOne) RemoveChallengeIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveChallengeIDs(ids...)
+	return _u
+}
+
+// RemoveChallenges removes "challenges" edges to TwoFactorChallenge entities.
+func (_u *UserUpdateOne) RemoveChallenges(v ...*TwoFactorChallenge) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveChallengeIDs(ids...)
+}
+
+// ClearSystemRoles clears all "system_roles" edges to the UserSystemRole entity.
+func (_u *UserUpdateOne) ClearSystemRoles() *UserUpdateOne {
+	_u.mutation.ClearSystemRoles()
+	return _u
+}
+
+// RemoveSystemRoleIDs removes the "system_roles" edge to UserSystemRole entities by IDs.
+func (_u *UserUpdateOne) RemoveSystemRoleIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveSystemRoleIDs(ids...)
+	return _u
+}
+
+// RemoveSystemRoles removes "system_roles" edges to UserSystemRole entities.
+func (_u *UserUpdateOne) RemoveSystemRoles(v ...*UserSystemRole) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSystemRoleIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -688,6 +1515,321 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if _u.mutation.SuspendedAtCleared() {
 		_spec.ClearField(user.FieldSuspendedAt, field.TypeTime)
+	}
+	if _u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MembershipsTable,
+			Columns: []string{user.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(membership.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMembershipsIDs(); len(nodes) > 0 && !_u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MembershipsTable,
+			Columns: []string{user.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(membership.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MembershipsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MembershipsTable,
+			Columns: []string{user.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(membership.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.DevicesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.DevicesTable,
+			Columns: []string{user.DevicesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(device.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedDevicesIDs(); len(nodes) > 0 && !_u.mutation.DevicesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.DevicesTable,
+			Columns: []string{user.DevicesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(device.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.DevicesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.DevicesTable,
+			Columns: []string{user.DevicesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(device.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.LoginEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginEventsTable,
+			Columns: []string{user.LoginEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginevent.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedLoginEventsIDs(); len(nodes) > 0 && !_u.mutation.LoginEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginEventsTable,
+			Columns: []string{user.LoginEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginevent.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.LoginEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginEventsTable,
+			Columns: []string{user.LoginEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginevent.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PasswordResetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPasswordResetsIDs(); len(nodes) > 0 && !_u.mutation.PasswordResetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PasswordResetsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.EmailChangesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.EmailChangesTable,
+			Columns: []string{user.EmailChangesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(emailchange.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedEmailChangesIDs(); len(nodes) > 0 && !_u.mutation.EmailChangesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.EmailChangesTable,
+			Columns: []string{user.EmailChangesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(emailchange.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.EmailChangesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.EmailChangesTable,
+			Columns: []string{user.EmailChangesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(emailchange.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ChallengesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ChallengesTable,
+			Columns: []string{user.ChallengesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(twofactorchallenge.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedChallengesIDs(); len(nodes) > 0 && !_u.mutation.ChallengesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ChallengesTable,
+			Columns: []string{user.ChallengesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(twofactorchallenge.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ChallengesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ChallengesTable,
+			Columns: []string{user.ChallengesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(twofactorchallenge.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SystemRolesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SystemRolesTable,
+			Columns: []string{user.SystemRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSystemRolesIDs(); len(nodes) > 0 && !_u.mutation.SystemRolesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SystemRolesTable,
+			Columns: []string{user.SystemRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SystemRolesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SystemRolesTable,
+			Columns: []string{user.SystemRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	_node = &User{config: _u.config}
