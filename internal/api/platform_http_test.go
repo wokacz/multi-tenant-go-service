@@ -322,3 +322,86 @@ func TestASuspendedAccountCannotGetAFreshToken(t *testing.T) {
 		}
 	})
 }
+
+// TestAnOwnerlessOrganizationCanBeFoundAndFixed is the loop this closes.
+//
+// Appointing an owner has been possible since the platform endpoint existed;
+// finding the organization that needs one was the missing half. An installation
+// administrator had to already know which organization to look at, which is not a
+// thing anybody knows about somebody else's tenant.
+func TestAnOwnerlessOrganizationCanBeFoundAndFixed(t *testing.T) {
+	f := newAuthzFixture(t, authz.RoleViewer)
+	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+
+	var created struct {
+		ID     uuid.UUID `json:"id"`
+		Slug   string    `json:"slug"`
+		Owners int       `json:"owners"`
+	}
+	f.call(t, http.MethodPost, "/v1/platform/organizations", `{"slug":"globex","name":"Globex"}`).
+		expect(t, http.StatusCreated).decode(t, &created)
+
+	// Creating one deliberately leaves it empty, and the count says so rather than
+	// leaving an administrator to find out by opening it.
+	if created.Owners != 0 {
+		t.Errorf("a new organization reports %d owners", created.Owners)
+	}
+
+	type row struct {
+		ID     uuid.UUID `json:"id"`
+		Slug   string    `json:"slug"`
+		Owners int       `json:"owners"`
+	}
+
+	var ownerless struct {
+		Organizations []row `json:"organizations"`
+	}
+	f.call(t, http.MethodGet, "/v1/platform/organizations?without_owner=true", "").
+		expect(t, http.StatusOK).decode(t, &ownerless)
+
+	found := false
+
+	for _, entry := range ownerless.Organizations {
+		if entry.Owners != 0 {
+			t.Errorf("%s has %d owners and is in the without_owner listing", entry.Slug, entry.Owners)
+		}
+
+		if entry.ID == created.ID {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("the new organization is not in the without_owner listing")
+	}
+
+	// Fix it, through the endpoint that already existed.
+	f.call(t, http.MethodPost, "/v1/platform/organizations/"+created.ID.String()+"/owners",
+		`{"user_id":"`+f.userID.String()+`"}`).
+		expect(t, http.StatusNoContent)
+
+	var after struct {
+		Organizations []row `json:"organizations"`
+	}
+	f.call(t, http.MethodGet, "/v1/platform/organizations?without_owner=true", "").
+		expect(t, http.StatusOK).decode(t, &after)
+
+	for _, entry := range after.Organizations {
+		if entry.ID == created.ID {
+			t.Error("the organization is still listed as ownerless after an owner was appointed")
+		}
+	}
+
+	// And the unfiltered listing now reports the owner rather than nothing.
+	var all struct {
+		Organizations []row `json:"organizations"`
+	}
+	f.call(t, http.MethodGet, "/v1/platform/organizations", "").
+		expect(t, http.StatusOK).decode(t, &all)
+
+	for _, entry := range all.Organizations {
+		if entry.ID == created.ID && entry.Owners != 1 {
+			t.Errorf("owners = %d after appointing one, want 1", entry.Owners)
+		}
+	}
+}

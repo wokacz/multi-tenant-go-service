@@ -103,25 +103,33 @@ export class PlatformService {
   listPlatformOrganizations(
     limit?: number,
     offset?: number,
+    withoutOwner?: boolean,
     observe?: 'body',
     options?: RequestOptions<'json'>,
   ): Observable<ListPlatformOrganizationsOutputBody>;
   listPlatformOrganizations(
     limit?: number,
     offset?: number,
+    withoutOwner?: boolean,
     observe?: 'response',
     options?: RequestOptions<'json'>,
   ): Observable<HttpResponse<ListPlatformOrganizationsOutputBody>>;
   listPlatformOrganizations(
     limit?: number,
     offset?: number,
+    withoutOwner?: boolean,
     observe?: 'events',
     options?: RequestOptions<'json'>,
   ): Observable<HttpEvent<ListPlatformOrganizationsOutputBody>>;
-  /** Requires platform.organizations.read. The only listing that crosses tenants, which is why it is measured against the installation rather than any one organization. */
+  /**
+   * Requires platform.organizations.read. The only listing that crosses tenants, which is why it is measured against the installation rather than any one organization.
+   *
+   * Each row says how many owners the organization has, counted exactly the way the last-owner rule counts them: an active membership holding owner whose account still exists. without_owner=true keeps only the ones at zero — an organization gets there when its last owner's account is deleted, and appointing a new one was already possible while finding such an organization was not.
+   */
   listPlatformOrganizations(
     limit?: number,
     offset?: number,
+    withoutOwner?: boolean,
     observe?: 'body' | 'events' | 'response',
     options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
   ): Observable<any> {
@@ -133,6 +141,9 @@ export class PlatformService {
     }
     if (offset != null) {
       params = HttpParamsBuilder.addToHttpParams(params, offset, 'offset');
+    }
+    if (withoutOwner != null) {
+      params = HttpParamsBuilder.addToHttpParams(params, withoutOwner, 'without_owner');
     }
 
     let headers: HttpHeaders;

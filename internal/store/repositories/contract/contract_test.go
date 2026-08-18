@@ -1158,3 +1158,130 @@ func TestAnInvitationToADeletedOrganizationCannotBeAccepted(t *testing.T) {
 		}
 	})
 }
+
+// TestTheOwnerCountAgreesWithTheOwnerRule is the case this listing exists for, and
+// the one that could quietly stop being true.
+//
+// The installation-wide listing counts owners in SQL; the last-owner rule counts
+// them again inside a locked transaction. Two answers to "does this organization
+// have an owner" is one too many: an administrator would be shown an owner for an
+// organization the guard treats as having none, or sent to fix one that is fine.
+//
+// The interesting input is a membership whose account has been deleted. The row
+// survives, still holding owner, and every rule that matters stopped counting it —
+// which is exactly how an organization ends up with nobody able to administer it.
+func TestTheOwnerCountAgreesWithTheOwnerRule(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+		owner := b.newShippedRole(t, orgID, authz.RoleOwner)
+
+		memberID, userID := addMember(t, b, orgID, owner)
+
+		if got := ownerCount(t, b, orgID); got != 1 {
+			t.Fatalf("owners = %d with one live owner, want 1", got)
+		}
+
+		if listed := ownerlessIDs(t, b); slices.Contains(listed, orgID) {
+			t.Error("an organization with an owner is listed as ownerless")
+		}
+
+		b.deleteAccount(t, userID)
+
+		// Read the listing before touching the membership: removing it would take the
+		// count to zero for a different reason and this case would prove nothing.
+		fromListing := ownerCount(t, b, orgID)
+
+		// What the rule sees, read from the guard itself rather than assumed.
+		var fromGuard int
+
+		err := b.repo.RemoveMember(t.Context(), orgID, memberID, models.ActionMemberRemoved,
+			func(state orgs.OwnerState) error {
+				fromGuard = state.Owners
+
+				return nil
+			})
+		if err != nil {
+			t.Fatalf("RemoveMember() = %v", err)
+		}
+
+		if fromGuard != 0 {
+			t.Errorf("the rule counted %d owners for a deleted account, want 0", fromGuard)
+		}
+
+		if fromListing != fromGuard {
+			t.Errorf("the listing says %d owners and the rule says %d; one of them is "+
+				"about to send an administrator to the wrong place", fromListing, fromGuard)
+		}
+	})
+}
+
+// TestTheOwnerlessFilterFindsTheOrganizationNobodyCanAdminister pins the filter
+// itself, which is the half a platform administrator actually calls.
+func TestTheOwnerlessFilterFindsTheOrganizationNobodyCanAdminister(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		withOwner := b.newOrg(t)
+		addMember(t, b, withOwner, b.newShippedRole(t, withOwner, authz.RoleOwner))
+
+		// Empty from the start, which is what creating one through the platform
+		// endpoint produces before anybody is appointed.
+		empty := b.newOrg(t)
+
+		// An owner whose account is gone: a member list that is not empty, and still
+		// nobody who can administer it.
+		abandoned := b.newOrg(t)
+		_, userID := addMember(t, b, abandoned, b.newShippedRole(t, abandoned, authz.RoleOwner))
+		b.deleteAccount(t, userID)
+
+		listed := ownerlessIDs(t, b)
+
+		if slices.Contains(listed, withOwner) {
+			t.Error("an organization with a live owner is in the ownerless listing")
+		}
+
+		for _, want := range []uuid.UUID{empty, abandoned} {
+			if !slices.Contains(listed, want) {
+				t.Errorf("%v is not in the ownerless listing", want)
+			}
+		}
+	})
+}
+
+func ownerCount(t *testing.T, b *backend, orgID uuid.UUID) int {
+	t.Helper()
+
+	list, err := b.prov.AllOrganizations(t.Context(), orgs.OrganizationFilter{}, wholePage, 0)
+	if err != nil {
+		t.Fatalf("AllOrganizations() = _, %v", err)
+	}
+
+	for _, summary := range list {
+		if summary.ID == orgID {
+			return summary.Owners
+		}
+	}
+
+	t.Fatalf("%v is not in the listing at all", orgID)
+
+	return -1
+}
+
+func ownerlessIDs(t *testing.T, b *backend) []uuid.UUID {
+	t.Helper()
+
+	list, err := b.prov.AllOrganizations(t.Context(),
+		orgs.OrganizationFilter{WithoutOwner: true}, wholePage, 0)
+	if err != nil {
+		t.Fatalf("AllOrganizations(without owner) = _, %v", err)
+	}
+
+	ids := make([]uuid.UUID, 0, len(list))
+	for _, summary := range list {
+		if summary.Owners != 0 {
+			t.Errorf("%v has %d owners but is in the ownerless listing", summary.ID, summary.Owners)
+		}
+
+		ids = append(ids, summary.ID)
+	}
+
+	return ids
+}

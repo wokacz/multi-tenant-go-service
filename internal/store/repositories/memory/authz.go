@@ -836,32 +836,62 @@ func (m *Authz) CreateOrganization(
 	return &stored, nil
 }
 
-func (m *Authz) AllOrganizations(_ context.Context, limit, offset int) ([]models.Organization, error) {
+func (m *Authz) AllOrganizations(
+	_ context.Context,
+	filter orgs.OrganizationFilter,
+	limit, offset int,
+) ([]orgs.OrganizationSummary, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	out := make([]models.Organization, 0, len(m.orgs))
+	out := make([]orgs.OrganizationSummary, 0, len(m.orgs))
+
 	for _, org := range m.orgs {
-		if !org.IsDeleted() {
-			out = append(out, *org)
+		if org.IsDeleted() {
+			continue
 		}
+
+		owners := m.ownerCountLocked(org.ID)
+		if filter.WithoutOwner && owners > 0 {
+			continue
+		}
+
+		out = append(out, orgs.OrganizationSummary{Organization: *org, Owners: owners})
 	}
 
 	// The SQL orders by id descending; map iteration does not.
-	slices.SortFunc(out, func(a, b models.Organization) int {
+	slices.SortFunc(out, func(a, b orgs.OrganizationSummary) int {
 		return strings.Compare(b.ID.String(), a.ID.String())
 	})
 
-	if offset >= len(out) {
-		return nil, nil
+	return page(out, limit, offset), nil
+}
+
+// ownerCountLocked is the fake's copy of the activeOwners subquery: active
+// memberships holding the owner role whose account is not deleted. It has to agree
+// with ownerStateLocked, which is what the last-owner rule reads.
+func (m *Authz) ownerCountLocked(orgID uuid.UUID) int {
+	owners := 0
+
+	for _, membership := range m.memberships {
+		if membership.OrganizationID != orgID || membership.Status != models.MembershipActive {
+			continue
+		}
+
+		if m.accountDeletedLocked(membership) {
+			continue
+		}
+
+		for _, roleID := range m.memberRoles[membership.ID] {
+			if role, ok := m.roles[roleID]; ok && role.Key == string(authz.RoleOwner) {
+				owners++
+
+				break
+			}
+		}
 	}
 
-	out = out[offset:]
-	if limit > 0 && limit < len(out) {
-		out = out[:limit]
-	}
-
-	return out, nil
+	return owners
 }
 
 func (m *Authz) GrantSystemRole(

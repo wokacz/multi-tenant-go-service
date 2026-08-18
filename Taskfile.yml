@@ -60,6 +60,12 @@ tasks:
       - docker rm -f {{.NAME}} >/dev/null 2>&1 || true
       - docker run -d --name {{.NAME}} -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres
         -e POSTGRES_DB=postgres -p 127.0.0.1:{{.PORT}}:5432 postgres:18 >/dev/null
+      # Twice, with a pause. The image's entrypoint starts Postgres once to run
+      # initdb and then restarts it, so a single pg_isready can succeed against the
+      # temporary server and the migration that follows dies with "querying system
+      # variables: EOF". Asking again after a second is what tells the two apart.
+      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
+      - sleep 1
       - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
       - atlas migrate apply --dir "file://migrations"
         --url "postgres://postgres:postgres@localhost:{{.PORT}}/postgres?sslmode=disable"

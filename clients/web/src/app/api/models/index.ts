@@ -397,6 +397,8 @@ export interface PlatformOrganizationResponse {
   is_protected: boolean;
   /** Display name */
   name: string;
+  /** How many people can administer it, counted the same way the last-owner rule counts. Zero means nobody can, and POST /v1/platform/organizations/{id}/owners is the way back. */
+  owners: number;
   /** Stable human-readable handle */
   slug: string;
 }

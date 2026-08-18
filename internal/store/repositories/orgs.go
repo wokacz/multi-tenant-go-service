@@ -891,16 +891,60 @@ func (r *Orgs) CreateOrganization(
 
 // AllOrganizations lists every organization, newest first. UUIDv7 is
 // time-ordered, so the primary key is already the creation order.
-func (r *Orgs) AllOrganizations(ctx context.Context, limit, offset int) ([]models.Organization, error) {
-	var out []models.Organization
+// activeOwners is the definition of "an owner this organization actually has",
+// written once so the listing and the last-owner rule cannot drift apart.
+//
+// A membership counts when it is active, holds the owner role, and has a live
+// account behind it. That last condition is the one that bites: soft deleting an
+// account leaves the membership row, still holding owner, and ownerStateTx stopped
+// counting it — so a listing that counted it would report an owner for an
+// organization the guard treats as having none.
+const activeOwners = `(
+	SELECT COUNT(DISTINCT m.id)
+	FROM membership_roles mr
+	JOIN memberships m ON m.id = mr.membership_id
+	JOIN roles r ON r.id = mr.role_id
+	JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+	WHERE m.organization_id = organizations.id
+	  AND m.status = 'active'
+	  AND r.key = 'owner'
+)`
 
-	err := r.db.WithContext(ctx).
-		Order("id DESC").
+func (r *Orgs) AllOrganizations(
+	ctx context.Context,
+	filter orgs.OrganizationFilter,
+	limit, offset int,
+) ([]orgs.OrganizationSummary, error) {
+	type row struct {
+		models.Organization
+		Owners int
+	}
+
+	var rows []row
+
+	// Queried through the model so GORM's soft-delete scope still applies: a
+	// deleted organization has no owners either, and listing it as ownerless would
+	// send an administrator to appoint one.
+	query := r.db.WithContext(ctx).
+		Model(&models.Organization{}).
+		Select("organizations.*, " + activeOwners + " AS owners")
+
+	if filter.WithoutOwner {
+		query = query.Where(activeOwners + " = 0")
+	}
+
+	err := query.
+		Order("organizations.id DESC").
 		Limit(limit).
 		Offset(offset).
-		Find(&out).Error
+		Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("store: all organizations: %w", err)
+	}
+
+	out := make([]orgs.OrganizationSummary, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, orgs.OrganizationSummary{Organization: r.Organization, Owners: r.Owners})
 	}
 
 	return out, nil

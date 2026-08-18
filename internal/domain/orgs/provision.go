@@ -31,7 +31,13 @@ type Provisioner interface {
 	// AllOrganizations lists every organization in the installation. It is the
 	// one listing that crosses tenants, which is why it sits behind a
 	// system-scope permission rather than an organization-scoped one.
-	AllOrganizations(ctx context.Context, limit, offset int) ([]models.Organization, error)
+	//
+	// Each row carries how many owners the organization has, counted by exactly the
+	// definition the last-owner rule uses — an active membership holding the owner
+	// role whose account has not been deleted. Two answers to "does this have an
+	// owner" would eventually disagree, and the disagreement would show up as a
+	// listing saying one while the guard says none.
+	AllOrganizations(ctx context.Context, filter OrganizationFilter, limit, offset int) ([]OrganizationSummary, error)
 
 	// GrantSystemRole assigns an installation-wide role by key. It is
 	// idempotent: granting twice is not an error, because one caller is a
@@ -53,6 +59,32 @@ type Provisioner interface {
 	// and addresses resolved, because "who administers this installation" is a
 	// question about people rather than about ids.
 	SystemRoleHolders(ctx context.Context) ([]SystemRoleHolder, error)
+}
+
+// OrganizationSummary is one organization as an installation administrator sees
+// it: the row, plus the one fact that cannot be read off it.
+type OrganizationSummary struct {
+	models.Organization
+
+	// Owners is how many people can administer it.
+	//
+	// Zero is the state this exists to make visible. An organization gets there by
+	// losing its last owner to a deleted account — the membership row outlives the
+	// person, and every rule that matters stopped counting it — and until now
+	// nothing could find such an organization. Appointing a new owner has been
+	// possible since the platform endpoint existed; knowing where to appoint one
+	// was the missing half.
+	Owners int
+}
+
+// OrganizationFilter narrows the installation-wide listing.
+//
+// A struct rather than a bare bool because the call site reads as a sentence, and
+// because the next filter goes here instead of becoming a second positional
+// argument nobody can tell apart from the first.
+type OrganizationFilter struct {
+	// WithoutOwner keeps only the organizations nobody can administer.
+	WithoutOwner bool
 }
 
 // SystemRoleHolder is one installation-wide grant.
@@ -200,7 +232,11 @@ const MaxOrganizationPage = 100
 
 // AllOrganizations lists every organization. Authorization happened at system
 // scope, so there is no grant to read an organization from.
-func (s *Service) AllOrganizations(ctx context.Context, limit, offset int) ([]models.Organization, error) {
+func (s *Service) AllOrganizations(
+	ctx context.Context,
+	filter OrganizationFilter,
+	limit, offset int,
+) ([]OrganizationSummary, error) {
 	if limit <= 0 || limit > MaxOrganizationPage {
 		limit = MaxOrganizationPage
 	}
@@ -209,7 +245,7 @@ func (s *Service) AllOrganizations(ctx context.Context, limit, offset int) ([]mo
 		offset = 0
 	}
 
-	return s.provisioner.AllOrganizations(ctx, limit, offset)
+	return s.provisioner.AllOrganizations(ctx, filter, limit, offset)
 }
 
 // CreateOrganization sets up a new organization with the shipped roles.

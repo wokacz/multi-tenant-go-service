@@ -468,6 +468,29 @@ Akcja jest **parametrem** `RemoveMember` z tego samego powodu, z jakiego `guard`
 wygląda w store identycznie, a tylko wołający wie, czy administrator kogoś usunął, czy ktoś odszedł. Store odpowiada za
 moment zapisu, domena za jego znaczenie.
 
+## Organizacja bez właściciela
+
+Naprawianie istniało od H2 — `POST /v1/platform/organizations/{id}/owners` wskazuje właściciela z zewnątrz, bez
+dołączania wołającego. **Brakowało wykrywania**: administrator instalacji musiałby już wiedzieć, której organizacji
+szukać, a to nie jest rzecz, którą się wie o czyimś tenancie.
+
+`GET /v1/platform/organizations` niesie teraz w każdym wierszu `owners`, a `?without_owner=true` zawęża listę do tych,
+którymi nikt nie może administrować. Dwie drogi do zera:
+
+1. organizacja utworzona przez platformę i jeszcze nieobsadzona — tworzenie **świadomie** nie dodaje twórcy,
+2. właściciel, którego **konto zostało usunięte** — wiersz członkostwa przeżywa osobę i przestaje się liczyć wszędzie
+   tam, gdzie to ma znaczenie.
+
+**Liczenie jest jedno.** Podzapytanie `activeOwners` w SQL i `ownerStateTx`, z którego czyta reguła ostatniego
+właściciela, mają tę samą definicję: aktywne członkostwo z rolą `owner` i **żywym kontem**. Dwie odpowiedzi na pytanie
+„czy ta organizacja ma właściciela" w końcu by się rozjechały, a rozjazd wyglądałby tak, że lista pokazuje właściciela
+dla organizacji, którą reguła uważa za pozbawioną właścicieli. Przypina to
+`TestTheOwnerCountAgreesWithTheOwnerRule` — czyta liczbę z listy i **z samego guarda**, i sprawdziłem, że nie przechodzi,
+gdy z podzapytania wypadnie warunek o usuniętym koncie.
+
+Pole `owners` jest tylko na odpowiedzi platformowej. Ilu właścicieli mają inne tenanty instalacji, nie jest sprawą
+członka.
+
 ## Reguły transakcyjne: gdzie mieszka decyzja
 
 Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu organizacji.

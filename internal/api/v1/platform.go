@@ -32,6 +32,10 @@ type PlatformOrganizationResponse struct {
 	OrganizationResponse
 
 	IsProtected bool `json:"is_protected" doc:"Refuses deletion. The default organization carries it."`
+
+	// Owners is only on this response, not on the organization-scoped one: how many
+	// owners an installation's other tenants have is not a member's business.
+	Owners int `json:"owners" doc:"How many people can administer it, counted the same way the last-owner rule counts. Zero means nobody can, and POST /v1/platform/organizations/{id}/owners is the way back."`
 }
 
 // PlatformUserResponse is an account as an installation administrator sees it.
@@ -52,6 +56,14 @@ type PlatformUserResponse struct {
 type PageInput struct {
 	Limit  int `query:"limit" minimum:"1" maximum:"100" default:"100" doc:"How many to return"`
 	Offset int `query:"offset" minimum:"0" default:"0" doc:"How many to skip"`
+}
+
+// ListPlatformOrganizationsInput is the page plus the one filter that answers a
+// question an administrator cannot answer any other way.
+type ListPlatformOrganizationsInput struct {
+	PageInput
+
+	WithoutOwner bool `query:"without_owner" doc:"Only organizations nobody can administer"`
 }
 
 type ListPlatformOrganizationsOutput struct {
@@ -119,7 +131,13 @@ func registerPlatform(api huma.API, service *orgs.Service, users *user.Service) 
 		Summary:     "List every organization",
 		Description: "Requires platform.organizations.read. The only listing that " +
 			"crosses tenants, which is why it is measured against the " +
-			"installation rather than any one organization.",
+			"installation rather than any one organization.\n\n" +
+			"Each row says how many owners the organization has, counted exactly the " +
+			"way the last-owner rule counts them: an active membership holding owner " +
+			"whose account still exists. without_owner=true keeps only the ones at " +
+			"zero — an organization gets there when its last owner's account is " +
+			"deleted, and appointing a new one was already possible while finding " +
+			"such an organization was not.",
 		Tags:     []string{"platform"},
 		Security: bearer(),
 		Errors:   platformErrors(),
@@ -215,10 +233,11 @@ func registerPlatform(api huma.API, service *orgs.Service, users *user.Service) 
 	}, h.appointOwner)
 }
 
-func newPlatformOrganizationResponse(o *models.Organization) PlatformOrganizationResponse {
+func newPlatformOrganizationResponse(o *orgs.OrganizationSummary) PlatformOrganizationResponse {
 	return PlatformOrganizationResponse{
-		OrganizationResponse: newOrganizationResponse(o),
+		OrganizationResponse: newOrganizationResponse(&o.Organization),
 		IsProtected:          o.IsProtected,
+		Owners:               o.Owners,
 	}
 }
 
@@ -240,8 +259,13 @@ func newPlatformUserResponse(u *models.User) PlatformUserResponse {
 	return out
 }
 
-func (h *platformHandlers) listOrganizations(ctx context.Context, in *PageInput) (*ListPlatformOrganizationsOutput, error) {
-	list, err := h.orgs.AllOrganizations(ctx, in.Limit, in.Offset)
+func (h *platformHandlers) listOrganizations(
+	ctx context.Context,
+	in *ListPlatformOrganizationsInput,
+) (*ListPlatformOrganizationsOutput, error) {
+	filter := orgs.OrganizationFilter{WithoutOwner: in.WithoutOwner}
+
+	list, err := h.orgs.AllOrganizations(ctx, filter, in.Limit, in.Offset)
 	if err != nil {
 		return nil, problem.Error(ctx, err)
 	}
@@ -265,7 +289,12 @@ func (h *platformHandlers) createOrganization(
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &PlatformOrganizationOutput{Body: newPlatformOrganizationResponse(org)}, nil
+	// Zero owners, and that is not a placeholder: creating an organization
+	// deliberately leaves it empty, so the count is telling the truth and pointing
+	// at the appoint-owner endpoint.
+	summary := &orgs.OrganizationSummary{Organization: *org}
+
+	return &PlatformOrganizationOutput{Body: newPlatformOrganizationResponse(summary)}, nil
 }
 
 func (h *platformHandlers) deleteOrganization(ctx context.Context, in *PlatformOrganizationPathInput) (*struct{}, error) {

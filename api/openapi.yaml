@@ -1017,11 +1017,16 @@ components:
         name:
           description: Display name
           type: string
+        owners:
+          description: How many people can administer it, counted the same way the last-owner rule counts. Zero means nobody can, and POST /v1/platform/organizations/{id}/owners is the way back.
+          format: int64
+          type: integer
         slug:
           description: Stable human-readable handle
           type: string
       required:
         - is_protected
+        - owners
         - id
         - slug
         - name
@@ -3631,7 +3636,10 @@ paths:
         - platform
   /v1/platform/organizations:
     get:
-      description: Requires platform.organizations.read. The only listing that crosses tenants, which is why it is measured against the installation rather than any one organization.
+      description: |-
+        Requires platform.organizations.read. The only listing that crosses tenants, which is why it is measured against the installation rather than any one organization.
+
+        Each row says how many owners the organization has, counted exactly the way the last-owner rule counts them: an active membership holding owner whose account still exists. without_owner=true keeps only the ones at zero — an organization gets there when its last owner's account is deleted, and appointing a new one was already possible while finding such an organization was not.
       operationId: list-platform-organizations
       parameters:
         - description: How many to return
@@ -3655,6 +3663,13 @@ paths:
             format: int64
             minimum: 0
             type: integer
+        - description: Only organizations nobody can administer
+          explode: false
+          in: query
+          name: without_owner
+          schema:
+            description: Only organizations nobody can administer
+            type: boolean
       responses:
         "200":
           content:
