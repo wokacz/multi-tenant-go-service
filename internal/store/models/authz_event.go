@@ -2,10 +2,8 @@ package models
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // AuthzAction enumerates the authorization changes worth keeping.
@@ -86,34 +84,29 @@ func (a AuthzAction) Valid() bool {
 type AuthzEvent struct {
 	Model
 
-	// CreatedAt shadows Model.CreatedAt to supply the time column of the
-	// composite indexes. GORM only builds a composite index when several fields
-	// share one index name, and the embedded field cannot be tagged per-model.
-	CreatedAt time.Time `gorm:"index:idx_authz_org_time,priority:2;index:idx_authz_actor_time,priority:2"`
-
 	// OrganizationID is null for a system-scope change, which is why the whole
 	// table is not scoped by it.
-	OrganizationID *uuid.UUID `gorm:"type:uuid;index:idx_authz_org_time,priority:1"`
+	OrganizationID *uuid.UUID
 
-	ActorID uuid.UUID `gorm:"type:uuid;not null;index:idx_authz_actor_time,priority:1"`
+	ActorID uuid.UUID
 
 	// SubjectID is the user the change was about, when there was one. Role edits
 	// have no subject.
-	SubjectID *uuid.UUID `gorm:"type:uuid;index"`
+	SubjectID *uuid.UUID
 
-	Action AuthzAction `gorm:"size:40;not null"`
+	Action AuthzAction
 
 	// RoleID is a bare column: the role may be deleted later, and the record of
 	// having granted it must outlive it.
-	RoleID        *uuid.UUID `gorm:"type:uuid"`
-	PermissionKey string     `gorm:"size:100"`
+	RoleID        *uuid.UUID
+	PermissionKey string
 
-	IP        string `gorm:"type:inet;not null"`
-	UserAgent string `gorm:"size:512"`
-	Detail    string `gorm:"size:500"`
+	IP        string
+	UserAgent string
+	Detail    string
 }
 
-func (e *AuthzEvent) BeforeSave(_ *gorm.DB) error {
+func (e *AuthzEvent) Validate() error {
 	if !e.Action.Valid() {
 		return fmt.Errorf("models: invalid authz action %q", e.Action)
 	}

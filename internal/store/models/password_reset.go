@@ -15,11 +15,11 @@ import (
 type PasswordReset struct {
 	Model
 
-	UserID uuid.UUID `gorm:"type:uuid;not null;index"`
-	User   *User     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	UserID uuid.UUID
+	User   *User `json:"-"`
 
-	CodeHash   string    `gorm:"size:64;not null"`
-	ExpiresAt  time.Time `gorm:"not null;index"`
-	Attempts   int       `gorm:"not null"`
+	CodeHash   string
+	ExpiresAt  time.Time
+	Attempts   int
 	ConsumedAt *time.Time
 }

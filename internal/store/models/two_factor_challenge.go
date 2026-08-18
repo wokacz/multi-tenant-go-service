@@ -18,16 +18,16 @@ import (
 type TwoFactorChallenge struct {
 	Model
 
-	UserID uuid.UUID `gorm:"type:uuid;not null;index"`
-	User   *User     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	UserID uuid.UUID
+	User   *User `json:"-"`
 
 	// DeviceID is not nullable: a challenge that trusts no particular device
 	// would have nothing to mark trusted once it is spent.
-	DeviceID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Device   *Device   `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	DeviceID uuid.UUID
+	Device   *Device `json:"-"`
 
-	CodeHash   string    `gorm:"size:64;not null"`
-	ExpiresAt  time.Time `gorm:"not null;index"`
-	Attempts   int       `gorm:"not null"`
+	CodeHash   string
+	ExpiresAt  time.Time
+	Attempts   int
 	ConsumedAt *time.Time
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/authzevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
@@ -211,12 +212,12 @@ func TestTheHistoryIsScopedToTheOrganization(t *testing.T) {
 func countEvents(t *testing.T, db *store.DB, orgID uuid.UUID) int {
 	t.Helper()
 
-	var total int64
-	if err := db.Model(&models.AuthzEvent{}).
-		Where("organization_id = ?", orgID).
-		Count(&total).Error; err != nil {
+	total, err := db.Ent().AuthzEvent.Query().
+		Where(authzevent.OrganizationID(orgID)).
+		Count(t.Context())
+	if err != nil {
 		t.Fatalf("count events: %v", err)
 	}
 
-	return int(total)
+	return total
 }

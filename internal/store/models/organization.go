@@ -3,8 +3,6 @@ package models
 import (
 	"fmt"
 	"unicode/utf8"
-
-	"gorm.io/gorm"
 )
 
 // DefaultOrganizationSlug names the organization every account joins when the
@@ -34,21 +32,21 @@ type Organization struct {
 	// route takes the id. The slug is a label and a lookup for the default
 	// organization, so reusing one cannot make an old link resolve to a different
 	// tenant.
-	Slug string `gorm:"size:63;not null;index:idx_organizations_slug,unique,where:deleted_at IS NULL"`
-	Name string `gorm:"size:100;not null"`
+	Slug string
+	Name string
 
 	// OnDelete:CASCADE only fires on a hard delete. An organization is soft
 	// deleted, so every query that reads through these has to filter
 	// organizations.deleted_at itself — see the repository.
-	Memberships []Membership `gorm:"constraint:OnDelete:CASCADE"`
-	Roles       []Role       `gorm:"constraint:OnDelete:CASCADE"`
+	Memberships []Membership `json:"-"`
+	Roles       []Role       `json:"-"`
 }
 
-// BeforeSave keeps a malformed slug out of the database. The rules are narrow on
+// Validate keeps a malformed slug out of the database. The rules are narrow on
 // purpose: a slug appears in URLs a customer will paste into tickets, and
 // anything needing percent-encoding there is a slug that will be transcribed
 // wrongly.
-func (o *Organization) BeforeSave(_ *gorm.DB) error {
+func (o *Organization) Validate() error {
 	if !validSlug(o.Slug) {
 		return fmt.Errorf("models: invalid organization slug %q", o.Slug)
 	}

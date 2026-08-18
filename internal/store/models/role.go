@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 var (
@@ -36,26 +35,26 @@ const MaxRoleKeyLength = 64
 type Role struct {
 	Model
 
-	OrganizationID uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:idx_role_org_key,priority:1"`
-	Organization   *Organization `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	OrganizationID uuid.UUID
+	Organization   *Organization `json:"-"`
 
-	Key string `gorm:"size:64;not null;uniqueIndex:idx_role_org_key,priority:2"`
+	Key string
 
 	// Name and Description are what a role created here is called. For a shipped
 	// role they are the English strings from the Go definition and act as a
 	// fallback: the API renders those from the message catalog instead, keyed by
 	// Key, so they read in the caller's language.
-	Name        string `gorm:"size:100;not null"`
-	Description string `gorm:"size:255"`
+	Name        string
+	Description string
 
 	// IsSystem marks a row materialised from the shipped catalog when the
 	// organization was created.
-	IsSystem bool `gorm:"not null;default:false"`
+	IsSystem bool
 
-	Permissions []RolePermission `gorm:"constraint:OnDelete:CASCADE"`
+	Permissions []RolePermission `json:"-"`
 }
 
-func (r *Role) BeforeSave(_ *gorm.DB) error {
+func (r *Role) Validate() error {
 	if !validRoleKey(r.Key) {
 		return fmt.Errorf("models: invalid role key %q", r.Key)
 	}
@@ -67,7 +66,7 @@ func (r *Role) BeforeSave(_ *gorm.DB) error {
 	return nil
 }
 
-func (r *Role) BeforeDelete(_ *gorm.DB) error {
+func (r *Role) RefuseDelete() error {
 	if r.ID == uuid.Nil {
 		return ErrRoleBatchDeleteUnsupported
 	}
@@ -117,10 +116,10 @@ func validRoleKey(key string) bool {
 type RolePermission struct {
 	Model
 
-	RoleID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_role_permission,priority:1"`
-	Role   *Role     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	RoleID uuid.UUID
+	Role   *Role `json:"-"`
 
-	PermissionKey string `gorm:"size:100;not null;uniqueIndex:idx_role_permission,priority:2"`
+	PermissionKey string
 }
 
 // MembershipRole assigns a role to one membership. The unique index makes
@@ -129,13 +128,13 @@ type RolePermission struct {
 type MembershipRole struct {
 	Model
 
-	MembershipID uuid.UUID   `gorm:"type:uuid;not null;uniqueIndex:idx_membership_role,priority:1"`
-	Membership   *Membership `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	MembershipID uuid.UUID
+	Membership   *Membership `json:"-"`
 
-	RoleID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_membership_role,priority:2"`
-	Role   *Role     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	RoleID uuid.UUID
+	Role   *Role `json:"-"`
 
-	GrantedBy *uuid.UUID `gorm:"type:uuid"`
+	GrantedBy *uuid.UUID
 }
 
 // UserSystemRole assigns an installation-wide role by key.
@@ -146,15 +145,15 @@ type MembershipRole struct {
 type UserSystemRole struct {
 	Model
 
-	UserID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_user_system_role,priority:1"`
-	User   *User     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	UserID uuid.UUID
+	User   *User `json:"-"`
 
-	RoleKey string `gorm:"size:64;not null;uniqueIndex:idx_user_system_role,priority:2"`
+	RoleKey string
 
-	GrantedBy *uuid.UUID `gorm:"type:uuid"`
+	GrantedBy *uuid.UUID
 }
 
-func (r *UserSystemRole) BeforeSave(_ *gorm.DB) error {
+func (r *UserSystemRole) Validate() error {
 	if !validRoleKey(r.RoleKey) {
 		return fmt.Errorf("models: invalid system role key %q", r.RoleKey)
 	}

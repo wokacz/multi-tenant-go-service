@@ -10,6 +10,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membershiprole"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
@@ -139,9 +140,7 @@ func TestTheOwnerStateTheGuardSeesCountsOnlyRealOwners(t *testing.T) {
 	deleted := newUser(t, users)
 	newMembership(t, db, org.ID, deleted.ID, models.MembershipActive, owner.ID)
 
-	if err := db.Delete(deleted).Error; err != nil {
-		t.Fatalf("delete user: %v", err)
-	}
+	retireAccount(t, db, deleted.ID)
 
 	// errStop abandons the transaction once the state has been captured, so the
 	// probe reads without changing anything.
@@ -254,9 +253,7 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 
 	// A soft delete never fires the foreign key cascade, so the membership row
 	// is still there afterwards.
-	if err := db.Delete(gone).Error; err != nil {
-		t.Fatalf("delete user: %v", err)
-	}
+	retireAccount(t, db, gone.ID)
 
 	members, err := repo.Members(t.Context(), org.ID, wholePage, 0)
 	if err != nil {
@@ -314,9 +311,7 @@ func TestAnOwnerWhoseAccountIsDeletedDoesNotBlockRemoval(t *testing.T) {
 	gone := newUser(t, users)
 	goneMembership := newMembership(t, db, org.ID, gone.ID, models.MembershipActive, owner.ID)
 
-	if err := db.Delete(gone).Error; err != nil {
-		t.Fatalf("delete user: %v", err)
-	}
+	retireAccount(t, db, gone.ID)
 
 	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("RemoveMember() for an owner whose account is deleted = %v, want it removed", err)
@@ -384,21 +379,26 @@ func TestARoleKeyIsUniquePerOrganization(t *testing.T) {
 	}
 }
 
-// TestDeletingARoleIsRefusedForSystemRoles covers the model hook reaching the
-// database path. The repository loads the row first precisely so BeforeDelete
-// sees IsSystem; a bare Where(...).Delete() would hand it a zero receiver.
+// TestDeletingARoleIsRefusedForSystemRoles covers RefuseDelete reaching the
+// database path. The repository loads the row first precisely so IsSystem is
+// visible; a delete by id alone would skip the guard.
 func TestDeletingARoleIsRefusedForSystemRoles(t *testing.T) {
 	db := testDB(t)
 	repo := repositories.NewOrgs(db)
 
 	org := newOrganization(t, db)
 
-	role := &models.Role{OrganizationID: org.ID, Key: "admin", Name: "Administrator", IsSystem: true}
-	if err := db.Create(role).Error; err != nil {
+	row, err := db.Ent().Role.Create().
+		SetOrganizationID(org.ID).
+		SetKey("admin").
+		SetName("Administrator").
+		SetIsSystem(true).
+		Save(t.Context())
+	if err != nil {
 		t.Fatalf("create role: %v", err)
 	}
 
-	if err := repo.DeleteRole(t.Context(), org.ID, role.ID, orgs.RefuseRoleInUse()); !errors.Is(err, models.ErrRoleIsSystem) {
+	if err := repo.DeleteRole(t.Context(), org.ID, row.ID, orgs.RefuseRoleInUse()); !errors.Is(err, models.ErrRoleIsSystem) {
 		t.Errorf("DeleteRole() on a system role = %v, want ErrRoleIsSystem", err)
 	}
 }
@@ -410,7 +410,7 @@ func TestDeletingAnOrganizationIsRefusedWhenProtected(t *testing.T) {
 	repo := repositories.NewOrgs(db)
 
 	org := newOrganization(t, db)
-	if err := db.Model(org).Update("is_protected", true).Error; err != nil {
+	if _, err := db.Ent().Organization.UpdateOneID(org.ID).SetIsProtected(true).Save(t.Context()); err != nil {
 		t.Fatalf("protect organization: %v", err)
 	}
 
@@ -492,10 +492,10 @@ func TestRemovingAMemberCascadesTheirRoleAssignments(t *testing.T) {
 		t.Fatalf("RemoveMember() = %v", err)
 	}
 
-	var remaining int64
-	if err := db.Model(&models.MembershipRole{}).
-		Where("membership_id = ?", membership.ID).
-		Count(&remaining).Error; err != nil {
+	remaining, err := db.Ent().MembershipRole.Query().
+		Where(membershiprole.MembershipID(membership.ID)).
+		Count(t.Context())
+	if err != nil {
 		t.Fatalf("count assignments: %v", err)
 	}
 

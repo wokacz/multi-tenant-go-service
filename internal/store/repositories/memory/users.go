@@ -140,8 +140,8 @@ func (m *Users) Delete(_ context.Context, userID uuid.UUID) error {
 	// refusing a registration Postgres accepts.
 	delete(m.byEmail, u.Email)
 
-	// The model hook revokes the devices; the fake does the same so a test
-	// cannot pass here and fail against Postgres.
+	// Soft delete does not cascade, so the fake revokes the devices here the
+	// same way the Postgres repository does before it retires the account.
 	for _, device := range m.devices {
 		if device.UserID == userID && !device.IsRevoked() {
 			_ = device.Revoke()

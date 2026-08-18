@@ -29,6 +29,8 @@ import (
 // to their package variables.
 func init() {
 	authzeventMixin := schema.AuthzEvent{}.Mixin()
+	authzeventHooks := schema.AuthzEvent{}.Hooks()
+	authzevent.Hooks[0] = authzeventHooks[0]
 	authzeventMixinFields0 := authzeventMixin[0].Fields()
 	_ = authzeventMixinFields0
 	authzeventFields := schema.AuthzEvent{}.Fields()
@@ -182,6 +184,8 @@ func init() {
 	// emailchange.DefaultID holds the default value on creation for the id field.
 	emailchange.DefaultID = emailchangeDescID.Default.(func() uuid.UUID)
 	invitationMixin := schema.Invitation{}.Mixin()
+	invitationHooks := schema.Invitation{}.Hooks()
+	invitation.Hooks[0] = invitationHooks[0]
 	invitationMixinFields0 := invitationMixin[0].Fields()
 	_ = invitationMixinFields0
 	invitationFields := schema.Invitation{}.Fields()
@@ -256,6 +260,8 @@ func init() {
 	// invitationrole.DefaultID holds the default value on creation for the id field.
 	invitationrole.DefaultID = invitationroleDescID.Default.(func() uuid.UUID)
 	logineventMixin := schema.LoginEvent{}.Mixin()
+	logineventHooks := schema.LoginEvent{}.Hooks()
+	loginevent.Hooks[0] = logineventHooks[0]
 	logineventMixinFields0 := logineventMixin[0].Fields()
 	_ = logineventMixinFields0
 	logineventFields := schema.LoginEvent{}.Fields()
@@ -283,6 +289,8 @@ func init() {
 	// loginevent.DefaultID holds the default value on creation for the id field.
 	loginevent.DefaultID = logineventDescID.Default.(func() uuid.UUID)
 	membershipMixin := schema.Membership{}.Mixin()
+	membershipHooks := schema.Membership{}.Hooks()
+	membership.Hooks[0] = membershipHooks[0]
 	membershipMixinFields0 := membershipMixin[0].Fields()
 	_ = membershipMixinFields0
 	membershipFields := schema.Membership{}.Fields()
@@ -322,7 +330,9 @@ func init() {
 	membershiprole.DefaultID = membershiproleDescID.Default.(func() uuid.UUID)
 	organizationMixin := schema.Organization{}.Mixin()
 	organizationMixinHooks1 := organizationMixin[1].Hooks()
+	organizationHooks := schema.Organization{}.Hooks()
 	organization.Hooks[0] = organizationMixinHooks1[0]
+	organization.Hooks[1] = organizationHooks[0]
 	organizationMixinInters1 := organizationMixin[1].Interceptors()
 	organization.Interceptors[0] = organizationMixinInters1[0]
 	organizationMixinFields0 := organizationMixin[0].Fields()
@@ -427,6 +437,8 @@ func init() {
 	// passwordreset.DefaultID holds the default value on creation for the id field.
 	passwordreset.DefaultID = passwordresetDescID.Default.(func() uuid.UUID)
 	roleMixin := schema.Role{}.Mixin()
+	roleHooks := schema.Role{}.Hooks()
+	role.Hooks[0] = roleHooks[0]
 	roleMixinFields0 := roleMixin[0].Fields()
 	_ = roleMixinFields0
 	roleFields := schema.Role{}.Fields()
@@ -663,6 +675,8 @@ func init() {
 	// user.DefaultID holds the default value on creation for the id field.
 	user.DefaultID = userDescID.Default.(func() uuid.UUID)
 	usersystemroleMixin := schema.UserSystemRole{}.Mixin()
+	usersystemroleHooks := schema.UserSystemRole{}.Hooks()
+	usersystemrole.Hooks[0] = usersystemroleHooks[0]
 	usersystemroleMixinFields0 := usersystemroleMixin[0].Fields()
 	_ = usersystemroleMixinFields0
 	usersystemroleFields := schema.UserSystemRole{}.Fields()

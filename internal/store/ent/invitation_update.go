@@ -188,7 +188,9 @@ func (_u *InvitationUpdate) RemoveRoles(v ...*InvitationRole) *InvitationUpdate 
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *InvitationUpdate) Save(ctx context.Context) (int, error) {
-	_u.defaults()
+	if err := _u.defaults(); err != nil {
+		return 0, err
+	}
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -215,11 +217,15 @@ func (_u *InvitationUpdate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *InvitationUpdate) defaults() {
+func (_u *InvitationUpdate) defaults() error {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		if invitation.UpdateDefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized invitation.UpdateDefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := invitation.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -547,7 +553,9 @@ func (_u *InvitationUpdateOne) Select(field string, fields ...string) *Invitatio
 
 // Save executes the query and returns the updated Invitation entity.
 func (_u *InvitationUpdateOne) Save(ctx context.Context) (*Invitation, error) {
-	_u.defaults()
+	if err := _u.defaults(); err != nil {
+		return nil, err
+	}
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -574,11 +582,15 @@ func (_u *InvitationUpdateOne) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *InvitationUpdateOne) defaults() {
+func (_u *InvitationUpdateOne) defaults() error {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		if invitation.UpdateDefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized invitation.UpdateDefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := invitation.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.

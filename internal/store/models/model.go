@@ -5,21 +5,23 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 var ErrProtected = errors.New("models: record is protected from deletion")
 
 type Model struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey"`
+	ID        uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-// BeforeCreate assigns a UUIDv7 rather than a v4. v7 is time-ordered, so
-// consecutive inserts land next to each other in the primary key index instead
-// of scattering across the whole B-tree.
-func (m *Model) BeforeCreate(_ *gorm.DB) error {
+// AssignID mints a UUIDv7 when the caller did not supply one.
+//
+// v7 rather than v4 for the same reason the schema does: it is time-ordered, so
+// consecutive inserts land next to each other in the primary key index instead of
+// scattering across the whole B-tree. The memory fake and the tests call this;
+// Postgres gets the same default from the ent mixin.
+func (m *Model) AssignID() error {
 	if m.ID != uuid.Nil {
 		return nil
 	}
@@ -28,19 +30,21 @@ func (m *Model) BeforeCreate(_ *gorm.DB) error {
 	if err != nil {
 		return err
 	}
+
 	m.ID = id
 
 	return nil
 }
 
 type SoftDelete struct {
-	DeletedAt   gorm.DeletedAt `gorm:"index"`
+	DeletedAt   *time.Time
 	IsProtected bool
 }
 
-// BeforeDelete is where protection is actually enforced: GORM runs it for every
-// delete, including db.Delete calls that never touch the Delete method below.
-func (s *SoftDelete) BeforeDelete(_ *gorm.DB) error {
+// RefuseIfProtected is the in-memory half of the protection the repository also
+// enforces before a delete. The ent soft-delete hook cannot see is_protected
+// without a query of its own, so the refusal lives here and at the call site.
+func (s *SoftDelete) RefuseIfProtected() error {
 	if s.IsProtected {
 		return ErrProtected
 	}
@@ -49,20 +53,22 @@ func (s *SoftDelete) BeforeDelete(_ *gorm.DB) error {
 }
 
 // Delete marks the record deleted in memory only. Persisting it is the caller's
-// job; prefer db.Delete, which routes through BeforeDelete.
+// job.
 func (s *SoftDelete) Delete() error {
-	if s.IsProtected {
-		return ErrProtected
+	if err := s.RefuseIfProtected(); err != nil {
+		return err
 	}
-	s.DeletedAt = gorm.DeletedAt{Time: time.Now().UTC(), Valid: true}
+
+	now := time.Now().UTC()
+	s.DeletedAt = &now
 
 	return nil
 }
 
 func (s *SoftDelete) Restore() {
-	s.DeletedAt = gorm.DeletedAt{}
+	s.DeletedAt = nil
 }
 
 func (s *SoftDelete) IsDeleted() bool {
-	return s.DeletedAt.Valid
+	return s.DeletedAt != nil
 }

@@ -9,26 +9,26 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
-func TestModelBeforeCreateAssignsOrderedUUID(t *testing.T) {
+func TestModelAssignIDMintsOrderedUUID(t *testing.T) {
 	var m models.Model
-	if err := m.BeforeCreate(nil); err != nil {
-		t.Fatalf("BeforeCreate() = %v, want nil", err)
+	if err := m.AssignID(); err != nil {
+		t.Fatalf("AssignID() = %v, want nil", err)
 	}
 
 	if m.ID == uuid.Nil {
-		t.Fatal("BeforeCreate() left the ID unset")
+		t.Fatal("AssignID() left the ID unset")
 	}
 	if got := m.ID.Version(); got != 7 {
 		t.Errorf("ID version = %d, want 7 (time-ordered)", got)
 	}
 }
 
-func TestModelBeforeCreateKeepsExistingID(t *testing.T) {
+func TestModelAssignIDKeepsExistingID(t *testing.T) {
 	want := uuid.New()
 	m := models.Model{ID: want}
 
-	if err := m.BeforeCreate(nil); err != nil {
-		t.Fatalf("BeforeCreate() = %v, want nil", err)
+	if err := m.AssignID(); err != nil {
+		t.Fatalf("AssignID() = %v, want nil", err)
 	}
 	if m.ID != want {
 		t.Errorf("ID = %v, want %v (caller-supplied ID overwritten)", m.ID, want)
@@ -102,8 +102,8 @@ func TestSoftDeleteProtection(t *testing.T) {
 	if err := s.Delete(); !errors.Is(err, models.ErrProtected) {
 		t.Errorf("Delete() = %v, want ErrProtected", err)
 	}
-	if err := s.BeforeDelete(nil); !errors.Is(err, models.ErrProtected) {
-		t.Errorf("BeforeDelete() = %v, want ErrProtected", err)
+	if err := s.RefuseIfProtected(); !errors.Is(err, models.ErrProtected) {
+		t.Errorf("RefuseIfProtected() = %v, want ErrProtected", err)
 	}
 	if s.IsDeleted() {
 		t.Error("a protected record was marked deleted")
@@ -125,8 +125,8 @@ func TestSoftDeleteRoundTrip(t *testing.T) {
 	if s.IsDeleted() {
 		t.Error("record is still marked deleted after Restore()")
 	}
-	if err := s.BeforeDelete(nil); err != nil {
-		t.Errorf("BeforeDelete() on an unprotected record = %v, want nil", err)
+	if err := s.RefuseIfProtected(); err != nil {
+		t.Errorf("RefuseIfProtected() on an unprotected record = %v, want nil", err)
 	}
 }
 
@@ -150,14 +150,14 @@ func TestLoginOutcomeValid(t *testing.T) {
 	}
 }
 
-func TestLoginEventBeforeSaveRejectsUnknownOutcome(t *testing.T) {
+func TestLoginEventValidateRejectsUnknownOutcome(t *testing.T) {
 	e := models.LoginEvent{Outcome: "definitely_not_an_outcome"}
-	if err := e.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for an unknown outcome")
+	if err := e.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for an unknown outcome")
 	}
 
 	e.Outcome = models.OutcomeSuccess
-	if err := e.BeforeSave(nil); err != nil {
-		t.Errorf("BeforeSave() = %v, want nil", err)
+	if err := e.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
 	}
 }

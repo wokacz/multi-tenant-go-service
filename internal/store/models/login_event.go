@@ -2,10 +2,8 @@ package models
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // LoginOutcome enumerates the recognised results of a login attempt.
@@ -30,24 +28,18 @@ func (o LoginOutcome) Valid() bool {
 type LoginEvent struct {
 	Model
 
-	// CreatedAt shadows Model.CreatedAt to supply the time column of the
-	// composite indexes below. GORM only builds a composite index when several
-	// fields share one index name, and the embedded field cannot be tagged
-	// per-model.
-	CreatedAt time.Time `gorm:"index:idx_login_user_time,priority:2;index:idx_login_device_time,priority:2"`
+	UserID   uuid.UUID
+	DeviceID *uuid.UUID
 
-	UserID   uuid.UUID  `gorm:"type:uuid;not null;index:idx_login_user_time,priority:1"`
-	DeviceID *uuid.UUID `gorm:"type:uuid;index:idx_login_device_time,priority:1"`
-
-	IP        string       `gorm:"type:inet;not null;index"`
-	UserAgent string       `gorm:"size:512"`
-	Outcome   LoginOutcome `gorm:"size:20;not null;check:outcome IN ('success','bad_password','mfa_failed','locked')"`
-	Country   string       `gorm:"size:2"`
+	IP        string
+	UserAgent string
+	Outcome   LoginOutcome
+	Country   string
 }
 
-// BeforeSave rejects unknown outcomes in Go, so callers get a useful error
+// Validate rejects unknown outcomes in Go, so callers get a useful error
 // instead of a constraint violation from Postgres.
-func (e *LoginEvent) BeforeSave(_ *gorm.DB) error {
+func (e *LoginEvent) Validate() error {
 	if !e.Outcome.Valid() {
 		return fmt.Errorf("models: invalid login outcome %q", e.Outcome)
 	}

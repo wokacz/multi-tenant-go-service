@@ -14,20 +14,20 @@ type Device struct {
 
 	// UserID leads the composite unique index, so lookups filtered by user
 	// alone still use it — no separate single-column index needed.
-	UserID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_device_user_fp,priority:1"`
-	User   *User     `json:"-"`
+	UserID uuid.UUID
+	User   *User `json:"-"`
 
 	// Fingerprint is the SHA-256 of the opaque device token the client holds,
 	// hex-encoded — hence size 64. The token itself is never stored, so this
 	// table cannot be replayed into someone else's trusted device.
-	Fingerprint string `gorm:"size:64;not null;uniqueIndex:idx_device_user_fp,priority:2"`
-	Label       string `gorm:"size:100"` // optional user-defined label for the device
+	Fingerprint string
+	Label       string // optional user-defined label for the device
 
-	UserAgent string `gorm:"size:512"`
+	UserAgent string
 	// Pointers so "never seen" is NULL. A zero time.Time or an empty string
 	// would be written as year 1 and as '', and Postgres rejects '' for inet.
-	LastSeenAt *time.Time `gorm:"index"`
-	LastIP     *string    `gorm:"type:inet"`
+	LastSeenAt *time.Time
+	LastIP     *string
 	TrustedAt  *time.Time // nullable, if set, device is trusted
 	RevokedAt  *time.Time
 }

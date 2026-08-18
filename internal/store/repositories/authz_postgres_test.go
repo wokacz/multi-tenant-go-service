@@ -9,6 +9,8 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
@@ -22,17 +24,27 @@ import (
 
 // newOrganization inserts an organization with a unique slug so repeated runs
 // against the same database do not collide.
+//
+// The insert goes through ent, not the repository: CreateOrganization also
+// materialises the shipped roles, and several cases below need an empty tenant
+// so they can plant a role the catalog does not define.
 func newOrganization(t *testing.T, db *store.DB) *models.Organization {
 	t.Helper()
 
-	org := &models.Organization{
-		Slug: "org-" + uuid.Must(uuid.NewV7()).String(),
-		Name: "Test organization",
-	}
-
-	if err := db.Create(org).Error; err != nil {
+	row, err := db.Ent().Organization.Create().
+		SetSlug("org-" + uuid.Must(uuid.NewV7()).String()).
+		SetName("Test organization").
+		Save(t.Context())
+	if err != nil {
 		t.Fatalf("create organization: %v", err)
 	}
+
+	org := &models.Organization{Slug: row.Slug, Name: row.Name}
+	org.ID = row.ID
+	org.CreatedAt = row.CreatedAt
+	org.UpdatedAt = row.UpdatedAt
+	org.IsProtected = row.IsProtected
+	org.DeletedAt = row.DeletedAt
 
 	return org
 }
@@ -42,17 +54,29 @@ func newOrganization(t *testing.T, db *store.DB) *models.Organization {
 func newRole(t *testing.T, db *store.DB, orgID uuid.UUID, key string, permissions ...string) *models.Role {
 	t.Helper()
 
-	role := &models.Role{OrganizationID: orgID, Key: key, Name: key}
-	if err := db.Create(role).Error; err != nil {
+	row, err := db.Ent().Role.Create().
+		SetOrganizationID(orgID).
+		SetKey(key).
+		SetName(key).
+		Save(t.Context())
+	if err != nil {
 		t.Fatalf("create role: %v", err)
 	}
 
 	for _, perm := range permissions {
-		rp := &models.RolePermission{RoleID: role.ID, PermissionKey: perm}
-		if err := db.Create(rp).Error; err != nil {
+		if _, err := db.Ent().RolePermission.Create().
+			SetRoleID(row.ID).
+			SetPermissionKey(perm).
+			Save(t.Context()); err != nil {
 			t.Fatalf("create role permission: %v", err)
 		}
 	}
+
+	role := &models.Role{OrganizationID: orgID, Key: key, Name: key}
+	role.ID = row.ID
+	role.CreatedAt = row.CreatedAt
+	role.UpdatedAt = row.UpdatedAt
+	role.IsSystem = row.IsSystem
 
 	return role
 }
@@ -66,23 +90,56 @@ func newMembership(
 ) *models.Membership {
 	t.Helper()
 
-	membership := &models.Membership{
-		OrganizationID: orgID,
-		UserID:         userID,
-		Status:         status,
-	}
-	if err := db.Create(membership).Error; err != nil {
+	row, err := db.Ent().Membership.Create().
+		SetOrganizationID(orgID).
+		SetUserID(userID).
+		SetStatus(membership.Status(status)).
+		Save(t.Context())
+	if err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
 
 	for _, roleID := range roleIDs {
-		mr := &models.MembershipRole{MembershipID: membership.ID, RoleID: roleID}
-		if err := db.Create(mr).Error; err != nil {
+		if _, err := db.Ent().MembershipRole.Create().
+			SetMembershipID(row.ID).
+			SetRoleID(roleID).
+			Save(t.Context()); err != nil {
 			t.Fatalf("create membership role: %v", err)
 		}
 	}
 
-	return membership
+	out := &models.Membership{
+		OrganizationID: orgID,
+		UserID:         userID,
+		Status:         status,
+	}
+	out.ID = row.ID
+	out.CreatedAt = row.CreatedAt
+	out.UpdatedAt = row.UpdatedAt
+
+	return out
+}
+
+// retireAccount soft-deletes the user the way the repository does, without going
+// through User.Delete — these cases need the membership row to survive, which a
+// cascade would not leave behind, and they are not testing device revocation.
+func retireAccount(t *testing.T, db *store.DB, id uuid.UUID) {
+	t.Helper()
+
+	if err := db.Ent().User.DeleteOneID(id).Exec(t.Context()); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+}
+
+func grantSystemRole(t *testing.T, db *store.DB, userID uuid.UUID, key string) {
+	t.Helper()
+
+	if _, err := db.Ent().UserSystemRole.Create().
+		SetUserID(userID).
+		SetRoleKey(key).
+		Save(t.Context()); err != nil {
+		t.Fatalf("create system role: %v", err)
+	}
 }
 
 func TestOrganizationPermissionKeysUnionsEveryRole(t *testing.T) {
@@ -179,7 +236,7 @@ func TestSoftDeletesStopGranting(t *testing.T) {
 		role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 		newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
 
-		if err := db.Delete(org).Error; err != nil {
+		if err := db.Ent().Organization.DeleteOneID(org.ID).Exec(t.Context()); err != nil {
 			t.Fatalf("delete organization: %v", err)
 		}
 
@@ -197,9 +254,7 @@ func TestSoftDeletesStopGranting(t *testing.T) {
 		role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 		newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
 
-		if err := db.Delete(u).Error; err != nil {
-			t.Fatalf("delete user: %v", err)
-		}
+		retireAccount(t, db, u.ID)
 
 		if _, err := repo.OrganizationPermissionKeys(t.Context(), u.ID, org.ID); !errors.Is(err, authz.ErrNotMember) {
 			t.Errorf("OrganizationPermissionKeys() = %v, want ErrNotMember", err)
@@ -248,7 +303,7 @@ func TestDeletingARoleCascadesItsAssignments(t *testing.T) {
 
 	newMembership(t, db, org.ID, u.ID, models.MembershipActive, kept.ID, gone.ID)
 
-	if err := db.Delete(gone).Error; err != nil {
+	if err := db.Ent().Role.DeleteOneID(gone.ID).Exec(t.Context()); err != nil {
 		t.Fatalf("delete role: %v", err)
 	}
 
@@ -272,10 +327,7 @@ func TestSystemRolesAreScopedToTheUser(t *testing.T) {
 	admin := newUser(t, users)
 	other := newUser(t, users)
 
-	grant := &models.UserSystemRole{UserID: admin.ID, RoleKey: string(authz.RolePlatformAdmin)}
-	if err := db.Create(grant).Error; err != nil {
-		t.Fatalf("create system role: %v", err)
-	}
+	grantSystemRole(t, db, admin.ID, string(authz.RolePlatformAdmin))
 
 	keys, err := repo.SystemRoleKeys(t.Context(), admin.ID)
 	if err != nil {
@@ -307,9 +359,14 @@ func TestARepeatedRoleAssignmentIsRefusedByTheIndex(t *testing.T) {
 	role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
 
-	dup := &models.MembershipRole{MembershipID: membership.ID, RoleID: role.ID}
-	if err := db.Create(dup).Error; err == nil {
+	_, err := db.Ent().MembershipRole.Create().
+		SetMembershipID(membership.ID).
+		SetRoleID(role.ID).
+		Save(t.Context())
+	if err == nil {
 		t.Error("assigning the same role twice succeeded; idx_membership_role is not unique")
+	} else if !ent.IsConstraintError(err) {
+		t.Errorf("second assignment = %v, want a unique constraint violation", err)
 	}
 }
 
@@ -328,10 +385,7 @@ func TestADeletedAccountHoldsNoSystemRole(t *testing.T) {
 
 	admin := newUser(t, users)
 
-	grant := &models.UserSystemRole{UserID: admin.ID, RoleKey: string(authz.RolePlatformAdmin)}
-	if err := db.Create(grant).Error; err != nil {
-		t.Fatalf("create system role: %v", err)
-	}
+	grantSystemRole(t, db, admin.ID, string(authz.RolePlatformAdmin))
 
 	keys, err := repo.SystemRoleKeys(t.Context(), admin.ID)
 	if err != nil {

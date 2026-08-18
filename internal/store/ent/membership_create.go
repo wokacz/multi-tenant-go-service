@@ -147,7 +147,9 @@ func (_c *MembershipCreate) Mutation() *MembershipMutation {
 
 // Save creates the Membership in the database.
 func (_c *MembershipCreate) Save(ctx context.Context) (*Membership, error) {
-	_c.defaults()
+	if err := _c.defaults(); err != nil {
+		return nil, err
+	}
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -174,19 +176,29 @@ func (_c *MembershipCreate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_c *MembershipCreate) defaults() {
+func (_c *MembershipCreate) defaults() error {
 	if _, ok := _c.mutation.CreatedAt(); !ok {
+		if membership.DefaultCreatedAt == nil {
+			return fmt.Errorf("ent: uninitialized membership.DefaultCreatedAt (forgotten import ent/runtime?)")
+		}
 		v := membership.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		if membership.DefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized membership.DefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := membership.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
 	if _, ok := _c.mutation.ID(); !ok {
+		if membership.DefaultID == nil {
+			return fmt.Errorf("ent: uninitialized membership.DefaultID (forgotten import ent/runtime?)")
+		}
 		v := membership.DefaultID()
 		_c.mutation.SetID(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.

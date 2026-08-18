@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // MembershipStatus enumerates where a person stands in an organization.
@@ -52,26 +51,26 @@ type Membership struct {
 	// membership, and that had two costs: every query had to cope with a member
 	// who was not a person, and the unique index on (user_id, organization_id)
 	// could not do its job, because Postgres treats two NULLs as distinct.
-	UserID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_membership_user_org,priority:1"`
-	User   *User     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	UserID uuid.UUID
+	User   *User `json:"-"`
 
-	OrganizationID uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:idx_membership_user_org,priority:2"`
-	Organization   *Organization `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	OrganizationID uuid.UUID
+	Organization   *Organization `json:"-"`
 
-	Status MembershipStatus `gorm:"size:20;not null;check:status IN ('active','suspended')"`
+	Status MembershipStatus
 
 	// InvitedBy is a bare column rather than a relation: it points at a user who
 	// may later be deleted, and the record of who brought somebody in should
 	// outlive them. It is copied from the invitation when one is accepted.
-	InvitedBy *uuid.UUID `gorm:"type:uuid"`
+	InvitedBy *uuid.UUID
 	JoinedAt  *time.Time
 
-	Roles []MembershipRole `gorm:"constraint:OnDelete:CASCADE"`
+	Roles []MembershipRole `json:"-"`
 }
 
-// BeforeSave rejects an unknown status in Go, so callers get a useful error
+// Validate rejects an unknown status in Go, so callers get a useful error
 // rather than a constraint violation from Postgres.
-func (m *Membership) BeforeSave(_ *gorm.DB) error {
+func (m *Membership) Validate() error {
 	if !m.Status.Valid() {
 		return fmt.Errorf("models: invalid membership status %q", m.Status)
 	}

@@ -114,8 +114,8 @@ func (r *User) Delete(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 
-	if u.IsProtected {
-		return models.ErrProtected
+	if err := u.RefuseDelete(); err != nil {
+		return err
 	}
 
 	err = r.withTx(ctx, func(tx *ent.Tx) error {
@@ -397,10 +397,7 @@ func userModel(row *ent.User) *models.User {
 	out.CreatedAt = row.CreatedAt
 	out.UpdatedAt = row.UpdatedAt
 	out.IsProtected = row.IsProtected
-	if row.DeletedAt != nil {
-		out.DeletedAt.Time = *row.DeletedAt
-		out.DeletedAt.Valid = true
-	}
+	out.DeletedAt = row.DeletedAt
 
 	return out
 }

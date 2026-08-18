@@ -113,8 +113,8 @@ func (r *Orgs) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 		return err
 	}
 
-	if org.IsProtected {
-		return models.ErrProtected
+	if err := org.RefuseIfProtected(); err != nil {
+		return err
 	}
 
 	err = r.withTx(ctx, func(tx *ent.Tx) error {
@@ -713,8 +713,9 @@ func (r *Orgs) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard or
 			return err
 		}
 
-		if row.IsSystem {
-			return models.ErrRoleIsSystem
+		loaded := roleModel(row)
+		if err := loaded.RefuseDelete(); err != nil {
+			return err
 		}
 
 		holders, err := tx.MembershipRole.Query().
@@ -1015,8 +1016,8 @@ func (r *Orgs) AllOrganizations(
 		}
 
 		if deletedAt.Valid {
-			org.DeletedAt.Time = deletedAt.Time
-			org.DeletedAt.Valid = true
+			t := deletedAt.Time
+			org.DeletedAt = &t
 		}
 
 		out = append(out, orgs.OrganizationSummary{Organization: org, Owners: owners})

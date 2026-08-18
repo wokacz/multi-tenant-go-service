@@ -103,7 +103,9 @@ func (_u *UserSystemRoleUpdate) ClearUser() *UserSystemRoleUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *UserSystemRoleUpdate) Save(ctx context.Context) (int, error) {
-	_u.defaults()
+	if err := _u.defaults(); err != nil {
+		return 0, err
+	}
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -130,11 +132,15 @@ func (_u *UserSystemRoleUpdate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *UserSystemRoleUpdate) defaults() {
+func (_u *UserSystemRoleUpdate) defaults() error {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		if usersystemrole.UpdateDefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized usersystemrole.UpdateDefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := usersystemrole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -316,7 +322,9 @@ func (_u *UserSystemRoleUpdateOne) Select(field string, fields ...string) *UserS
 
 // Save executes the query and returns the updated UserSystemRole entity.
 func (_u *UserSystemRoleUpdateOne) Save(ctx context.Context) (*UserSystemRole, error) {
-	_u.defaults()
+	if err := _u.defaults(); err != nil {
+		return nil, err
+	}
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -343,11 +351,15 @@ func (_u *UserSystemRoleUpdateOne) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *UserSystemRoleUpdateOne) defaults() {
+func (_u *UserSystemRoleUpdateOne) defaults() error {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		if usersystemrole.UpdateDefaultUpdatedAt == nil {
+			return fmt.Errorf("ent: uninitialized usersystemrole.UpdateDefaultUpdatedAt (forgotten import ent/runtime?)")
+		}
 		v := usersystemrole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.

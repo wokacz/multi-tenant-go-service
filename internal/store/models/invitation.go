@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // Invitation is an offer of membership, identified by a secret.
@@ -24,14 +23,14 @@ import (
 type Invitation struct {
 	Model
 
-	OrganizationID uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:idx_invitation_org_email,priority:1"`
-	Organization   *Organization `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	OrganizationID uuid.UUID
+	Organization   *Organization `json:"-"`
 
 	// Email is where the offer was sent. It is unique per organization so the
 	// same address cannot have two outstanding offers to the same place, and it
 	// is still compared at acceptance — the token proves the mailbox, the address
 	// says which mailbox was meant.
-	Email string `gorm:"size:255;not null;uniqueIndex:idx_invitation_org_email,priority:2"`
+	Email string
 
 	// TokenHash is the only copy of the token this side keeps. Plain SHA-256
 	// rather than an HMAC with a pepper, and that is a deliberate difference from
@@ -39,27 +38,27 @@ type Invitation struct {
 	// an offline guess expensive. This is 32 random bytes, so there is nothing to
 	// guess and a keyed hash would only add a secret to lose. Device fingerprints
 	// are hashed the same way for the same reason.
-	TokenHash string `gorm:"size:64;not null;uniqueIndex"`
+	TokenHash string
 
 	// InvitedBy is a bare column rather than a relation: it points at a user who
 	// may later be deleted, and the record of who invited whom should outlive
 	// them.
-	InvitedBy *uuid.UUID `gorm:"type:uuid"`
+	InvitedBy *uuid.UUID
 
 	// ExpiresAt is what stops an offer from being valid for ever. An invitation
 	// that never expires is a credential to an organization sitting in somebody's
 	// inbox indefinitely.
-	ExpiresAt time.Time `gorm:"not null;index"`
+	ExpiresAt time.Time
 
 	// AcceptedAt marks it spent. The row is kept rather than deleted so the
 	// history of who was offered what survives the membership it produced.
 	AcceptedAt *time.Time
 
-	Roles []InvitationRole `gorm:"constraint:OnDelete:CASCADE"`
+	Roles []InvitationRole `json:"-"`
 }
 
-// BeforeSave keeps the two things that make a row meaningful from being empty.
-func (i *Invitation) BeforeSave(_ *gorm.DB) error {
+// Validate keeps the two things that make a row meaningful from being empty.
+func (i *Invitation) Validate() error {
 	if strings.TrimSpace(i.Email) == "" {
 		return fmt.Errorf("models: invitation email is empty")
 	}
@@ -83,9 +82,9 @@ func (i Invitation) Pending(now time.Time) bool {
 type InvitationRole struct {
 	Model
 
-	InvitationID uuid.UUID   `gorm:"type:uuid;not null;uniqueIndex:idx_invitation_role,priority:1"`
-	Invitation   *Invitation `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	InvitationID uuid.UUID
+	Invitation   *Invitation `json:"-"`
 
-	RoleID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_invitation_role,priority:2"`
-	Role   *Role     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+	RoleID uuid.UUID
+	Role   *Role `json:"-"`
 }

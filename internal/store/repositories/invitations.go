@@ -459,10 +459,7 @@ func organizationModel(row *ent.Organization) models.Organization {
 	out.CreatedAt = row.CreatedAt
 	out.UpdatedAt = row.UpdatedAt
 	out.IsProtected = row.IsProtected
-	if row.DeletedAt != nil {
-		out.DeletedAt.Time = *row.DeletedAt
-		out.DeletedAt.Valid = true
-	}
+	out.DeletedAt = row.DeletedAt
 
 	return out
 }

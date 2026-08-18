@@ -34,9 +34,9 @@ func TestOrganizationBeforeSaveRejectsAMalformedSlug(t *testing.T) {
 		t.Run(slug, func(t *testing.T) {
 			org := &models.Organization{Slug: slug, Name: "Acme"}
 
-			err := org.BeforeSave(nil)
+			err := org.Validate()
 			if got := err == nil; got != want {
-				t.Errorf("BeforeSave() with slug %q = %v, want accepted = %v", slug, err, want)
+				t.Errorf("Validate() with slug %q = %v, want accepted = %v", slug, err, want)
 			}
 		})
 	}
@@ -45,8 +45,8 @@ func TestOrganizationBeforeSaveRejectsAMalformedSlug(t *testing.T) {
 func TestOrganizationBeforeSaveRequiresAName(t *testing.T) {
 	org := &models.Organization{Slug: "acme"}
 
-	if err := org.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for an empty name")
+	if err := org.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for an empty name")
 	}
 }
 
@@ -57,8 +57,8 @@ func TestDefaultOrganizationCanBeProtected(t *testing.T) {
 	org := &models.Organization{Slug: models.DefaultOrganizationSlug, Name: "Default"}
 	org.IsProtected = true
 
-	if err := org.BeforeDelete(nil); !errors.Is(err, models.ErrProtected) {
-		t.Errorf("BeforeDelete() on the default organization = %v, want ErrProtected", err)
+	if err := org.RefuseIfProtected(); !errors.Is(err, models.ErrProtected) {
+		t.Errorf("RefuseIfProtected() on the default organization = %v, want ErrProtected", err)
 	}
 }
 
@@ -87,28 +87,28 @@ func TestMembershipStatusOnlyGrantsWhenActive(t *testing.T) {
 	}
 }
 
-func TestMembershipBeforeSaveRejectsAnUnknownStatus(t *testing.T) {
+func TestMembershipValidateRejectsAnUnknownStatus(t *testing.T) {
 	m := &models.Membership{Status: "member"}
-	if err := m.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for an unknown status")
+	if err := m.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for an unknown status")
 	}
 
 	m.Status = models.MembershipActive
 	m.UserID = uuid.Must(uuid.NewV7())
-	if err := m.BeforeSave(nil); err != nil {
-		t.Errorf("BeforeSave() = %v, want nil", err)
+	if err := m.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
 	}
 }
 
-// TestMembershipBeforeSaveRequiresAnAccount is the invariant that replaced two
+// TestMembershipValidateRequiresAnAccount is the invariant that replaced two
 // earlier ones. A membership used to be allowed without an account — that was how
 // an invitation was stored — so the rule had to be "an *active* one needs an
 // account", and an address column stood in for the missing person. Now every
 // membership is somebody.
-func TestMembershipBeforeSaveRequiresAnAccount(t *testing.T) {
+func TestMembershipValidateRequiresAnAccount(t *testing.T) {
 	m := &models.Membership{Status: models.MembershipActive}
-	if err := m.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for a membership with no account")
+	if err := m.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for a membership with no account")
 	}
 }
 
@@ -160,9 +160,9 @@ func TestRoleBeforeSaveRejectsAMalformedKey(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			role := &models.Role{Key: key, Name: "Role"}
 
-			err := role.BeforeSave(nil)
+			err := role.Validate()
 			if got := err == nil; got != want {
-				t.Errorf("BeforeSave() with key %q = %v, want accepted = %v", key, err, want)
+				t.Errorf("Validate() with key %q = %v, want accepted = %v", key, err, want)
 			}
 		})
 	}
@@ -175,48 +175,48 @@ func TestSystemRolesRefuseDeletion(t *testing.T) {
 	role := &models.Role{Key: "admin", Name: "Administrator", IsSystem: true}
 	role.ID = uuid.Must(uuid.NewV7())
 
-	if err := role.BeforeDelete(nil); !errors.Is(err, models.ErrRoleIsSystem) {
-		t.Errorf("BeforeDelete() on a system role = %v, want ErrRoleIsSystem", err)
+	if err := role.RefuseDelete(); !errors.Is(err, models.ErrRoleIsSystem) {
+		t.Errorf("RefuseDelete() on a system role = %v, want ErrRoleIsSystem", err)
 	}
 
 	role.IsSystem = false
-	if err := role.BeforeDelete(nil); err != nil {
-		t.Errorf("BeforeDelete() on a custom role = %v, want nil", err)
+	if err := role.RefuseDelete(); err != nil {
+		t.Errorf("RefuseDelete() on a custom role = %v, want nil", err)
 	}
 }
 
-// TestRoleBatchDeleteIsRefused closes the way around the check above: a batch
-// delete hands the hook a zero-valued receiver, so IsSystem reads false and
-// every system role in the table would go.
+// TestRoleBatchDeleteIsRefused closes the way around the check above: a delete
+// without a primary key would see IsSystem as false and every system role would
+// go.
 func TestRoleBatchDeleteIsRefused(t *testing.T) {
 	role := &models.Role{Key: "admin", Name: "Administrator", IsSystem: true}
 
-	if err := role.BeforeDelete(nil); !errors.Is(err, models.ErrRoleBatchDeleteUnsupported) {
-		t.Errorf("BeforeDelete() without a primary key = %v, want ErrRoleBatchDeleteUnsupported", err)
+	if err := role.RefuseDelete(); !errors.Is(err, models.ErrRoleBatchDeleteUnsupported) {
+		t.Errorf("RefuseDelete() without a primary key = %v, want ErrRoleBatchDeleteUnsupported", err)
 	}
 }
 
-func TestUserSystemRoleBeforeSaveValidatesTheKey(t *testing.T) {
+func TestUserSystemRoleValidateValidatesTheKey(t *testing.T) {
 	r := &models.UserSystemRole{RoleKey: "Platform Admin"}
-	if err := r.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for a malformed key")
+	if err := r.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for a malformed key")
 	}
 
 	r.RoleKey = "platform_admin"
-	if err := r.BeforeSave(nil); err != nil {
-		t.Errorf("BeforeSave() = %v, want nil", err)
+	if err := r.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
 	}
 }
 
-func TestAuthzEventBeforeSaveRejectsUnknownActions(t *testing.T) {
+func TestAuthzEventValidateRejectsUnknownActions(t *testing.T) {
 	e := &models.AuthzEvent{Action: "role.exploded", ActorID: uuid.Must(uuid.NewV7())}
-	if err := e.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for an unknown action")
+	if err := e.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for an unknown action")
 	}
 
 	e.Action = models.ActionRolePermissionsChanged
-	if err := e.BeforeSave(nil); err != nil {
-		t.Errorf("BeforeSave() = %v, want nil", err)
+	if err := e.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestAuthzEventBeforeSaveRejectsUnknownActions(t *testing.T) {
 func TestAuthzEventRequiresAnActor(t *testing.T) {
 	e := &models.AuthzEvent{Action: models.ActionRoleCreated}
 
-	if err := e.BeforeSave(nil); err == nil {
-		t.Error("BeforeSave() = nil, want an error for an event with no actor")
+	if err := e.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for an event with no actor")
 	}
 }

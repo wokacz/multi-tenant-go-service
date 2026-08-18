@@ -432,7 +432,8 @@ func (c *AuthzEventClient) GetX(ctx context.Context, id uuid.UUID) *AuthzEvent {
 
 // Hooks returns the client hooks.
 func (c *AuthzEventClient) Hooks() []Hook {
-	return c.hooks.AuthzEvent
+	hooks := c.hooks.AuthzEvent
+	return append(hooks[:len(hooks):len(hooks)], authzevent.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
@@ -911,7 +912,8 @@ func (c *InvitationClient) QueryRoles(_m *Invitation) *InvitationRoleQuery {
 
 // Hooks returns the client hooks.
 func (c *InvitationClient) Hooks() []Hook {
-	return c.hooks.Invitation
+	hooks := c.hooks.Invitation
+	return append(hooks[:len(hooks):len(hooks)], invitation.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
@@ -1225,7 +1227,8 @@ func (c *LoginEventClient) QueryUser(_m *LoginEvent) *UserQuery {
 
 // Hooks returns the client hooks.
 func (c *LoginEventClient) Hooks() []Hook {
-	return c.hooks.LoginEvent
+	hooks := c.hooks.LoginEvent
+	return append(hooks[:len(hooks):len(hooks)], loginevent.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
@@ -1406,7 +1409,8 @@ func (c *MembershipClient) QueryRoles(_m *Membership) *MembershipRoleQuery {
 
 // Hooks returns the client hooks.
 func (c *MembershipClient) Hooks() []Hook {
-	return c.hooks.Membership
+	hooks := c.hooks.Membership
+	return append(hooks[:len(hooks):len(hooks)], membership.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
@@ -2100,7 +2104,8 @@ func (c *RoleClient) QueryInvitationRoles(_m *Role) *InvitationRoleQuery {
 
 // Hooks returns the client hooks.
 func (c *RoleClient) Hooks() []Hook {
-	return c.hooks.Role
+	hooks := c.hooks.Role
+	return append(hooks[:len(hooks):len(hooks)], role.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
@@ -2810,7 +2815,8 @@ func (c *UserSystemRoleClient) QueryUser(_m *UserSystemRole) *UserQuery {
 
 // Hooks returns the client hooks.
 func (c *UserSystemRoleClient) Hooks() []Hook {
-	return c.hooks.UserSystemRole
+	hooks := c.hooks.UserSystemRole
+	return append(hooks[:len(hooks):len(hooks)], usersystemrole.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.

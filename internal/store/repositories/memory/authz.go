@@ -751,9 +751,9 @@ func (m *Authz) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard o
 		return err
 	}
 
-	// BeforeDelete carries the protection rule, so a system role is refused
+	// RefuseDelete carries the protection rule, so a system role is refused
 	// here exactly as it is in Postgres.
-	if err := role.BeforeDelete(nil); err != nil {
+	if err := role.RefuseDelete(); err != nil {
 		return err
 	}
 
