@@ -479,7 +479,11 @@ export class OrganizationsService {
     observe?: 'events',
     options?: RequestOptions<'json'>,
   ): Observable<HttpEvent<any>>;
-  /** Takes back an offer. Distinct from the invitee declining it: the two are authorized by different facts — the invitee holds the token, the organization holds members.remove — and the audit entry says which of them ended it. */
+  /**
+   * Takes back an offer. Requires members.invite — the same permission as sending one, because this is the third step of that lifecycle rather than a way of taking somebody's access away: nobody has any yet.
+   *
+   * Distinct from the invitee declining it: the two are authorized by different facts — the invitee holds the token, the organization holds the permission — and the audit entry says which of them ended it.
+   */
   withdrawInvitation(
     orgID: string,
     invitationID: string,

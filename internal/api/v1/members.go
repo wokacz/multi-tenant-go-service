@@ -250,10 +250,13 @@ func registerMembers(api huma.API, service *orgs.Service, mailer mail.Sender, lo
 		Method:      http.MethodDelete,
 		Path:        Prefix + "/orgs/{orgID}/invitations/{invitationID}",
 		Summary:     "Withdraw an invitation",
-		Description: "Takes back an offer. Distinct from the invitee declining it: the " +
-			"two are authorized by different facts — the invitee holds the token, " +
-			"the organization holds members.remove — and the audit entry says which " +
-			"of them ended it.",
+		Description: "Takes back an offer. Requires members.invite — the same " +
+			"permission as sending one, because this is the third step of that " +
+			"lifecycle rather than a way of taking somebody's access away: nobody " +
+			"has any yet.\n\n" +
+			"Distinct from the invitee declining it: the two are authorized by " +
+			"different facts — the invitee holds the token, the organization holds " +
+			"the permission — and the audit entry says which of them ended it.",
 		Tags:          []string{"organizations"},
 		Security:      bearer(),
 		DefaultStatus: http.StatusNoContent,

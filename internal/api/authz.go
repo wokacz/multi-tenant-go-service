@@ -86,12 +86,18 @@ var operationAccess = map[string]accessRule{
 	"update-organization": {authz.PermOrganizationUpdate, authz.ScopeOrganization},
 	"delete-organization": {authz.PermOrganizationDelete, authz.ScopeOrganization},
 
-	"list-members":         {authz.PermMembersRead, authz.ScopeOrganization},
-	"add-member":           {authz.PermMembersInvite, authz.ScopeOrganization},
-	"invite-members":       {authz.PermMembersInvite, authz.ScopeOrganization},
-	"list-invitations":     {authz.PermMembersRead, authz.ScopeOrganization},
-	"reissue-invitation":   {authz.PermMembersInvite, authz.ScopeOrganization},
-	"withdraw-invitation":  {authz.PermMembersRemove, authz.ScopeOrganization},
+	"list-members":       {authz.PermMembersRead, authz.ScopeOrganization},
+	"add-member":         {authz.PermMembersInvite, authz.ScopeOrganization},
+	"invite-members":     {authz.PermMembersInvite, authz.ScopeOrganization},
+	"list-invitations":   {authz.PermMembersRead, authz.ScopeOrganization},
+	"reissue-invitation": {authz.PermMembersInvite, authz.ScopeOrganization},
+	// Withdrawing sits with inviting, not with removing. It is the third step of
+	// one lifecycle — send, resend, cancel — and it was the only one behind
+	// members.remove, which meant fixing a typo in an address needed a heavier
+	// permission than making it. members.remove keeps one meaning: take somebody's
+	// access away. Nobody loses access when an offer is cancelled; there is no
+	// access yet.
+	"withdraw-invitation":  {authz.PermMembersInvite, authz.ScopeOrganization},
 	"update-member-status": {authz.PermMembersSuspend, authz.ScopeOrganization},
 	"remove-member":        {authz.PermMembersRemove, authz.ScopeOrganization},
 	"set-member-roles":     {authz.PermMembersRolesAssign, authz.ScopeOrganization},

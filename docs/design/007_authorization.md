@@ -355,7 +355,7 @@ czyli dokładnie to, co token miał zlikwidować. Token istnieje w tym procesie 
 | zaproszenie zbiorcze | `POST /v1/orgs/{orgID}/invitations`                | `members.invite` |
 | lista     | `GET /v1/orgs/{orgID}/invitations`                            | `members.read`   |
 | ponowne wysłanie | `POST /v1/orgs/{orgID}/invitations/{id}/reissue`        | `members.invite` |
-| wycofanie | `DELETE /v1/orgs/{orgID}/invitations/{id}`                    | `members.remove` |
+| wycofanie | `DELETE /v1/orgs/{orgID}/invitations/{id}`                    | `members.invite` |
 
 Te trzy istnieją, bo zaproszenie **wypadło z listy członków**. Dopóki było wierszem `memberships`, administrator widział
 je i wycofywał przez `remove-member`; usunięcie go stamtąd bez dania niczego w zamian zostawiłoby ofertę, której nikt nie
@@ -399,12 +399,20 @@ więc nie umie policzyć adresów bez parsowania żądania dwa razy. Uczciwym ro
 organizacja**, a nie kubełek per IP — tym bardziej że na trasie uwierzytelnionej IP jest słabszym przybliżeniem sprawcy
 niż na anonimowej.
 
+**Cały cykl życia oferty stoi za `members.invite`** — wysłanie, ponowne wysłanie i wycofanie. Wycofanie było jedyne za
+`members.remove`, co dawało dwie niekonsekwencje naraz: trzeci krok jednego cyklu za innym uprawnieniem niż dwa
+pierwsze, i naprawienie własnej literówki w adresie drożej niż jej popełnienie. `members.remove` znaczy teraz jedno:
+**odbierz komuś dostęp**. Wycofanie oferty nikomu dostępu nie odbiera, bo nikt go jeszcze nie ma.
+
+Żadna rola shipowana tego nie rozróżniała (`owner` i `admin` mają oba uprawnienia), więc zmiana dotyczy wyłącznie ról
+własnych: rola z samym `members.invite` zaczyna móc wycofywać, rola z samym `members.remove` przestaje.
+
 **Ponowne wysłanie wymienia token** i przesuwa wygaśnięcie. Nie „wysyła tego samego jeszcze raz" — to utrzymywałoby
 wyciekniętą wiadomość ważną kolejny tydzień — i nie tworzy drugiego zaproszenia, bo zderzyłoby się z unikatem
 `(organization_id, email)`. Stary link przestaje działać, i to jest cel.
 
 **Wycofanie i odrzucenie to dwie operacje**, choć robią wierszowi to samo. Różnią się tym, **co je autoryzuje**:
-zaproszony ma token, organizacja ma `members.remove`. Zlanie ich w jedną znaczyłoby, że jedna z tych autoryzacji
+zaproszony ma token, organizacja ma `members.invite`. Zlanie ich w jedną znaczyłoby, że jedna z tych autoryzacji
 zastępuje drugą. Dziennik też je rozróżnia (`member.invitation_withdrawn` vs `member.invitation_declined`), bo „kto to
 zakończył" jest dokładnie tym pytaniem, na które wpis odpowiada.
 

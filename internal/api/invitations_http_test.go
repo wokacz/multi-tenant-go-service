@@ -395,3 +395,40 @@ func signIn(t *testing.T, s *Server, email, password string) string {
 
 	return session.Token
 }
+
+// TestWithdrawingAnInvitationNeedsTheInvitePermission pins where the third step of
+// the invitation lifecycle sits.
+//
+// It used to need members.remove — the only step of the three that did — which made
+// fixing a typo in an address cost more than making it, and gave one lifecycle two
+// different permissions. members.remove now means one thing: take somebody's access
+// away. Cancelling an offer takes nothing away, because nobody has anything yet.
+//
+// Both directions are asserted. A test that only checked the new permission would
+// still pass if the rule kept accepting the old one as well.
+func TestWithdrawingAnInvitationNeedsTheInvitePermission(t *testing.T) {
+	cases := map[string]struct {
+		permission authz.Permission
+		want       int
+	}{
+		"members.invite may withdraw": {authz.PermMembersInvite, http.StatusNoContent},
+		"members.remove may not":      {authz.PermMembersRemove, http.StatusForbidden},
+		"members.read may not":        {authz.PermMembersRead, http.StatusForbidden},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newAuthzFixture(t)
+
+			role := f.repo.SeedRole(f.orgID, "probe_role", string(tc.permission))
+			f.repo.SeedMemberRoles(f.membership, role)
+
+			invitation := f.repo.SeedInvitation(f.orgID, "bo@example.com", "a-withdrawn-token",
+				time.Now().UTC().Add(orgs.InvitationTTL))
+
+			f.call(t, http.MethodDelete,
+				f.orgPath("/invitations/"+invitation.String()), "").
+				expect(t, tc.want)
+		})
+	}
+}
