@@ -11,6 +11,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
@@ -35,15 +36,17 @@ type MemberResponse struct {
 type RoleSummaryResponse struct {
 	ID       uuid.UUID `json:"id" format:"uuid"`
 	Key      string    `json:"key" doc:"Stable identifier, and the translation key"`
-	Name     string    `json:"name" doc:"Display name, already localised"`
+	Name     string    `json:"name" doc:"Display name. A shipped role is named in the caller language; a role the organization created is shown as it was typed."`
 	IsSystem bool      `json:"is_system" doc:"Whether the role ships with the product and cannot be edited"`
 }
 
-func newMemberResponse(m *orgs.Member) MemberResponse {
+func newMemberResponse(locale i18n.Locale, m *orgs.Member) MemberResponse {
 	roles := make([]RoleSummaryResponse, 0, len(m.Roles))
+
 	for _, role := range m.Roles {
+		name, _ := roleLabel(locale, role.Key, role.Name, "", role.IsSystem)
 		roles = append(roles, RoleSummaryResponse{
-			ID: role.ID, Key: role.Key, Name: role.Name, IsSystem: role.IsSystem,
+			ID: role.ID, Key: role.Key, Name: name, IsSystem: role.IsSystem,
 		})
 	}
 
@@ -273,11 +276,13 @@ func (h *memberHandlers) list(ctx context.Context, in *ListMembersInput) (*ListM
 		return nil, problem.Error(ctx, err)
 	}
 
+	locale := i18n.LocaleFrom(ctx)
+
 	out := &ListMembersOutput{}
 	out.Body.Members = make([]MemberResponse, 0, len(members))
 
 	for i := range members {
-		out.Body.Members = append(out.Body.Members, newMemberResponse(&members[i]))
+		out.Body.Members = append(out.Body.Members, newMemberResponse(locale, &members[i]))
 	}
 
 	return out, nil
@@ -393,7 +398,7 @@ func (h *memberHandlers) setStatus(ctx context.Context, in *UpdateMemberStatusIn
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &MemberOutput{Body: newMemberResponse(member)}, nil
+	return &MemberOutput{Body: newMemberResponse(i18n.LocaleFrom(ctx), member)}, nil
 }
 
 func (h *memberHandlers) remove(ctx context.Context, in *MemberPathInput) (*struct{}, error) {
@@ -420,7 +425,7 @@ func (h *memberHandlers) setRoles(ctx context.Context, in *SetMemberRolesInput) 
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &MemberOutput{Body: newMemberResponse(member)}, nil
+	return &MemberOutput{Body: newMemberResponse(i18n.LocaleFrom(ctx), member)}, nil
 }
 
 type InvitationPathInput struct {

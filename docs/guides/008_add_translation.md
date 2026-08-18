@@ -63,7 +63,7 @@ Nic więcej nie trzeba: lista języków wynika z plików w katalogu, a matcher
 | komunikat błędu (`detail`)         | katalog, klucz `error.<code>`                                                              |
 | nazwa i opis uprawnienia           | katalog, `permission.<klucz>.name` / `.description`                                        |
 | nazwa i opis roli systemowej       | katalog, `role.<klucz>.name` / `.description`                                              |
-| nazwa roli własnej                 | kolumna `roles.name` — **jednojęzyczna, tabela `role_translations` jeszcze niepodłączona** |
+| nazwa roli własnej                 | kolumna `roles.name` — **nietłumaczona**, w języku, w którym ją wpisano                     |
 | `code`, `required_permission`      | **nigdy** — to identyfikatory maszynowe                                                    |
 | `Summary` / `Description` operacji | angielski, w kodzie; trafiają do OpenAPI                                                   |
 

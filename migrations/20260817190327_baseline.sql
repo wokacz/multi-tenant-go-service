@@ -241,20 +241,6 @@ CREATE TABLE "role_permissions" (
 );
 -- Create index "idx_role_permission" to table: "role_permissions"
 CREATE UNIQUE INDEX "idx_role_permission" ON "role_permissions" ("role_id", "permission_key");
--- Create "role_translations" table
-CREATE TABLE "role_translations" (
-  "id" uuid NOT NULL,
-  "created_at" timestamptz NULL,
-  "updated_at" timestamptz NULL,
-  "role_id" uuid NOT NULL,
-  "locale" character varying(10) NOT NULL,
-  "name" character varying(100) NOT NULL,
-  "description" character varying(255) NULL,
-  PRIMARY KEY ("id"),
-  CONSTRAINT "fk_roles_translations" FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
-);
--- Create index "idx_role_translation" to table: "role_translations"
-CREATE UNIQUE INDEX "idx_role_translation" ON "role_translations" ("role_id", "locale");
 -- Create "two_factor_challenges" table
 CREATE TABLE "two_factor_challenges" (
   "id" uuid NOT NULL,

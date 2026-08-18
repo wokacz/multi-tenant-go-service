@@ -173,7 +173,6 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 | `roles`, `role_permissions`                | role organizacji i to, co nadają                                                              |
 | `membership_roles`                         | przypisania ról                                                                               |
 | `user_system_roles`                        | role platformowe, przypisywane kluczem                                                        |
-| `role_translations`                        | tłumaczenia nazw ról własnych — **tabela jeszcze nieużywana**                                 |
 | `authz_events`                             | dziennik zmian uprawnień                                                                      |
 
 Każdy nowy model musi trafić do listy w `loader/main.go`. Pominięty jest po cichu nieobecny w generowanym schemacie, a

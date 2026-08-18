@@ -513,8 +513,9 @@ metoda do liczenia z puli byłaby drugą odpowiedzią na to samo pytanie, a dwie
 - **Weryfikacja adresu e-mail.** Nie ma ani kolumny, ani endpointu: adres na koncie jest niepotwierdzony przez cały czas
   jego życia. Dlatego adres **nie może być czynnikiem, który cokolwiek nadaje** — na tym opiera się decyzja, że
   [rejestracja nie jest przyjęciem](#rejestracja-nie-jest-przyjęciem).
-- **Tłumaczenia ról własnych.** Tabela `role_translations` istnieje, ale nic jej nie czyta ani nie zapisuje. Nazwy ról
-  tworzonych przez użytkownika pokazują się z kolumny `roles.name`, w jednym języku.
+- **Tłumaczenia ról własnych.** Świadomie nie ma. Nazwa roli utworzonej przez klienta jest pokazywana tak, jak ją
+  wpisał — jest już w języku, w którym pracuje. Tabela `role_translations` na drugą odpowiedź istniała bez czytelnika i
+  pisarza; została usunięta. Nazwy ról **shipowanych** są tłumaczone, z katalogu, po `Key`.
 - **Cache uprawnień.** Rozwiązanie uprawnień to jedno zapytanie, migawka też. Cache dokłada ryzyko nieświeżej decyzji za
   oszczędność, której nikt jeszcze nie zmierzył.
 - **TOCTOU na grancie.** Decyzja zapada raz, w middleware; handler pracuje na `Grant` z kontekstu. Zmiana roli w trakcie

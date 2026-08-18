@@ -42,7 +42,6 @@ func run() error {
 		&models.RolePermission{},
 		&models.MembershipRole{},
 		&models.UserSystemRole{},
-		&models.RoleTranslation{},
 		&models.AuthzEvent{},
 	)
 	if err != nil {

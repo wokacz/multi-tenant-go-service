@@ -5,8 +5,10 @@
 // the code itself produces — error messages, permission names, the names of the
 // roles that ship with the product — because those change with the code, go
 // through review with it, and must not be missing at runtime. Text created by
-// users, such as the name of a role somebody defined in the settings screen,
-// belongs in the database instead; see models.RoleTranslation.
+// users — the name of a role somebody defined in the settings screen — is not
+// translated at all: it is stored once, in the language they typed it in, and
+// shown back that way. There was a role_translations table for the other answer,
+// and nothing ever wrote to it or read from it.
 package i18n
 
 import (

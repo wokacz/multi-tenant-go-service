@@ -125,9 +125,6 @@ func TestAuthorizationUniqueIndexes(t *testing.T) {
 		"a system role is granted once per user": {
 			&models.UserSystemRole{}, "idx_user_system_role", []string{"user_id", "role_key"},
 		},
-		"a role has one translation per locale": {
-			&models.RoleTranslation{}, "idx_role_translation", []string{"role_id", "locale"},
-		},
 	}
 
 	for name, tc := range tests {

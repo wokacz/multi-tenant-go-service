@@ -208,27 +208,6 @@ func TestUserSystemRoleBeforeSaveValidatesTheKey(t *testing.T) {
 	}
 }
 
-func TestRoleTranslationBeforeSaveRequiresLocaleAndName(t *testing.T) {
-	tests := map[string]models.RoleTranslation{
-		"no locale":       {Name: "Ksiegowosc"},
-		"no name":         {Locale: "pl"},
-		"locale too long": {Locale: "pl-PL-x-toolong", Name: "Ksiegowosc"},
-	}
-
-	for name, tr := range tests {
-		t.Run(name, func(t *testing.T) {
-			if err := tr.BeforeSave(nil); err == nil {
-				t.Error("BeforeSave() = nil, want an error")
-			}
-		})
-	}
-
-	ok := models.RoleTranslation{Locale: "pl", Name: "Ksiegowosc"}
-	if err := ok.BeforeSave(nil); err != nil {
-		t.Errorf("BeforeSave() on a valid translation = %v, want nil", err)
-	}
-}
-
 func TestAuthzEventBeforeSaveRejectsUnknownActions(t *testing.T) {
 	e := &models.AuthzEvent{Action: "role.exploded", ActorID: uuid.Must(uuid.NewV7())}
 	if err := e.BeforeSave(nil); err == nil {

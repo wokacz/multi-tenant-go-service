@@ -442,7 +442,7 @@ export interface RoleSummaryResponse {
   is_system: boolean;
   /** Stable identifier, and the translation key */
   key: string;
-  /** Display name, already localised */
+  /** Display name. A shipped role is named in the caller language; a role the organization created is shown as it was typed. */
   name: string;
 }
 

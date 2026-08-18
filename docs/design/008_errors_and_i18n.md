@@ -96,8 +96,19 @@ Model hybrydowy:
 |-------------------------|---------------------------------------------------------------|-------------------------------------------------|
 | komunikaty błędów       | katalog w kodzie (`internal/i18n/locales/*.json`, `go:embed`) | zmieniają się razem z kodem i przechodzą review |
 | nazwy i opisy uprawnień | katalog w kodzie                                              | uprawnienie *jest* kodem                        |
-| nazwy ról systemowych   | katalog w kodzie                                              | powstają z katalogu                             |
-| nazwy ról własnych      | tabela `role_translations`                                    | powstają w runtime — **jeszcze niepodłączone**  |
+| nazwy ról systemowych   | katalog w kodzie, `role.<klucz>.name`                         | powstają z katalogu                             |
+| nazwy ról własnych      | kolumna `roles.name`, **nietłumaczone**                       | nazwa wpisana przez klienta jest już w jego języku |
+
+Nazwy ról shipowanych są renderowane z katalogu **przy odczycie**, po `Key`. Kolumna `roles.name` niesie dla nich
+angielski napis z definicji w Go i jest tylko awaryjnym zapasem dla klucza, którego katalog nie zna — pokazanie
+`role.auditor.name` użytkownikowi jest gorsze niż pokazanie nieaktualnej etykiety.
+
+Te komunikaty były kompletne i przetestowane w obu językach na długo przed tym, jak cokolwiek zaczęło je czytać: każda
+odpowiedź niosła kolumnę. Utrzymywanie katalogu w porządku to nie to samo co używanie go.
+
+Była też tabela `role_translations` na drugą odpowiedź — z modelem, hookami i wpisem w loaderze, bez ani jednego
+czytelnika i pisarza. Usunięta: nazwa, którą klient wpisał w ustawieniach, jest już w języku, w którym pracuje, a druga
+jej kopia w bazie kosztowała przy każdej migracji.
 
 Języki: `en` (fallback) i `pl`.
 

@@ -41,9 +41,10 @@ type Role struct {
 
 	Key string `gorm:"size:64;not null;uniqueIndex:idx_role_org_key,priority:2"`
 
-	// Name and Description are the fallback labels, used when no translation
-	// matches the caller's language. They are never the primary source: see
-	// RoleTranslation.
+	// Name and Description are what a role created here is called. For a shipped
+	// role they are the English strings from the Go definition and act as a
+	// fallback: the API renders those from the message catalog instead, keyed by
+	// Key, so they read in the caller's language.
 	Name        string `gorm:"size:100;not null"`
 	Description string `gorm:"size:255"`
 
@@ -51,8 +52,7 @@ type Role struct {
 	// organization was created.
 	IsSystem bool `gorm:"not null;default:false"`
 
-	Permissions  []RolePermission  `gorm:"constraint:OnDelete:CASCADE"`
-	Translations []RoleTranslation `gorm:"constraint:OnDelete:CASCADE"`
+	Permissions []RolePermission `gorm:"constraint:OnDelete:CASCADE"`
 }
 
 func (r *Role) BeforeSave(_ *gorm.DB) error {
@@ -157,38 +157,6 @@ type UserSystemRole struct {
 func (r *UserSystemRole) BeforeSave(_ *gorm.DB) error {
 	if !validRoleKey(r.RoleKey) {
 		return fmt.Errorf("models: invalid system role key %q", r.RoleKey)
-	}
-
-	return nil
-}
-
-// RoleTranslation holds the localised label for a role.
-//
-// Only roles created at runtime need it: the shipped ones are translated in the
-// message catalog, which travels with the code and goes through review. This
-// table is what makes a customer's own "Ksiegowosc" role displayable in English
-// without a deploy.
-type RoleTranslation struct {
-	Model
-
-	RoleID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_role_translation,priority:1"`
-	Role   *Role     `json:"-" gorm:"constraint:OnDelete:CASCADE"`
-
-	// Locale is a BCP 47 tag, stored as given so that a pl-PL override and a pl
-	// override can coexist and the more specific one can win.
-	Locale string `gorm:"size:10;not null;uniqueIndex:idx_role_translation,priority:2"`
-
-	Name        string `gorm:"size:100;not null"`
-	Description string `gorm:"size:255"`
-}
-
-func (t *RoleTranslation) BeforeSave(_ *gorm.DB) error {
-	if t.Locale == "" || len(t.Locale) > 10 {
-		return fmt.Errorf("models: invalid translation locale %q", t.Locale)
-	}
-
-	if t.Name == "" || utf8.RuneCountInString(t.Name) > 100 {
-		return fmt.Errorf("models: invalid translated role name %q", t.Name)
 	}
 
 	return nil

@@ -1128,7 +1128,7 @@ components:
           description: Stable identifier, and the translation key
           type: string
         name:
-          description: Display name, already localised
+          description: Display name. A shipped role is named in the caller language; a role the organization created is shown as it was typed.
           type: string
       required:
         - id

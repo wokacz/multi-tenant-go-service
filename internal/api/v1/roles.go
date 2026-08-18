@@ -10,6 +10,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
 )
 
 // RoleResponse is a role with everything it grants.
@@ -28,17 +29,19 @@ type RoleResponse struct {
 	Members     int       `json:"members" doc:"How many people hold it"`
 }
 
-func newRoleResponse(r *orgs.Role) RoleResponse {
+func newRoleResponse(locale i18n.Locale, r *orgs.Role) RoleResponse {
 	permissions := make([]string, 0, len(r.Permissions))
 	for _, perm := range r.Permissions {
 		permissions = append(permissions, string(perm))
 	}
 
+	name, description := roleLabel(locale, r.Key, r.Name, r.Description, r.IsSystem)
+
 	return RoleResponse{
 		ID:          r.ID,
 		Key:         r.Key,
-		Name:        r.Name,
-		Description: r.Description,
+		Name:        name,
+		Description: description,
 		IsSystem:    r.IsSystem,
 		Permissions: permissions,
 		Members:     r.Members,
@@ -243,11 +246,13 @@ func (h *roleHandlers) list(ctx context.Context, in *ListRolesInput) (*ListRoles
 		return nil, problem.Error(ctx, err)
 	}
 
+	locale := i18n.LocaleFrom(ctx)
+
 	out := &ListRolesOutput{}
 	out.Body.Roles = make([]RoleResponse, 0, len(roles))
 
 	for i := range roles {
-		out.Body.Roles = append(out.Body.Roles, newRoleResponse(&roles[i]))
+		out.Body.Roles = append(out.Body.Roles, newRoleResponse(locale, &roles[i]))
 	}
 
 	return out, nil
@@ -264,7 +269,7 @@ func (h *roleHandlers) get(ctx context.Context, in *RolePathInput) (*RoleOutput,
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &RoleOutput{Body: newRoleResponse(role)}, nil
+	return &RoleOutput{Body: newRoleResponse(i18n.LocaleFrom(ctx), role)}, nil
 }
 
 func (h *roleHandlers) create(ctx context.Context, in *CreateRoleInput) (*RoleOutput, error) {
@@ -279,7 +284,7 @@ func (h *roleHandlers) create(ctx context.Context, in *CreateRoleInput) (*RoleOu
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &RoleOutput{Body: newRoleResponse(role)}, nil
+	return &RoleOutput{Body: newRoleResponse(i18n.LocaleFrom(ctx), role)}, nil
 }
 
 func (h *roleHandlers) update(ctx context.Context, in *UpdateRoleInput) (*RoleOutput, error) {
@@ -293,7 +298,7 @@ func (h *roleHandlers) update(ctx context.Context, in *UpdateRoleInput) (*RoleOu
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &RoleOutput{Body: newRoleResponse(role)}, nil
+	return &RoleOutput{Body: newRoleResponse(i18n.LocaleFrom(ctx), role)}, nil
 }
 
 func (h *roleHandlers) setPermissions(ctx context.Context, in *SetRolePermissionsInput) (*RoleOutput, error) {
@@ -307,7 +312,7 @@ func (h *roleHandlers) setPermissions(ctx context.Context, in *SetRolePermission
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &RoleOutput{Body: newRoleResponse(role)}, nil
+	return &RoleOutput{Body: newRoleResponse(i18n.LocaleFrom(ctx), role)}, nil
 }
 
 func (h *roleHandlers) remove(ctx context.Context, in *RolePathInput) (*struct{}, error) {

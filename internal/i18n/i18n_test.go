@@ -31,9 +31,13 @@ func TestEveryPermissionIsTranslatedInEveryLocale(t *testing.T) {
 	}
 }
 
-// TestEveryShippedRoleIsTranslatedInEveryLocale is the same rule for the roles
-// the product defines. Roles created by users are translated in the database
-// instead — see models.RoleTranslation.
+// TestEveryShippedRoleIsTranslatedInEveryLocale is the same rule for the roles the
+// product defines. Roles created by users are not translated: they are shown as
+// they were typed.
+//
+// These messages were complete and tested in both languages long before anything
+// read them — every response carried the English column instead. Keeping a catalog
+// honest is not the same as using it.
 func TestEveryShippedRoleIsTranslatedInEveryLocale(t *testing.T) {
 	catalog := i18n.Default()
 
