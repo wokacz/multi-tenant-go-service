@@ -1121,3 +1121,40 @@ func roleKeys(t *testing.T, b *backend, orgID uuid.UUID, limit, offset int) []st
 func compareIDs(a, b uuid.UUID) int {
 	return strings.Compare(a.String(), b.String())
 }
+
+// TestAnInvitationToADeletedOrganizationCannotBeAccepted closes a race rather than
+// an open door.
+//
+// InvitationByToken filters deleted organizations, so the service path cannot reach
+// this — but that lookup and the accept are two statements, and an organization
+// deleted in between would leave an active membership in something that does not
+// exist. The row is harmless today, because every read filters deleted
+// organizations out again, which is exactly why it would have survived until
+// something started counting rows instead.
+//
+// Only reachable at this level, since the repository is where the two statements
+// meet.
+func TestAnInvitationToADeletedOrganizationCannotBeAccepted(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+		userID, email := b.newAccount(t)
+
+		invitation, err := b.repo.InviteMember(t.Context(), orgID, email, "token-for-a-doomed-org",
+			nil, uuid.Nil, time.Now().UTC().Add(time.Hour), time.Now().UTC())
+		if err != nil {
+			t.Fatalf("InviteMember() = _, %v", err)
+		}
+
+		b.deleteOrg(t, orgID)
+
+		err = b.dir.AcceptInvitation(t.Context(), invitation.ID, userID, time.Now().UTC())
+		if !errors.Is(err, orgs.ErrNotFound) {
+			t.Errorf("AcceptInvitation() into a deleted organization = %v, want ErrNotFound", err)
+		}
+
+		// And nothing was created on the way to refusing.
+		if _, err := b.repo.MemberByUser(t.Context(), orgID, userID); !errors.Is(err, orgs.ErrNotFound) {
+			t.Errorf("MemberByUser() = %v, want ErrNotFound; the refusal still left a membership", err)
+		}
+	})
+}

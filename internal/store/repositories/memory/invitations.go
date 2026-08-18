@@ -144,6 +144,12 @@ func (m *Authz) AcceptInvitation(ctx context.Context, invitationID, userID uuid.
 		return orgs.ErrNotFound
 	}
 
+	// Same rule as the SQL: no membership in an organization that has been
+	// deleted, however the caller got here.
+	if org, ok := m.orgs[invitation.OrganizationID]; !ok || org.IsDeleted() {
+		return orgs.ErrNotFound
+	}
+
 	for _, existing := range m.memberships {
 		if existing.OrganizationID == invitation.OrganizationID && sameAccount(existing, userID) {
 			return orgs.ErrAlreadyMember

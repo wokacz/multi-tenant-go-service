@@ -164,6 +164,25 @@ func (r *Orgs) AcceptInvitation(ctx context.Context, invitationID, userID uuid.U
 			return err
 		}
 
+		// The organization has to still exist, checked here rather than only in
+		// InvitationByToken. That lookup does filter deleted organizations, so the
+		// service path cannot reach this with a dead one — but it is a separate
+		// statement from this transaction, and an organization deleted in between
+		// would leave an active membership in something that no longer exists.
+		// Harmless today, because every read filters deleted organizations out
+		// again; a row that means nothing is still a row that will eventually be
+		// counted by something.
+		var live int64
+		if err := tx.Model(&models.Organization{}).
+			Where("id = ?", invitation.OrganizationID).
+			Count(&live).Error; err != nil {
+			return err
+		}
+
+		if live == 0 {
+			return orgs.ErrNotFound
+		}
+
 		var roleIDs []uuid.UUID
 		if err := tx.Model(&models.InvitationRole{}).
 			Where("invitation_id = ?", invitationID).

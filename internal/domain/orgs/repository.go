@@ -378,7 +378,10 @@ type Directory interface {
 	//
 	// The roles come from the invitation, never from the caller: whoever accepts
 	// must not get to choose what they are accepting. It returns ErrAlreadyMember
-	// when the account is already in that organization.
+	// when the account is already in that organization, and ErrNotFound when the
+	// organization has been deleted — checked inside the transaction, because
+	// InvitationByToken having filtered it out a statement earlier is not the same
+	// as it still being true.
 	AcceptInvitation(ctx context.Context, invitationID, userID uuid.UUID, at time.Time) error
 
 	// DeclineInvitation removes a pending invitation. Holding the token is the
