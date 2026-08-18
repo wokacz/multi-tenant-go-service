@@ -64,6 +64,11 @@ type backend struct {
 	newOrgSlug      func(t *testing.T, slug string) error
 	deleteAccount   func(t *testing.T, userID uuid.UUID)
 	newOrg          func(t *testing.T) uuid.UUID
+
+	// newProtectedOrg is the default organization's shape: one that refuses
+	// deletion. The two implementations reach it differently — a seed helper on one
+	// side, the column on the other — which is exactly what a fixture is for.
+	newProtectedOrg func(t *testing.T) uuid.UUID
 	deleteOrg       func(t *testing.T, orgID uuid.UUID)
 	newRole         func(t *testing.T, orgID uuid.UUID, key string, permissions ...string) uuid.UUID
 
@@ -156,6 +161,11 @@ func newMemoryBackend(t *testing.T) *backend {
 			t.Helper()
 
 			return repo.SeedOrganization("org-"+uuid.Must(uuid.NewV7()).String(), "Org")
+		},
+		newProtectedOrg: func(t *testing.T) uuid.UUID {
+			t.Helper()
+
+			return repo.SeedProtectedOrganization("protected-"+uuid.Must(uuid.NewV7()).String(), "Protected")
 		},
 		deleteOrg: func(t *testing.T, orgID uuid.UUID) {
 			t.Helper()
@@ -250,6 +260,22 @@ func newPostgresBackend(t *testing.T) *backend {
 			created, err := repo.CreateOrganization(t.Context(), org, nil)
 			if err != nil {
 				t.Fatalf("create organization: %v", err)
+			}
+
+			return created.ID
+		},
+		newProtectedOrg: func(t *testing.T) uuid.UUID {
+			t.Helper()
+
+			org := &models.Organization{
+				Slug: "protected-" + uuid.Must(uuid.NewV7()).String(),
+				Name: "Protected",
+			}
+			org.IsProtected = true
+
+			created, err := repo.CreateOrganization(t.Context(), org, nil)
+			if err != nil {
+				t.Fatalf("create protected organization: %v", err)
 			}
 
 			return created.ID
