@@ -141,6 +141,38 @@ tasks:
     cmds:
       - atlas migrate diff {{.NAME}} --env local
 
+  # Migration to ent (see ENT.md). The dump is the "before" picture: the ent schema
+  # is correct when the database it produces is byte-identical to this file, which is
+  # a stronger statement than an empty Atlas diff — the diff can be empty because two
+  # things are equally wrong.
+  schema:dump:
+    desc: Dump the schema of a freshly migrated throwaway database
+    vars:
+      PORT: '{{.PORT | default "55440"}}'
+      NAME: mtgs-schema-dump
+      OUT: '{{.OUT | default "schema.baseline.sql"}}'
+    cmds:
+      - defer: docker rm -f {{.NAME}} >/dev/null 2>&1 || true
+      - docker rm -f {{.NAME}} >/dev/null 2>&1 || true
+      - docker run -d --name {{.NAME}} -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres
+        -e POSTGRES_DB=postgres -p 127.0.0.1:{{.PORT}}:5432 postgres:18 >/dev/null
+      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
+      - sleep 1
+      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
+      - atlas migrate apply --dir "file://migrations"
+        --url "postgres://postgres:postgres@localhost:{{.PORT}}/postgres?sslmode=disable"
+      # Excluding the revisions table: it records which migrations ran, not what the
+      # schema is, and it would differ on every run.
+      #
+      # The grep is what makes two dumps comparable at all: pg_dump 18 opens with a
+      # \restrict line carrying a random token, and prints the server version it ran
+      # against. Both change between runs, so a byte comparison would always differ
+      # and the file would be worthless for the one job it has.
+      - docker exec {{.NAME}} pg_dump -U postgres -d postgres --schema-only --no-owner
+        --exclude-table=atlas_schema_revisions
+        | grep -v -E '^\\(un)?restrict |^-- Dumped (from|by)' > {{.OUT}}
+      - 'echo "wrote {{.OUT}}"'
+
   migrate:status:
     desc: Show which migrations have been applied
     cmds:

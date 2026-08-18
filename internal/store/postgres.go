@@ -107,6 +107,17 @@ func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*D
 // Ping checks that a connection can actually be obtained and used. The pool
 // opens lazily, so nothing before this has proved the credentials are right or
 // the host is reachable.
+// SQL is the pool underneath.
+//
+// It exists for the two things that cannot go through the ORM: the schema tests,
+// which have to read information_schema rather than trust a struct tag, and the
+// migration to ent, which builds its client on this same pool so both can run side
+// by side. Nothing else should reach for it — a query written here is a query no
+// repository owns.
+func (db *DB) SQL() *sql.DB {
+	return db.sql
+}
+
 func (db *DB) Ping(ctx context.Context) error {
 	if err := db.sql.PingContext(ctx); err != nil {
 		return fmt.Errorf("store: ping: %w", err)
