@@ -1,6 +1,7 @@
 package contract_test
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
@@ -609,4 +611,183 @@ func sortedPermissions(in []authz.Permission) []string {
 	slices.Sort(out)
 
 	return out
+}
+
+// --- the audit history ------------------------------------------------------
+
+// actingAs puts an actor on the context, which is what makes a change recordable: the
+// store writes no entry without one.
+func actingAs(t *testing.T, userID uuid.UUID) context.Context {
+	t.Helper()
+
+	return audit.WithActor(t.Context(), audit.Actor{
+		ID:        userID,
+		IP:        "127.0.0.1",
+		UserAgent: "contract",
+	})
+}
+
+// TestTheHistoryIsScopedToItsOrganization is the reader's half of the tenancy rule. The
+// installation-wide listing sits behind a system-scope permission precisely because the
+// organization-scoped one must never show another tenant's history.
+func TestTheHistoryIsScopedToItsOrganization(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		mine := b.newOrg(t)
+		theirs := b.newOrg(t)
+
+		_, actor := addMember(t, b, mine, b.newRole(t, mine, "auditor", string(authz.PermAuditRead)))
+		ctx := actingAs(t, actor)
+
+		// A change in each organization, so each has something to show.
+		if err := b.repo.UpdateOrganization(ctx, mine, "Mine"); err != nil {
+			t.Fatalf("UpdateOrganization(mine) = %v", err)
+		}
+
+		if err := b.repo.UpdateOrganization(ctx, theirs, "Theirs"); err != nil {
+			t.Fatalf("UpdateOrganization(theirs) = %v", err)
+		}
+
+		events, err := b.audit.Events(t.Context(), mine, wholePage, 0)
+		if err != nil {
+			t.Fatalf("Events() = %v", err)
+		}
+
+		if len(events) == 0 {
+			t.Fatal("the organization's own history is empty")
+		}
+
+		for _, event := range events {
+			if event.OrganizationID == nil || *event.OrganizationID != mine {
+				t.Errorf("an entry for %v appeared in %v's history", event.OrganizationID, mine)
+			}
+		}
+	})
+}
+
+// TestTheHistoryIsNewestFirstAndPaged pins the order the screen renders in, and the page
+// boundary. An audit log read in the wrong order is one nobody trusts.
+func TestTheHistoryIsNewestFirstAndPaged(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+
+		_, actor := addMember(t, b, orgID)
+		ctx := actingAs(t, actor)
+
+		for _, name := range []string{"First", "Second", "Third"} {
+			if err := b.repo.UpdateOrganization(ctx, orgID, name); err != nil {
+				t.Fatalf("UpdateOrganization(%s) = %v", name, err)
+			}
+		}
+
+		all, err := b.audit.Events(t.Context(), orgID, wholePage, 0)
+		if err != nil {
+			t.Fatalf("Events() = %v", err)
+		}
+
+		if len(all) < 3 {
+			t.Fatalf("%d entries, want at least the three renames", len(all))
+		}
+
+		for i := 1; i < len(all); i++ {
+			if all[i].At.After(all[i-1].At) {
+				t.Errorf("entry %d is newer than the one before it; the order is not newest first", i)
+			}
+		}
+
+		// A page of one, then the next: the two must not be the same entry.
+		first, err := b.audit.Events(t.Context(), orgID, 1, 0)
+		if err != nil {
+			t.Fatalf("Events(1, 0) = %v", err)
+		}
+
+		second, err := b.audit.Events(t.Context(), orgID, 1, 1)
+		if err != nil {
+			t.Fatalf("Events(1, 1) = %v", err)
+		}
+
+		if len(first) != 1 || len(second) != 1 {
+			t.Fatalf("pages of one returned %d and %d entries", len(first), len(second))
+		}
+
+		if first[0].ID == second[0].ID {
+			t.Error("the second page repeats the first entry")
+		}
+	})
+}
+
+// TestTheHistoryKeepsEntriesWhoseActorIsGone is the rule the joins are LEFT for, and the
+// one the port to ent could have broken silently.
+//
+// Dropping an entry because its account was deleted would erase exactly the changes
+// somebody is most likely to be looking for — what did the person who has since left do.
+// Reading it also means the joined name and address come back NULL, which the SQL layer
+// has to fold into empty strings rather than fail on.
+func TestTheHistoryKeepsEntriesWhoseActorIsGone(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		orgID := b.newOrg(t)
+
+		_, actor := addMember(t, b, orgID)
+
+		if err := b.repo.UpdateOrganization(actingAs(t, actor), orgID, "Renamed"); err != nil {
+			t.Fatalf("UpdateOrganization() = %v", err)
+		}
+
+		b.deleteAccount(t, actor)
+
+		events, err := b.audit.Events(t.Context(), orgID, wholePage, 0)
+		if err != nil {
+			t.Fatalf("Events() after deleting the actor = %v", err)
+		}
+
+		var found bool
+
+		for _, event := range events {
+			if event.Actor.ID == actor {
+				found = true
+			}
+		}
+
+		if !found {
+			t.Error("the entry disappeared with its actor; the history has to outlive the account")
+		}
+	})
+}
+
+// TestTheInstallationHistoryCrossesOrganizations is the other reader: the same rows,
+// without the tenancy filter, which is why it sits behind its own permission.
+func TestTheInstallationHistoryCrossesOrganizations(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b *backend) {
+		first := b.newOrg(t)
+		second := b.newOrg(t)
+
+		_, actor := addMember(t, b, first)
+		ctx := actingAs(t, actor)
+
+		if err := b.repo.UpdateOrganization(ctx, first, "First"); err != nil {
+			t.Fatalf("UpdateOrganization(first) = %v", err)
+		}
+
+		if err := b.repo.UpdateOrganization(ctx, second, "Second"); err != nil {
+			t.Fatalf("UpdateOrganization(second) = %v", err)
+		}
+
+		events, err := b.platformAudit.AllEvents(t.Context(), wholePage, 0)
+		if err != nil {
+			t.Fatalf("AllEvents() = %v", err)
+		}
+
+		seen := map[uuid.UUID]bool{}
+
+		for _, event := range events {
+			if event.OrganizationID != nil {
+				seen[*event.OrganizationID] = true
+			}
+		}
+
+		for _, orgID := range []uuid.UUID{first, second} {
+			if !seen[orgID] {
+				t.Errorf("%v is missing from the installation-wide history", orgID)
+			}
+		}
+	})
 }

@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -89,48 +90,89 @@ type eventRow struct {
 }
 
 func (r *Orgs) Events(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]audit.Event, error) {
-	return r.events(ctx, func(q *gorm.DB) *gorm.DB {
-		return q.Where("e.organization_id = ?", orgID)
-	}, limit, offset)
+	return r.events(ctx, "WHERE e.organization_id = $3", limit, offset, orgID)
 }
 
 func (r *Orgs) AllEvents(ctx context.Context, limit, offset int) ([]audit.Event, error) {
-	return r.events(ctx, func(q *gorm.DB) *gorm.DB { return q }, limit, offset)
+	return r.events(ctx, "", limit, offset)
 }
 
 // events runs the one query both readers share.
 //
-// The joins to users are LEFT: an account may have been deleted since, and
-// dropping its entries from the history would quietly erase the very changes
-// somebody is most likely to be looking for.
+// Raw SQL, deliberately, and the port to ent did not change that: three LEFT JOINs with
+// aliased columns is what this query *is*, and an ORM that carried it added nothing but
+// a place for it to be misread. It runs on the same pool as everything else, so it
+// shares the connection limits and — once the driver is wrapped — the same spans.
+//
+// The joins to users are LEFT: an account may have been deleted since, and dropping its
+// entries from the history would quietly erase the very changes somebody is most likely
+// to be looking for. That also means the joined columns can be NULL, which is why the
+// scan below reads them through sql.NullString rather than into plain strings — GORM
+// used to fold a NULL into "" on the way past, and nothing else does.
 func (r *Orgs) events(
 	ctx context.Context,
-	scope func(*gorm.DB) *gorm.DB,
+	where string,
 	limit, offset int,
+	args ...any,
 ) ([]audit.Event, error) {
-	var rows []eventRow
+	const query = `
+		SELECT e.id, e.created_at, e.organization_id, e.action, e.role_id,
+		       e.permission_key, e.detail, e.ip, e.user_agent,
+		       e.actor_id, actor.name, actor.email,
+		       e.subject_id, subject.name, subject.email,
+		       COALESCE(r.key, '')
+		FROM authz_events AS e
+		LEFT JOIN users actor ON actor.id = e.actor_id
+		LEFT JOIN users subject ON subject.id = e.subject_id
+		LEFT JOIN roles r ON r.id = e.role_id
+		%s
+		ORDER BY e.created_at DESC, e.id DESC
+		LIMIT $1 OFFSET $2`
 
-	q := r.db.WithContext(ctx).
-		Table("authz_events AS e").
-		Select(`e.id, e.created_at, e.organization_id, e.action, e.role_id,
-			e.permission_key, e.detail, e.ip, e.user_agent,
-			e.actor_id, actor.name AS actor_name, actor.email AS actor_email,
-			e.subject_id, subject.name AS subject_name, subject.email AS subject_email,
-			COALESCE(r.key, '') AS role_key`).
-		Joins("LEFT JOIN users actor ON actor.id = e.actor_id").
-		Joins("LEFT JOIN users subject ON subject.id = e.subject_id").
-		Joins("LEFT JOIN roles r ON r.id = e.role_id").
-		Order("e.created_at DESC, e.id DESC").
-		Limit(limit).
-		Offset(offset)
+	// $1 and $2 are the page, so a scope's own parameter starts at $3 — see Events.
+	params := append([]any{limit, offset}, args...)
 
-	if err := scope(q).Scan(&rows).Error; err != nil {
+	rows, err := r.db.SQL().QueryContext(ctx, fmt.Sprintf(query, where), params...)
+	if err != nil {
 		return nil, fmt.Errorf("store: audit events: %w", err)
 	}
 
-	out := make([]audit.Event, 0, len(rows))
-	for i := range rows {
-		out = append(out, rows[i].toEvent())
+	defer func() {
+		if cerr := rows.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("store: audit events: close: %w", cerr)
+		}
+	}()
+
+	out := make([]audit.Event, 0, limit)
+
+	for rows.Next() {
+		var (
+			row                              eventRow
+			actorName, actorEmail            sql.NullString
+			subjectName, subjectEmail        sql.NullString
+			permissionKey, detail, userAgent sql.NullString
+		)
+
+		err := rows.Scan(
+			&row.ID, &row.CreatedAt, &row.OrganizationID, &row.Action, &row.RoleID,
+			&permissionKey, &detail, &row.IP, &userAgent,
+			&row.ActorID, &actorName, &actorEmail,
+			&row.SubjectID, &subjectName, &subjectEmail,
+			&row.RoleKey,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("store: audit events: scan: %w", err)
+		}
+
+		row.ActorName, row.ActorEmail = actorName.String, actorEmail.String
+		row.SubjectName, row.SubjectEmail = subjectName.String, subjectEmail.String
+		row.PermissionKey, row.Detail, row.UserAgent = permissionKey.String, detail.String, userAgent.String
+
+		out = append(out, row.toEvent())
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: audit events: %w", err)
 	}
 
 	return out, nil

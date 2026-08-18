@@ -27,6 +27,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
@@ -58,6 +59,13 @@ type backend struct {
 	prov  orgs.Provisioner
 	perms authz.Repository
 	users user.Repository
+
+	// audit reads the history back. Both implementations put it on the same type as
+	// the organization repository; the field exists so a case does not have to know
+	// that.
+	audit audit.Reader
+
+	platformAudit audit.PlatformReader
 
 	newNamedAccount func(t *testing.T, name string) (uuid.UUID, string)
 	registerEmail   func(t *testing.T, email string) error
@@ -130,6 +138,9 @@ func newMemoryBackend(t *testing.T) *backend {
 		prov:  repo,
 		perms: repo,
 		users: users,
+		audit: repo,
+
+		platformAudit: repo,
 
 		newNamedAccount: accountFixture(users),
 		registerEmail: func(t *testing.T, email string) error {
@@ -226,6 +237,9 @@ func newPostgresBackend(t *testing.T) *backend {
 		prov:  repo,
 		perms: repositories.NewAuthz(db),
 		users: users,
+		audit: repo,
+
+		platformAudit: repo,
 
 		newNamedAccount: accountFixture(users),
 		registerEmail: func(t *testing.T, email string) error {
