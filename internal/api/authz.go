@@ -220,6 +220,11 @@ func (s *Server) requirePermission(ctx huma.Context, next func(huma.Context)) {
 // organization that never existed — otherwise trying identifiers reveals which
 // tenants an installation has.
 func (s *Server) denyAuthorization(ctx huma.Context, rule accessRule, err error) {
+	// Counted here rather than in each branch: every refusal is one, and the number
+	// worth having is "which permission stops people", not "which status they got".
+	s.deps.Telemetry.Metrics.CountDenial(ctx.Context(),
+		string(rule.Permission), string(rule.Scope))
+
 	switch {
 	case errors.Is(err, authz.ErrNotMember):
 		_ = huma.WriteErr(s.api, ctx, http.StatusNotFound, problem.CodeNotFound)

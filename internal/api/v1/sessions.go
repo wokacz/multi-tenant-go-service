@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 // deviceTokenHeader is how a client says "you have seen me before". It is a
@@ -45,10 +47,17 @@ type sessionHandlers struct {
 	tokens *auth.Signer
 	mail   mail.Sender
 	log    *slog.Logger
+	tel    *telemetry.Telemetry
 }
 
 func registerSessions(api huma.API, deps Deps) {
-	h := &sessionHandlers{users: deps.Users, tokens: deps.Tokens, mail: deps.Mail, log: deps.Log}
+	h := &sessionHandlers{
+		users:  deps.Users,
+		tokens: deps.Tokens,
+		mail:   deps.Mail,
+		log:    deps.Log,
+		tel:    deps.Telemetry,
+	}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "create-session",
@@ -96,10 +105,17 @@ func registerSessions(api huma.API, deps Deps) {
 func (h *sessionHandlers) create(ctx context.Context, in *CreateSessionInput) (*CreateSessionOutput, error) {
 	result, err := h.users.SignIn(ctx, in.Body.Email, in.Body.Password, signInContext(ctx, in.DeviceToken))
 	if err != nil {
+		// The only place that can tell these apart. The response deliberately
+		// cannot — a wrong password and an unknown address share one error, so the
+		// status cannot be used to discover who has an account — which is exactly
+		// why the ratio has to be a metric instead.
+		h.tel.Metrics.CountSignIn(ctx, signInOutcome(err))
+
 		return nil, problem.Error(ctx, err)
 	}
 
 	if result.Challenged {
+		h.tel.Metrics.CountSignIn(ctx, telemetry.OutcomeTwoFactorNeeded)
 		// Unlike the password-reset request, a delivery failure is reported.
 		// The caller already proved the password, so a 5xx here tells them
 		// nothing about the account that they did not already know, and
@@ -124,6 +140,8 @@ func (h *sessionHandlers) create(ctx context.Context, in *CreateSessionInput) (*
 func (h *sessionHandlers) verify(ctx context.Context, in *VerifySessionInput) (*CreateSessionOutput, error) {
 	u, device, err := h.users.VerifyTwoFactor(ctx, in.Body.Email, in.Body.Code, signInContext(ctx, in.DeviceToken))
 	if err != nil {
+		h.tel.Metrics.CountSignIn(ctx, signInOutcome(err))
+
 		return nil, problem.Error(ctx, err)
 	}
 
@@ -131,7 +149,28 @@ func (h *sessionHandlers) verify(ctx context.Context, in *VerifySessionInput) (*
 	return h.issue(ctx, u, device, "")
 }
 
-// issue signs the token for a completed sign-in.
+// signInOutcome maps a domain error onto a stable metric label.
+//
+// The default is deliberately "error" rather than the error's text: an attribute
+// built from an error message is unbounded cardinality, and one bad path would fill
+// the metric store with variations of the same failure.
+func signInOutcome(err error) string {
+	switch {
+	case errors.Is(err, user.ErrInvalidCredentials):
+		return telemetry.OutcomeBadCredentials
+	case errors.Is(err, user.ErrSuspended):
+		return telemetry.OutcomeSuspended
+	case errors.Is(err, user.ErrDeviceRevoked):
+		return telemetry.OutcomeDeviceRevoked
+	case errors.Is(err, user.ErrInvalidTwoFactorCode):
+		return telemetry.OutcomeBadTwoFactorCode
+	default:
+		return telemetry.OutcomeError
+	}
+}
+
+// issue signs the token for a completed sign-in. Both paths end here, which makes it
+// the one place "granted" can be counted once.
 func (h *sessionHandlers) issue(
 	ctx context.Context,
 	u *models.User,
@@ -150,6 +189,8 @@ func (h *sessionHandlers) issue(
 	if err != nil {
 		return nil, problem.Error(ctx, err)
 	}
+
+	h.tel.Metrics.CountSignIn(ctx, telemetry.OutcomeGranted)
 
 	body := newUserResponse(u)
 

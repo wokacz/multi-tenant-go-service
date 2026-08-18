@@ -223,6 +223,9 @@ Najważniejsze zmienne (pełna lista z komentarzami w `.env.example`):
 | `POSTGRES_*`                        | localhost / postgres | produkcja wymaga SSL i mocnego hasła                           |
 | `REGISTER_/LOGIN_/RESET_PER_MINUTE` | `5`                  | `0` wyłącza limiter (tylko testy)                              |
 | `INVITE_PER_MINUTE`                 | `30`                 | zaproszenia i ponowne wysłanie; **żądania**, nie adresy — jedno żądanie zbiorcze to do 50 adresów |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`       | puste                | puste = telemetria **wyłączona**; `task otel` stawia kolektor — patrz [010](../design/010_observability.md) |
+| `LOG_FORMAT` / `LOG_LEVEL`          | `console` / `debug`  | produkcja domyślnie `json` / `info`                            |
+| `LOG_COLOR`                         | `auto`               | `never` albo `NO_COLOR` wyłącza; potok i tak nie dostaje kolorów |
 | `SMTP_HOST`                         | puste                | bez niego kody nie idą mailem (tylko development)              |
 | `MAIL_LOG_CODES`                    | puste                | `1` drukuje kody na stderr; Compose ustawia, bo nie ma TTY     |
 

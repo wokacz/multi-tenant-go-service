@@ -18,6 +18,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 func main() {
@@ -54,6 +55,39 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Telemetry before anything else that might want to record: with no endpoint
+	// configured this is a no-op and the process behaves exactly as it did before it
+	// had any, which is what keeps a laptop and the test suite from needing a
+	// collector.
+	tel, err := telemetry.Setup(ctx, cfg, log)
+	if err != nil {
+		return err
+	}
+
+	// The same records now go to the terminal and to the collector. Set as the
+	// default too, so a library reaching for slog.Default lands in the same place.
+	log = tel.Logger(log)
+	slog.SetDefault(log)
+
+	defer func() {
+		// Its own timeout: ctx is already cancelled by the time this runs — that is
+		// what ended the server — and a batch processor given a dead context drops
+		// exactly the spans describing the shutdown.
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := tel.Shutdown(flushCtx); err != nil {
+			log.Error("flushing telemetry", "error", err)
+		}
+	}()
+
+	log.Info("telemetry",
+		slog.Bool("enabled", tel.Enabled),
+		slog.String("endpoint", cfg.OTLPEndpoint),
+		slog.String("service", cfg.ServiceName),
+		slog.Float64("trace_sample_ratio", cfg.TraceSampleRatio),
+	)
+
 	db, err := store.OpenPostgres(ctx, cfg, log)
 	if err != nil {
 		return err
@@ -74,19 +108,28 @@ func run() error {
 
 	// AuthResetSecret peppers reset-code HMACs. It is not AuthTokenSecret:
 	// rotating session tokens must not rewrite hashes of codes already emailed.
+	// Registered on the pool rather than passed to OpenPostgres, so the one-shot
+	// commands that share that function do not pay for callbacks nobody watches.
+	if err := store.Instrument(db, tel); err != nil {
+		return err
+	}
+
 	orgRepo := repositories.NewOrgs(db)
 	users := user.NewService(repositories.NewUser(db), []byte(cfg.AuthResetSecret))
 	authzService := authz.NewService(repositories.NewAuthz(db))
 
 	deps := api.Deps{
-		DB:        db,
-		Users:     users,
-		Tokens:    tokens,
-		Mail:      mail.New(cfg, log),
+		DB:     db,
+		Users:  users,
+		Tokens: tokens,
+		// Wrapped, so a message that could not be sent is a counter and a span
+		// rather than only a log line the handlers deliberately swallow.
+		Mail:      telemetry.MeteredMailer(mail.New(cfg, log), tel),
 		Authz:     authzService,
 		Snapshots: authzService,
 		Orgs:      orgs.NewService(orgRepo, orgRepo, orgRepo),
 		Audit:     audit.NewService(orgRepo, orgRepo),
+		Telemetry: tel,
 	}
 
 	return api.NewServer(cfg, log, deps).Run(ctx)

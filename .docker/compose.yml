@@ -37,6 +37,12 @@ x-api-environment: &api-environment
   # stderr inside Compose is not a TTY, so without this the development
   # mailer would log that a code was requested and never print the code.
   MAIL_LOG_CODES: "1"
+  # Where telemetry goes on the compose network. Empty in .env means off; this
+  # points at the otel service, which only exists under its profile — so the
+  # exporter retries quietly in the background until somebody starts it, and the
+  # API works either way.
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+  OTEL_EXPORTER_OTLP_INSECURE: "1"
 
 services:
   postgres:
@@ -130,6 +136,41 @@ services:
       # Generous: the first start compiles the whole module.
       start_period: 90s
 
+  # Traces, metrics and logs in one container, opt in with:
+  #
+  #   task compose:otel
+  #
+  # grafana/otel-lgtm is Tempo, Prometheus, Loki and Grafana wired together with an
+  # OpenTelemetry collector in front. It is one image rather than four services
+  # because the point here is to *look* at what the API emits, and four services plus
+  # their configuration files is a stack somebody has to maintain to answer that.
+  #
+  # Under a profile, so the ordinary `task up` does not start a second database and
+  # three storage engines on a laptop. The API keeps its endpoint configured
+  # regardless: an exporter with nowhere to send retries and logs a warning, which is
+  # a better failure than an API that will not start without an observability stack.
+  otel:
+    profiles: [otel]
+    image: grafana/otel-lgtm:latest
+    restart: unless-stopped
+    ports:
+      # Grafana. Anonymous admin access is on inside this image, which is fine for
+      # something bound to loopback and holding a laptop's traces.
+      - "127.0.0.1:3000:3000"
+      # OTLP over HTTP, which is what the API is configured to use, and gRPC for
+      # anything else somebody points at it.
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:4317:4317"
+    volumes:
+      # Named, so restarting the stack does not throw away yesterday's traces.
+      - otel-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 60s
+
   # Same image, running under delve. Opt in with:
   #
   #   task compose:debug
@@ -192,6 +233,7 @@ services:
 
 volumes:
   postgres-data:
+  otel-data:
   go-mod-cache:
   go-build-cache:
   api-tmp:

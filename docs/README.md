@@ -21,6 +21,7 @@ element, nie czytając wszystkiego od zera.
 | [007 Autoryzacja](design/007_authorization.md)                   | role, uprawnienia, organizacje, anty-eskalacja, migawka, audyt              |
 | [008 Błędy i języki](design/008_errors_and_i18n.md)              | `problem+json`, kody błędów, mapa błędów domenowych, i18n                   |
 | [009 Odporność](design/009_hardening.md)                         | enumeracja kont, limity, koszt bcrypta, nagłówki, produkcja                 |
+| [010 Obserwowalność](design/010_observability.md)                 | ślady, metryki, logi, korelacja, logowanie w terminalu                      |
 
 ## Instrukcje
 
@@ -51,6 +52,8 @@ element, nie czytając wszystkiego od zera.
 | Zmieniłem model i CI protestuje                   | [guides/003](guides/003_models_and_migrations.md) |
 | Test przechodzi u mnie, a na CI nie               | [guides/007](guides/007_write_tests.md)           |
 | Skąd wziąć konta do klikania po aplikacji?        | [guides/009](guides/009_seed_data.md)             |
+| Gdzie zobaczyć ślady i metryki?                   | [design/010](design/010_observability.md)          |
+| Dlaczego log nie ma `trace_id`?                   | [design/010](design/010_observability.md#logi)     |
 
 ## Konwencja
 

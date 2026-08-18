@@ -14,6 +14,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 // MemberResponse is one person's place in an organization.
@@ -120,10 +121,17 @@ type memberHandlers struct {
 	orgs *orgs.Service
 	mail mail.Sender
 	log  *slog.Logger
+	tel  *telemetry.Telemetry
 }
 
-func registerMembers(api huma.API, service *orgs.Service, mailer mail.Sender, log *slog.Logger) {
-	h := &memberHandlers{orgs: service, mail: mailer, log: log}
+func registerMembers(
+	api huma.API,
+	service *orgs.Service,
+	mailer mail.Sender,
+	log *slog.Logger,
+	tel *telemetry.Telemetry,
+) {
+	h := &memberHandlers{orgs: service, mail: mailer, log: log, tel: tel}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "list-members",
@@ -302,6 +310,8 @@ func (h *memberHandlers) add(ctx context.Context, in *AddMemberInput) (*Invitati
 		return nil, problem.Error(ctx, err)
 	}
 
+	h.tel.Metrics.CountInvitation(ctx, telemetry.EventInvitationSent)
+
 	// The token exists only here and in the message. It is deliberately absent
 	// from the response: an administrator who could read it back could accept on
 	// the invitee's behalf, which is the whole thing the token replaced.
@@ -364,6 +374,8 @@ func (h *memberHandlers) inviteMany(ctx context.Context, in *InviteMembersInput)
 		status := "already_member"
 		if outcome.Invitation != nil {
 			status = "invited"
+
+			h.tel.Metrics.CountInvitation(ctx, telemetry.EventInvitationSent)
 
 			// One message per invitation, each with its own token. A failure to
 			// send is logged and does not fail the request: the row exists, and
@@ -478,6 +490,8 @@ func (h *memberHandlers) reissueInvitation(ctx context.Context, in *InvitationPa
 		return nil, problem.Error(ctx, err)
 	}
 
+	h.tel.Metrics.CountInvitation(ctx, telemetry.EventInvitationReissued)
+
 	if h.mail != nil {
 		if err := h.mail.SendInvitation(ctx, invitation.Email,
 			invitation.Organization.Name, token, invitation.ExpiresAt); err != nil {
@@ -497,6 +511,8 @@ func (h *memberHandlers) withdrawInvitation(ctx context.Context, in *InvitationP
 	if err := h.orgs.WithdrawInvitation(ctx, grant, in.InvitationID); err != nil {
 		return nil, problem.Error(ctx, err)
 	}
+
+	h.tel.Metrics.CountInvitation(ctx, telemetry.EventInvitationWithdrawn)
 
 	return nil, nil
 }

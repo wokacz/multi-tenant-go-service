@@ -118,7 +118,7 @@ func (h *emailChangeHandlers) begin(ctx context.Context, in *BeginEmailChangeInp
 	// and a caller who sees "sent" and gets nothing retries, which is the correct
 	// behaviour anyway.
 	if err := h.mail.SendEmailChange(ctx, to, code); err != nil {
-		h.log.Error("sending email change code", "error", err)
+		h.log.ErrorContext(ctx, "sending email change code", "error", err)
 	}
 
 	return nil, nil

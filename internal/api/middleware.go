@@ -284,7 +284,14 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 		}
 
 		if lim != nil && !lim.Allow(s.remoteIP(r)) {
+			// The route, not the path: an organization id in a metric attribute is
+			// a new series per tenant, which is how a metrics bill becomes a
+			// surprise. limiterRoute maps the handful of limited paths onto stable
+			// names.
+			s.deps.Telemetry.Metrics.CountRateLimited(r.Context(), limiterRoute(r.URL.Path))
+
 			problem.Write(w, r, http.StatusTooManyRequests, problem.CodeTooManyRequests)
+
 			return
 		}
 
@@ -319,6 +326,25 @@ func isReissuePath(path string) bool {
 	parts := strings.Split(middle, "/")
 
 	return len(parts) == 3 && parts[0] != "" && parts[1] == "invitations" && parts[2] != ""
+}
+
+// limiterRoute names a limited path for the counter, with the identifiers taken out.
+//
+// It is a switch over the same shapes the limiter itself matches, which means it has
+// to be kept in step with the one above — the alternative was a path with a uuid in
+// it, and a metric with unbounded cardinality is worse than a name somebody has to
+// remember to add.
+func limiterRoute(path string) string {
+	switch {
+	case isMembersPath(path):
+		return v1.Prefix + "/orgs/{orgID}/members"
+	case isBulkInvitePath(path):
+		return v1.Prefix + "/orgs/{orgID}/invitations"
+	case isReissuePath(path):
+		return v1.Prefix + "/orgs/{orgID}/invitations/{invitationID}/reissue"
+	default:
+		return path
+	}
 }
 
 // isMembersPath reports whether the path is /v1/orgs/{something}/members.

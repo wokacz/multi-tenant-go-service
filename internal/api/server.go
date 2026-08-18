@@ -24,6 +24,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 // Version is reported in the OpenAPI document. It describes the API contract,
@@ -64,6 +65,11 @@ type Deps struct {
 	Snapshots authz.Snapshotter
 	Orgs      *orgs.Service
 	Audit     *audit.Service
+
+	// Telemetry carries the tracer and the counters. It is never nil in a wired
+	// process, and a test that leaves it out gets the no-op one from
+	// telemetry.Disabled rather than a panic on the first refused request.
+	Telemetry *telemetry.Telemetry
 }
 
 // Server owns the HTTP listener and the huma API registered on it. huma appears
@@ -82,6 +88,10 @@ type Server struct {
 	inviteLimit   *limiter
 }
 
+// healthPath is the liveness endpoint. It is a constant because two places need to
+// agree on it: the route, and the tracing filter that leaves it out.
+const healthPath = "/health"
+
 // NewServer wires the router, the middleware chain and the huma adapter. It
 // does not bind a port — that happens in Run.
 func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
@@ -89,6 +99,10 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	// huma.NewError while building each operation's responses, so a later call
 	// would leave the contract describing the wrong body.
 	problem.Install()
+
+	if deps.Telemetry == nil {
+		deps.Telemetry = telemetry.Disabled()
+	}
 
 	s := &Server{
 		cfg:           cfg,
@@ -114,6 +128,16 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 	// belongs to the route it is asking about.
 	router.Use(middleware.RequestID)
 	router.Use(middleware.CleanPath)
+
+	// Tracing wraps almost everything, so a request refused by the rate limiter or
+	// by CORS is still a span: "the request never reached the handler" is a fact
+	// worth seeing, and a trace that only covers successful work answers the
+	// easy questions.
+	//
+	// It sits inside RequestID so the request id can go on the span, and outside the
+	// logger so the log line can carry the trace id — the two directions are what
+	// make a log line and a span findable from each other.
+	router.Use(s.tracing)
 	router.Use(s.securityHeaders)
 	router.Use(s.maxBytes)
 	router.Use(s.requestLogger)
@@ -312,7 +336,11 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 
 		defer func() {
-			log.Info("request",
+			// InfoContext, not Info: the trace id lives on the context, and a log
+			// line without it is a line somebody has to correlate by timestamp —
+			// which is the job tracing exists to remove. Both the console handler
+			// and the collector read it from here.
+			log.InfoContext(r.Context(), "request",
 				"status", ww.Status(),
 				"bytes", ww.BytesWritten(),
 				"duration_ms", time.Since(start).Milliseconds(),
@@ -402,13 +430,15 @@ func (s *Server) registerRoutes() {
 		Authz:  s.deps.Snapshots,
 		Audit:  s.deps.Audit,
 		Log:    s.log,
+
+		Telemetry: s.deps.Telemetry,
 	})
 
 	// Health stays outside /v1 on purpose — see v1.Prefix.
 	huma.Register(s.api, huma.Operation{
 		OperationID: "health",
 		Method:      http.MethodGet,
-		Path:        "/health",
+		Path:        healthPath,
 		Summary:     "Health check",
 		Description: "Reports whether the service can serve traffic. Returns 503 " +
 			"when a dependency it cannot work without is unreachable.",
@@ -430,7 +460,7 @@ func (s *Server) health(ctx context.Context, _ *struct{}) (*HealthOutput, error)
 	defer cancel()
 
 	if err := s.deps.DB.Ping(ctx); err != nil {
-		s.log.Error("health check failed", "dependency", "database", "error", err)
+		s.log.ErrorContext(ctx, "health check failed", "dependency", "database", "error", err)
 
 		// A failing status has to be a failing code — a probe reads the status
 		// line, not the body.

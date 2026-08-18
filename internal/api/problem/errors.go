@@ -227,12 +227,12 @@ func Error(ctx context.Context, err error) error {
 		return newDocument(locale, statusClientClosedRequest, CodeClientClosed)
 
 	case errors.Is(err, context.DeadlineExceeded):
-		LoggerFrom(ctx).Warn("request timed out", "error", err)
+		LoggerFrom(ctx).WarnContext(ctx, "request timed out", "error", err)
 
 		return newDocument(locale, http.StatusGatewayTimeout, CodeTimeout)
 	}
 
-	LoggerFrom(ctx).Error("unhandled error", "error", err)
+	LoggerFrom(ctx).ErrorContext(ctx, "unhandled error", "error", err)
 
 	return newDocument(locale, http.StatusInternalServerError, CodeInternal)
 }

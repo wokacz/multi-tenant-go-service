@@ -195,6 +195,15 @@ tasks:
     cmds:
       - docker compose build {{.CLI_ARGS}}
 
+  compose:otel:
+    desc: Start the observability stack (Grafana on :3000, OTLP on :4318)
+    aliases: [otel]
+    # The API is already configured to export to it; this only starts the receiver.
+    # Restarting the api service is not needed — the exporter retries.
+    cmds:
+      - docker compose --profile otel up -d --wait otel
+      - 'echo "Grafana: http://127.0.0.1:3000 (traces: Tempo, metrics: Prometheus, logs: Loki)"'
+
   compose:debug:
     desc: Start the API under delve (API 4001, debugger 2345)
     cmds:

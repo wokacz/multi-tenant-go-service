@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -96,6 +97,41 @@ type Config struct {
 	// with an unbounded JSON document.
 	MaxRequestBytes int64
 
+	// LogFormat is "console" or "json". Development defaults to console, which is
+	// for a person reading a terminal; production defaults to json, which is for a
+	// shipper. Both are settable either way, because a developer debugging what a
+	// collector receives wants json on a laptop.
+	LogFormat LogFormat
+
+	// LogLevel is the floor for the process logger.
+	LogLevel slog.Level
+
+	// LogColour is "auto", "always" or "never". auto means: unless NO_COLOR is set
+	// and unless the output is a pipe.
+	LogColour string
+
+	// OTLPEndpoint is where traces, metrics and logs are sent. Empty means
+	// telemetry is off and the process behaves exactly as it did before it had any:
+	// an observability stack that has to be running for the API to work would be a
+	// new way to take production down.
+	OTLPEndpoint string
+
+	// OTLPInsecure sends over http:// rather than https://. A collector on the same
+	// host in development is the case; anything crossing a network is not.
+	OTLPInsecure bool
+
+	// ServiceName and ServiceVersion identify this process in whatever collects
+	// from it. The name is what a dashboard is filtered by, so it is configurable
+	// rather than hard-coded: two deployments of this product reporting as one
+	// service is a dashboard nobody can read.
+	ServiceName    string
+	ServiceVersion string
+
+	// TraceSampleRatio is the fraction of traces kept when no parent decided
+	// already. One in development, where the point is to see everything; a fraction
+	// in production, where the point is to afford it.
+	TraceSampleRatio float64
+
 	// ReadHeaderTimeout is the one timeout that is a security control rather
 	// than a nicety: without it a client can pin a connection open forever by
 	// dribbling out request headers one byte at a time.
@@ -185,12 +221,17 @@ func Load() (*Config, error) {
 		return v
 	}
 
+	// Read once: several defaults below differ between development and production,
+	// and re-reading the variable in each of them is how two of them end up
+	// disagreeing.
+	env := Env(os.Getenv("ENV"))
+
 	cfg := &Config{
 		// ENV has no default. A forgotten variable on a server used to
 		// silently select development, including the well-known secrets
 		// below. An explicit value is a one-line .env; an implicit one is a
 		// forgeable installation.
-		Env:     Env(os.Getenv("ENV")),
+		Env:     env,
 		APIName: getEnv("API_NAME", "Example"),
 		APIHost: getEnv("API_HOST", "127.0.0.1"),
 		APIPort: getInt("API_PORT", 8000),
@@ -208,6 +249,17 @@ func Load() (*Config, error) {
 		ResetPerMinute:    getInt("RESET_PER_MINUTE", 5),
 		InvitePerMinute:   getInt("INVITE_PER_MINUTE", 30),
 		MaxRequestBytes:   int64(getInt("MAX_REQUEST_BYTES", 1<<20)),
+
+		LogFormat: LogFormat(getEnv("LOG_FORMAT", string(defaultLogFormat(env)))),
+		LogLevel:  ParseLogLevel(getEnv("LOG_LEVEL", defaultLogLevel(env))),
+		LogColour: getEnv("LOG_COLOR", "auto"),
+
+		OTLPEndpoint:   strings.TrimSpace(getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "")),
+		OTLPInsecure:   getEnvBool("OTEL_EXPORTER_OTLP_INSECURE"),
+		ServiceName:    getEnv("OTEL_SERVICE_NAME", "multi-tenant-go-service"),
+		ServiceVersion: getEnv("OTEL_SERVICE_VERSION", "dev"),
+
+		TraceSampleRatio: getFloat("OTEL_TRACES_SAMPLER_ARG", defaultSampleRatio(env)),
 
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -341,6 +393,21 @@ func (c *Config) validate() []error {
 
 	if c.InvitePerMinute < 0 {
 		errs = append(errs, fmt.Errorf("config: INVITE_PER_MINUTE must be >= 0, got %d", c.InvitePerMinute))
+	}
+
+	if c.LogFormat != LogFormatConsole && c.LogFormat != LogFormatJSON {
+		errs = append(errs, fmt.Errorf(
+			"config: LOG_FORMAT must be %q or %q, got %q", LogFormatConsole, LogFormatJSON, c.LogFormat))
+	}
+
+	// The endpoint is a URL the exporter dials. A typo here is silence, and silence
+	// in a telemetry pipeline is indistinguishable from a healthy quiet system.
+	if c.OTLPEndpoint != "" {
+		parsed, err := url.Parse(c.OTLPEndpoint)
+		if err != nil || parsed.Host == "" {
+			errs = append(errs, fmt.Errorf(
+				"config: OTEL_EXPORTER_OTLP_ENDPOINT must be a URL with a host, got %q", c.OTLPEndpoint))
+		}
 	}
 
 	if c.MaxRequestBytes < 1024 {
@@ -566,6 +633,69 @@ func parseTrustedProxies(value string) ([]net.IPNet, error) {
 	}
 
 	return out, nil
+}
+
+// LogFormat is how the process writes its own log.
+type LogFormat string
+
+const (
+	// LogFormatConsole is the handler a person reads: colour, aligned columns, no
+	// date on every line.
+	LogFormatConsole LogFormat = "console"
+
+	// LogFormatJSON is the handler a shipper parses.
+	LogFormatJSON LogFormat = "json"
+)
+
+func defaultLogFormat(env Env) LogFormat {
+	if env.IsProduction() {
+		return LogFormatJSON
+	}
+
+	return LogFormatConsole
+}
+
+// defaultLogLevel is debug in development, where the point is to see what happened,
+// and info in production, where debug is volume nobody reads and a bill somebody
+// pays.
+func defaultLogLevel(env Env) string {
+	if env.IsProduction() {
+		return "info"
+	}
+
+	return "debug"
+}
+
+// defaultSampleRatio keeps every trace in development and a tenth in production.
+//
+// A tenth is a starting point rather than a considered number, and it is the first
+// thing to change once somebody has looked at the volume. Sampling all of production
+// is the choice that gets discovered as a bill.
+func defaultSampleRatio(env Env) float64 {
+	if env.IsProduction() {
+		return 0.1
+	}
+
+	return 1
+}
+
+// getFloat reads a fraction, falling back on anything unparseable.
+//
+// Unlike getEnvInt this does not fail the process: a bad sampler argument should not
+// stop the API from serving, and the fallback is a documented value rather than a
+// guess.
+func getFloat(key string, defaultValue float64) float64 {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || value < 0 || value > 1 {
+		return defaultValue
+	}
+
+	return value
 }
 
 func getEnvBool(key string) bool {

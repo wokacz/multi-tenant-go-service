@@ -11,6 +11,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/auth"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 // InvitationTokenRequest carries the secret from the message.
@@ -64,10 +65,11 @@ type ListMyInvitationsOutput struct {
 type invitationHandlers struct {
 	orgs  *orgs.Service
 	users *user.Service
+	tel   *telemetry.Telemetry
 }
 
-func registerInvitations(api huma.API, service *orgs.Service, users *user.Service) {
-	h := &invitationHandlers{orgs: service, users: users}
+func registerInvitations(api huma.API, service *orgs.Service, users *user.Service, tel *telemetry.Telemetry) {
+	h := &invitationHandlers{orgs: service, users: users, tel: tel}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "list-my-invitations",
@@ -159,6 +161,8 @@ func (h *invitationHandlers) accept(ctx context.Context, in *InvitationTokenInpu
 		return nil, problem.Error(ctx, err)
 	}
 
+	h.tel.Metrics.CountInvitation(ctx, telemetry.EventInvitationAccepted)
+
 	return nil, nil
 }
 
@@ -170,6 +174,8 @@ func (h *invitationHandlers) decline(ctx context.Context, in *InvitationTokenInp
 	if err := h.orgs.DeclineInvitation(ctx, in.Body.Token); err != nil {
 		return nil, problem.Error(ctx, err)
 	}
+
+	h.tel.Metrics.CountInvitation(ctx, telemetry.EventInvitationDeclined)
 
 	return nil, nil
 }

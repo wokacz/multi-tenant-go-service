@@ -26,6 +26,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 var testPepper = []byte("0123456789abcdef0123456789abcdef")
@@ -158,6 +159,22 @@ func newTestAPIConfig(
 ) (*Server, *memory.Authz) {
 	t.Helper()
 
+	return newTestAPIConfigTel(t, mailer, repo, telemetry.Disabled(), adjust)
+}
+
+// newTestAPIConfigTel is the same with the telemetry handed in, for the tests that
+// assert on what was recorded. Everything else takes the no-op one: a counter behind
+// a discarding meter costs an atomic add, and a test that does not read it should not
+// have to build a reader.
+func newTestAPIConfigTel(
+	t *testing.T,
+	mailer mail.Sender,
+	repo user.Repository,
+	tel *telemetry.Telemetry,
+	adjust func(*config.Config),
+) (*Server, *memory.Authz) {
+	t.Helper()
+
 	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour, testIssuer)
 	if err != nil {
 		t.Fatalf("NewSigner() = %v", err)
@@ -198,6 +215,7 @@ func newTestAPIConfig(
 		Snapshots: authzService,
 		Orgs:      orgs.NewService(authzRepo, authzRepo, authzRepo),
 		Audit:     audit.NewService(authzRepo, authzRepo),
+		Telemetry: tel,
 	})
 
 	return server, authzRepo

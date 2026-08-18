@@ -18,6 +18,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 // Prefix is the path every operation in this package lives under. Operational
@@ -36,6 +37,14 @@ type Deps struct {
 	Authz  authz.Snapshotter
 	Audit  *audit.Service
 	Log    *slog.Logger
+
+	// Telemetry is where the handlers that know an outcome record it. Only two do:
+	// sign-in, which is the only place a wrong password is told apart from a second
+	// factor, and the invitation handlers, where "sent" and "accepted" are different
+	// acts on the same row. Everything else is covered by the middleware or by the
+	// instrumentation, and a counter in a handler that the middleware already counts
+	// is two series that drift apart.
+	Telemetry *telemetry.Telemetry
 }
 
 // Register attaches every v1 operation to the API.
@@ -44,6 +53,10 @@ type Deps struct {
 // allow-list of the operations that may be reached anonymously, and everything
 // registered below is behind a token unless it appears there.
 func Register(api huma.API, deps Deps) {
+	if deps.Telemetry == nil {
+		deps.Telemetry = telemetry.Disabled()
+	}
+
 	registerUsers(api, deps.Users, deps.Orgs)
 	registerSessions(api, deps)
 	registerPasswordResets(api, deps.Users, deps.Mail, deps.Log)
@@ -52,8 +65,8 @@ func Register(api huma.API, deps Deps) {
 	registerPasswordChange(api, deps.Users)
 	registerDevices(api, deps.Users)
 	registerOrganizations(api, deps.Orgs)
-	registerInvitations(api, deps.Orgs, deps.Users)
-	registerMembers(api, deps.Orgs, deps.Mail, deps.Log)
+	registerInvitations(api, deps.Orgs, deps.Users, deps.Telemetry)
+	registerMembers(api, deps.Orgs, deps.Mail, deps.Log, deps.Telemetry)
 	registerRoles(api, deps.Orgs)
 	registerPermissions(api, deps.Orgs, deps.Authz)
 	registerPlatform(api, deps.Orgs, deps.Users)

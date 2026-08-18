@@ -11,6 +11,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
+	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
 // authzFixture is one signed-in account plus the organization it belongs to.
@@ -29,8 +30,16 @@ type authzFixture struct {
 func newAuthzFixture(t *testing.T, roles ...authz.RoleKey) *authzFixture {
 	t.Helper()
 
+	return newAuthzFixtureWith(t, telemetry.Disabled(), roles...)
+}
+
+// newAuthzFixtureWith is the same fixture with telemetry attached, for the tests that
+// read the counters back.
+func newAuthzFixtureWith(t *testing.T, tel *telemetry.Telemetry, roles ...authz.RoleKey) *authzFixture {
+	t.Helper()
+
 	mailer := &capturingMailer{}
-	server, repo := newTestAPIConfig(t, mailer, memory.NewUsers(), nil)
+	server, repo := newTestAPIConfigTel(t, mailer, memory.NewUsers(), tel, nil)
 
 	registerAda(t, server)
 	session := signInAda(t, server, "", http.StatusCreated)
