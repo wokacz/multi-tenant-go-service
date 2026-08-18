@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -34,48 +35,73 @@ var _ authz.Repository = (*Authz)(nil)
 // organization or lock its newest member out of the 403 they should be getting.
 // So a member with no roles comes back as one row with a NULL key.
 //
-// The deleted_at filters are written out rather than left to GORM. Its
-// soft-delete scope only applies to the model being queried, and this query is
-// built from a table name: without them, a deleted organization keeps granting
-// permissions and a deleted account keeps holding them.
+// The deleted_at filters are written out, and they always were: no ORM's soft-delete
+// scope reaches a query built from table names. Without them a deleted organization
+// keeps granting permissions and a deleted account keeps holding them — the second is
+// how a deleted platform administrator would keep getting in.
 func (r *Authz) OrganizationPermissionKeys(ctx context.Context, userID, orgID uuid.UUID) ([]string, error) {
-	var rows []struct {
-		PermissionKey *string
-	}
+	const query = `
+		SELECT DISTINCT rp.permission_key
+		FROM memberships AS m
+		JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL
+		JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+		LEFT JOIN membership_roles mr ON mr.membership_id = m.id
+		LEFT JOIN roles r ON r.id = mr.role_id
+		LEFT JOIN role_permissions rp ON rp.role_id = r.id
+		WHERE m.user_id = $1 AND m.organization_id = $2 AND m.status = $3`
 
-	err := r.db.WithContext(ctx).
-		Table("memberships AS m").
-		Select("DISTINCT rp.permission_key").
-		Joins("JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Joins("LEFT JOIN membership_roles mr ON mr.membership_id = m.id").
-		Joins("LEFT JOIN roles r ON r.id = mr.role_id").
-		Joins("LEFT JOIN role_permissions rp ON rp.role_id = r.id").
-		Where("m.user_id = ? AND m.organization_id = ? AND m.status = ?",
-			userID, orgID, models.MembershipActive).
-		Scan(&rows).Error
+	keys, rowCount, err := r.permissionKeys(ctx, query, userID, orgID, models.MembershipActive)
 	if err != nil {
 		return nil, fmt.Errorf("store: organization permission keys: %w", err)
 	}
 
-	// No rows at all means no active membership. The organization may not exist,
-	// may be deleted, or may simply not have this person in it; the caller must
-	// not be able to tell which, so they share one error.
-	if len(rows) == 0 {
+	// No rows at all means no active membership. The organization may not exist, may be
+	// deleted, or may simply not have this person in it; the caller must not be able to
+	// tell which, so they share one error.
+	if rowCount == 0 {
 		return nil, authz.ErrNotMember
 	}
 
-	keys := make([]string, 0, len(rows))
+	return keys, nil
+}
 
-	for _, row := range rows {
-		if row.PermissionKey == nil {
-			continue
-		}
-
-		keys = append(keys, *row.PermissionKey)
+// permissionKeys runs a query returning one nullable key per row.
+//
+// It hands back the row count separately, because "no rows" and "rows whose key is
+// NULL" are different answers here and the caller decides what each means.
+func (r *Authz) permissionKeys(ctx context.Context, query string, args ...any) ([]string, int, error) {
+	rows, err := r.db.SQL().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	return keys, nil
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var (
+		keys  []string
+		count int
+	)
+
+	for rows.Next() {
+		var key sql.NullString
+		if err := rows.Scan(&key); err != nil {
+			return nil, 0, err
+		}
+
+		count++
+
+		if key.Valid {
+			keys = append(keys, key.String)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return keys, count, nil
 }
 
 // PermissionKeysByOrganization is OrganizationPermissionKeys without the
@@ -86,28 +112,42 @@ func (r *Authz) OrganizationPermissionKeys(ctx context.Context, userID, orgID uu
 // is one the UI has nothing to unlock. The other query has to tell a member
 // with no roles apart from a stranger, because those become different statuses.
 func (r *Authz) PermissionKeysByOrganization(ctx context.Context, userID uuid.UUID) (map[uuid.UUID][]string, error) {
-	var rows []struct {
-		OrganizationID uuid.UUID
-		PermissionKey  string
-	}
+	const query = `
+		SELECT DISTINCT m.organization_id, rp.permission_key
+		FROM memberships AS m
+		JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL
+		JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+		JOIN membership_roles mr ON mr.membership_id = m.id
+		JOIN roles r ON r.id = mr.role_id
+		JOIN role_permissions rp ON rp.role_id = r.id
+		WHERE m.user_id = $1 AND m.status = $2`
 
-	err := r.db.WithContext(ctx).
-		Table("memberships AS m").
-		Select("DISTINCT m.organization_id, rp.permission_key").
-		Joins("JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Joins("JOIN membership_roles mr ON mr.membership_id = m.id").
-		Joins("JOIN roles r ON r.id = mr.role_id").
-		Joins("JOIN role_permissions rp ON rp.role_id = r.id").
-		Where("m.user_id = ? AND m.status = ?", userID, models.MembershipActive).
-		Scan(&rows).Error
+	rows, err := r.db.SQL().QueryContext(ctx, query, userID, models.MembershipActive)
 	if err != nil {
 		return nil, fmt.Errorf("store: permission keys by organization: %w", err)
 	}
 
+	defer func() {
+		_ = rows.Close()
+	}()
+
 	out := map[uuid.UUID][]string{}
-	for _, row := range rows {
-		out[row.OrganizationID] = append(out[row.OrganizationID], row.PermissionKey)
+
+	for rows.Next() {
+		var (
+			orgID uuid.UUID
+			key   string
+		)
+
+		if err := rows.Scan(&orgID, &key); err != nil {
+			return nil, fmt.Errorf("store: permission keys by organization: scan: %w", err)
+		}
+
+		out[orgID] = append(out[orgID], key)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: permission keys by organization: %w", err)
 	}
 
 	return out, nil
@@ -118,14 +158,33 @@ func (r *Authz) PermissionKeysByOrganization(ctx context.Context, userID uuid.UU
 // Keys are returned raw. Which of them this build still ships is a question for
 // the catalog, and answering it here would put a copy of that list in the store.
 func (r *Authz) SystemRoleKeys(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	const query = `
+		SELECT usr.role_key
+		FROM user_system_roles AS usr
+		JOIN users u ON u.id = usr.user_id AND u.deleted_at IS NULL
+		WHERE usr.user_id = $1`
+
+	rows, err := r.db.SQL().QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: system role keys: %w", err)
+	}
+
+	defer func() {
+		_ = rows.Close()
+	}()
+
 	var keys []string
 
-	err := r.db.WithContext(ctx).
-		Table("user_system_roles AS usr").
-		Joins("JOIN users u ON u.id = usr.user_id AND u.deleted_at IS NULL").
-		Where("usr.user_id = ?", userID).
-		Pluck("usr.role_key", &keys).Error
-	if err != nil {
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("store: system role keys: scan: %w", err)
+		}
+
+		keys = append(keys, key)
+	}
+
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("store: system role keys: %w", err)
 	}
 

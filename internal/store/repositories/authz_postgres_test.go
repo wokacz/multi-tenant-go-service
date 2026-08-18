@@ -312,3 +312,46 @@ func TestARepeatedRoleAssignmentIsRefusedByTheIndex(t *testing.T) {
 		t.Error("assigning the same role twice succeeded; idx_membership_role is not unique")
 	}
 }
+
+// TestADeletedAccountHoldsNoSystemRole is the filter the query carries and nothing else
+// enforces.
+//
+// A platform administrator's account being deleted has to end their platform powers. The
+// grant row survives — a soft delete fires no cascade — so if the query stopped joining
+// to live accounts, a deleted administrator would keep answering yes to every
+// platform.* check, and the only visible symptom would be somebody who should be gone
+// still getting in.
+func TestADeletedAccountHoldsNoSystemRole(t *testing.T) {
+	db := testDB(t)
+	repo := repositories.NewAuthz(db)
+	users := repositories.NewUser(db)
+
+	admin := newUser(t, users)
+
+	grant := &models.UserSystemRole{UserID: admin.ID, RoleKey: string(authz.RolePlatformAdmin)}
+	if err := db.Create(grant).Error; err != nil {
+		t.Fatalf("create system role: %v", err)
+	}
+
+	keys, err := repo.SystemRoleKeys(t.Context(), admin.ID)
+	if err != nil {
+		t.Fatalf("SystemRoleKeys() = _, %v", err)
+	}
+
+	if len(keys) != 1 {
+		t.Fatalf("keys = %v before the deletion, want the granted role", keys)
+	}
+
+	if err := users.Delete(t.Context(), admin.ID); err != nil {
+		t.Fatalf("Delete() = %v", err)
+	}
+
+	keys, err = repo.SystemRoleKeys(t.Context(), admin.ID)
+	if err != nil {
+		t.Fatalf("SystemRoleKeys() after the deletion = _, %v", err)
+	}
+
+	if len(keys) != 0 {
+		t.Errorf("a deleted account still holds %v", keys)
+	}
+}
