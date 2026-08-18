@@ -1752,12 +1752,14 @@ func (c *OrganizationClient) QueryInvitations(_m *Organization) *InvitationQuery
 
 // Hooks returns the client hooks.
 func (c *OrganizationClient) Hooks() []Hook {
-	return c.hooks.Organization
+	hooks := c.hooks.Organization
+	return append(hooks[:len(hooks):len(hooks)], organization.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
 func (c *OrganizationClient) Interceptors() []Interceptor {
-	return c.inters.Organization
+	inters := c.inters.Organization
+	return append(inters[:len(inters):len(inters)], organization.Interceptors[:]...)
 }
 
 func (c *OrganizationClient) mutate(ctx context.Context, m *OrganizationMutation) (Value, error) {
@@ -2657,12 +2659,14 @@ func (c *UserClient) QuerySystemRoles(_m *User) *UserSystemRoleQuery {
 
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
-	return c.hooks.User
+	hooks := c.hooks.User
+	return append(hooks[:len(hooks):len(hooks)], user.Hooks[:]...)
 }
 
 // Interceptors returns the client interceptors.
 func (c *UserClient) Interceptors() []Interceptor {
-	return c.inters.User
+	inters := c.inters.User
+	return append(inters[:len(inters):len(inters)], user.Interceptors[:]...)
 }
 
 func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error) {

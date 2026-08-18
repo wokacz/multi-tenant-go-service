@@ -7,11 +7,22 @@ import (
 	"log/slog"
 	"time"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
+
+	// The generated runtime wires the schema's defaults, hooks and interceptors into
+	// the client. Without it soft delete silently is not soft delete — ent refuses
+	// with "uninitialized interceptor", which is better than proceeding, but the
+	// import is easy to lose in a refactor and impossible to notice by reading the
+	// client's construction. It belongs here because this is where the client is
+	// built; the ent package cannot import it itself without a cycle.
+	_ "github.com/wokacz/multi-tenant-go-service/internal/store/ent/runtime"
 )
 
 // DB owns the Postgres connection pool. The embedded *gorm.DB gives callers the
@@ -21,6 +32,11 @@ type DB struct {
 	*gorm.DB
 
 	sql *sql.DB
+
+	// ent is the client the repositories are moving to. It runs on the same pool as
+	// GORM — one set of connections, one set of limits — which is what lets the
+	// repositories move over one file at a time instead of all at once. See ENT.md.
+	ent *ent.Client
 }
 
 // OpenPostgres connects, configures the pool and verifies the connection is
@@ -81,7 +97,15 @@ func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*D
 	sqlDB.SetConnMaxLifetime(cfg.DBConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(cfg.DBConnMaxIdleTime)
 
-	db := &DB{DB: gormDB, sql: sqlDB}
+	// One pool, two clients. entsql.OpenDB wraps the existing *sql.DB rather than
+	// dialling again: a second pool would double the connection count, and the two
+	// halves of a repository being migrated would sit in different transactions
+	// without anything saying so.
+	db := &DB{
+		DB:  gormDB,
+		sql: sqlDB,
+		ent: ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, sqlDB))),
+	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, cfg.DBConnectTimeout)
 	defer cancel()
@@ -107,6 +131,15 @@ func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*D
 // Ping checks that a connection can actually be obtained and used. The pool
 // opens lazily, so nothing before this has proved the credentials are right or
 // the host is reachable.
+// Ent is the ent client on this pool.
+//
+// It returns the client rather than exposing the field so that nothing outside the
+// store can hold one: ent's generated types are a persistence detail, and
+// TestEntStaysInsideTheStore is what keeps them there.
+func (db *DB) Ent() *ent.Client {
+	return db.ent
+}
+
 // SQL is the pool underneath.
 //
 // It exists for the two things that cannot go through the ORM: the schema tests,

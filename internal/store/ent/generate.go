@@ -18,6 +18,9 @@
 //   - sql/modifier is the escape hatch for the statements that cannot be expressed
 //     as a builder call — the attempt counter's CASE WHEN, the ::inet cast, the
 //     correlated subquery counting owners.
+//   - intercept generates the helper package the soft-delete mixin needs to add its
+//     predicate to every read. It is the one feature the mixin could not be written
+//     without, and the reason the mixin shipped as columns first and behaviour second.
 //   - sql/versioned-migration generates migrate.NamedDiff, which is how the versioned
 //     migrations in migrations/ are written: ent computes the difference between the
 //     schema here and the directory, and Atlas renders it as SQL.

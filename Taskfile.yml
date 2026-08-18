@@ -110,7 +110,7 @@ tasks:
     # go/packages, which has to resolve it inside the module that owns it.
     cmds:
       - go build -C tools/entgen -o "$(pwd)/bin/entgen" entgo.io/ent/cmd/ent
-      - ./bin/entgen generate --feature sql/lock,sql/upsert,sql/modifier,sql/versioned-migration ./internal/store/ent/schema
+      - ./bin/entgen generate --feature intercept,sql/lock,sql/upsert,sql/modifier,sql/versioned-migration ./internal/store/ent/schema
 
   ent:check:
     desc: Fail if the committed ent client is out of date
