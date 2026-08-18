@@ -22,10 +22,10 @@ import (
 
 // Postgres integrity-violation codes. Named, because 23505 in a condition is a number
 // somebody has to look up.
-// pgForeignKeyViolation ("23503") is deliberately absent until something needs it:
-// AddMember turns it into ErrNotFound, because that is how it decides whether an
-// account exists, and it will arrive with that method.
-const pgUniqueViolation = "23505"
+const (
+	pgUniqueViolation     = "23505"
+	pgForeignKeyViolation = "23503"
+)
 
 // isNotFound reports whether ent found nothing.
 //
@@ -43,6 +43,15 @@ func isNotFound(err error) bool {
 // name would tie the domain's errors to names the schema generator chooses.
 func isUniqueViolation(err error) bool {
 	return hasPGCode(err, pgUniqueViolation)
+}
+
+// isForeignKeyViolation reports whether the write named a row that does not exist.
+//
+// AddMember uses this to decide whether the account exists: the membership's
+// user_id foreign key is the check, and a raw 23503 would otherwise arrive as an
+// opaque 500 on a platform endpoint that takes an account id from a request.
+func isForeignKeyViolation(err error) bool {
+	return hasPGCode(err, pgForeignKeyViolation)
 }
 
 func hasPGCode(err error, code string) bool {

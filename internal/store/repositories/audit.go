@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
@@ -19,7 +18,7 @@ var (
 	_ audit.PlatformReader = (*Orgs)(nil)
 )
 
-// record writes one audit row on the transaction that is making the change.
+// recordEnt writes one audit row on the transaction that is making the change.
 //
 // Taking tx rather than the pool is the whole point. An audit row committed
 // separately from the change it describes is the row that goes missing exactly
@@ -30,40 +29,17 @@ var (
 // A missing actor writes nothing. That is deliberate — see audit.Actor — and it
 // is why the guard against a forgotten one is a test that calls each mutating
 // endpoint and demands a row, rather than a nil check here.
-func record(ctx context.Context, tx *gorm.DB, event *models.AuthzEvent) error {
-	actor := audit.ActorFrom(ctx)
-	if actor.IsZero() {
-		return nil
-	}
-
-	event.ActorID = actor.ID
-	event.IP = actor.IP
-	event.UserAgent = truncateUserAgent(actor.UserAgent)
-
-	// The address is NOT NULL and typed inet, so a request that reached here
-	// without one — a test, a job — needs something valid rather than a
-	// constraint violation that hides the change it was describing.
-	if event.IP == "" {
-		event.IP = "0.0.0.0"
-	}
-
-	if err := tx.Create(event).Error; err != nil {
-		return fmt.Errorf("store: record authz event: %w", err)
-	}
-
-	return nil
-}
-
-// recordEnt is record for an ent transaction. Same rules: no actor, no row; the
-// write shares the transaction that is making the change. It exists because the
-// invitation methods moved off GORM and the audit row still has to land with them.
 func recordEnt(ctx context.Context, tx *ent.Tx, event *models.AuthzEvent) error {
 	actor := audit.ActorFrom(ctx)
 	if actor.IsZero() {
 		return nil
 	}
 
-	ip := event.IP
+	ip := actor.IP
+
+	// The address is NOT NULL and typed inet, so a request that reached here
+	// without one — a test, a job — needs something valid rather than a
+	// constraint violation that hides the change it was describing.
 	if ip == "" {
 		ip = "0.0.0.0"
 	}
@@ -238,36 +214,4 @@ func (e *eventRow) toEvent() audit.Event {
 	}
 
 	return event
-}
-
-// recordAboutMember fills in the subject from a membership before writing.
-//
-// The audit is about people, and a membership id means nothing to somebody
-// reading the history a year later. Resolving it here rather than at read time
-// also means the entry survives the membership being deleted, which is exactly
-// the case "who removed them" is asked about.
-func recordAboutMember(
-	ctx context.Context,
-	tx *gorm.DB,
-	orgID, memberID uuid.UUID,
-	event *models.AuthzEvent,
-) error {
-	if audit.ActorFrom(ctx).IsZero() {
-		return nil
-	}
-
-	var membership models.Membership
-
-	err := tx.Select("user_id").
-		First(&membership, "id = ? AND organization_id = ?", memberID, orgID).Error
-	if err != nil {
-		return fmt.Errorf("store: audit subject: %w", err)
-	}
-
-	// Every membership has an account behind it now, so there is no longer a case
-	// where the subject is unknown and the address has to stand in for it.
-	subject := membership.UserID
-	event.SubjectID = &subject
-
-	return record(ctx, tx, event)
 }

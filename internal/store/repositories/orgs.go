@@ -2,17 +2,27 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membershiprole"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/organization"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/predicate"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/role"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/rolepermission"
+	entuser "github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/usersystemrole"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
@@ -32,15 +42,15 @@ var (
 )
 
 // translateOrgError funnels the driver errors this file produces into domain
-// vocabulary. GORM's error types stop here, which is what lets internal/api map
+// vocabulary. ent's error types stop here, which is what lets internal/api map
 // orgs.ErrNotFound onto a 404 without knowing a database was involved.
 func translateOrgError(op string, err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, gorm.ErrRecordNotFound), isNotFound(err):
+	case isNotFound(err):
 		return orgs.ErrNotFound
-	case errors.Is(err, gorm.ErrDuplicatedKey):
+	case isUniqueViolation(err):
 		return orgs.ErrRoleKeyTaken
 	case errors.Is(err, models.ErrProtected),
 		errors.Is(err, models.ErrRoleIsSystem),
@@ -55,40 +65,36 @@ func translateOrgError(op string, err error) error {
 }
 
 func (r *Orgs) Organization(ctx context.Context, orgID uuid.UUID) (*models.Organization, error) {
-	var org models.Organization
-
-	// Queried through the model, so GORM's soft-delete scope applies and a
-	// deleted organization is already excluded.
-	if err := r.db.WithContext(ctx).First(&org, "id = ?", orgID).Error; err != nil {
+	row, err := r.db.Ent().Organization.Get(ctx, orgID)
+	if err != nil {
 		return nil, translateOrgError("organization", err)
 	}
 
-	return &org, nil
+	out := organizationModel(row)
+
+	return &out, nil
 }
 
 // UpdateOrganization renames it with a targeted statement.
 //
-// Hooks are skipped, and that needs saying. GORM runs BeforeSave against the
-// struct handed to Model, which for a statement-level update is a zero value —
-// so Organization.BeforeSave would see an empty slug and refuse a rename that is
-// perfectly valid. The validation that matters happens twice anyway: the service
-// checks the name before calling, and NOT NULL plus the length limit are on the
-// column. The same applies to UpdateRole and SetMemberStatus below.
+// The service checks the name before calling, and NOT NULL plus the length limit
+// are on the column. DeletedAtIsNil is written out because the interceptor only
+// filters reads — an update against a retired row would otherwise rewrite it.
 func (r *Orgs) UpdateOrganization(ctx context.Context, orgID uuid.UUID, name string) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Session(&gorm.Session{SkipHooks: true}).
-			Model(&models.Organization{}).
-			Where("id = ?", orgID).
-			Update("name", name)
-		if res.Error != nil {
-			return res.Error
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		affected, err := tx.Organization.Update().
+			Where(organization.ID(orgID), organization.DeletedAtIsNil()).
+			SetName(name).
+			Save(ctx)
+		if err != nil {
+			return err
 		}
 
-		if res.RowsAffected == 0 {
+		if affected == 0 {
 			return orgs.ErrNotFound
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         models.ActionOrganizationUpdated,
 			Detail:         name,
@@ -99,20 +105,24 @@ func (r *Orgs) UpdateOrganization(ctx context.Context, orgID uuid.UUID, name str
 }
 
 // DeleteOrganization soft deletes it. The row has to be loaded first so
-// BeforeDelete sees IsProtected — a bare Where(...).Delete() hands the hook a
-// zero-valued receiver and the protection would silently not apply.
+// IsProtected is visible — the soft-delete hook receives a predicate, not a row,
+// and cannot refuse a protected organization on its own.
 func (r *Orgs) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 	org, err := r.Organization(ctx, orgID)
 	if err != nil {
 		return err
 	}
 
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(org).Error; err != nil {
+	if org.IsProtected {
+		return models.ErrProtected
+	}
+
+	err = r.withTx(ctx, func(tx *ent.Tx) error {
+		if err := tx.Organization.DeleteOneID(org.ID).Exec(ctx); err != nil {
 			return err
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         models.ActionOrganizationDeleted,
 			Detail:         org.Slug,
@@ -120,6 +130,38 @@ func (r *Orgs) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 	})
 
 	return translateOrgError("delete organization", err)
+}
+
+func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]orgs.Member, error) {
+	rows, err := r.memberRows(ctx, &memberPage{limit: limit, offset: offset}, membership.OrganizationID(orgID))
+	if err != nil {
+		return nil, fmt.Errorf("store: members: %w", err)
+	}
+
+	return r.attachRoles(ctx, rows)
+}
+
+func (r *Orgs) Member(ctx context.Context, orgID, memberID uuid.UUID) (*orgs.Member, error) {
+	rows, err := r.memberRows(ctx, nil, membership.OrganizationID(orgID), membership.ID(memberID))
+	if err != nil {
+		return nil, fmt.Errorf("store: member: %w", err)
+	}
+
+	// Scoped by organization, so a membership id from another tenant simply
+	// does not match and comes back as not found. A membership whose account has
+	// been deleted is not found either, the same as in Members: HasUser goes
+	// through the interceptor, so a retired account is not on the other side of
+	// the edge.
+	if len(rows) == 0 {
+		return nil, orgs.ErrNotFound
+	}
+
+	members, err := r.attachRoles(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return &members[0], nil
 }
 
 // memberRow is the flat shape the member queries scan into.
@@ -132,65 +174,67 @@ type memberRow struct {
 	JoinedAt *time.Time
 }
 
-// Members lists everyone in the organization.
+// memberRows lists memberships whose account is still live.
 //
 // The join is inner, and now it can be. It had to be a left join while an
 // invitation was a membership with no user id, and that was the trap: a condition
 // in a LEFT JOIN does not remove rows, it only blanks the joined columns, so
 // "AND u.deleted_at IS NULL" filtered nothing and a deleted account stayed on the
 // list with an empty name. Every membership has an account behind it now, so the
-// rule "a row whose account is gone is not a member" is the join itself.
+// rule "a row whose account is gone is not a member" is HasUser itself.
 //
-// It is paged, and the order carries the membership id as a tiebreaker. Names are
-// not unique, and a sort with ties is free to return them in any order it likes
-// between two queries — which with an offset means a page boundary that drops one
-// row and repeats another. The id makes the order total, so the same table always
-// pages the same way.
-func (r *Orgs) Members(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]orgs.Member, error) {
-	var rows []memberRow
-
-	err := r.db.WithContext(ctx).
-		Table("memberships AS m").
-		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ?", orgID).
-		Order("u.name ASC, m.id ASC").
-		Limit(limit).
-		Offset(offset).
-		Scan(&rows).Error
-	if err != nil {
-		return nil, fmt.Errorf("store: members: %w", err)
-	}
-
-	return r.attachRoles(ctx, rows)
+// The order carries the membership id as a tiebreaker. Names are not unique, and
+// a sort with ties is free to return them in any order it likes between two
+// queries — which with an offset means a page boundary that drops one row and
+// repeats another. The id makes the order total, so the same table always pages
+// the same way.
+type memberPage struct {
+	limit, offset int
 }
 
-func (r *Orgs) Member(ctx context.Context, orgID, memberID uuid.UUID) (*orgs.Member, error) {
-	var rows []memberRow
+// liveUser is the "account is still there" half of every member lookup.
+//
+// HasUser() only asks whether the foreign key points at a users row. The
+// interceptor that hides retired rows runs on User queries, not on that
+// EXISTS, so a deleted account still satisfies HasUser — and WithUser then
+// returns nil. DeletedAtIsNil is the same predicate the GORM join wrote as
+// "u.deleted_at IS NULL".
+func liveUser() predicate.Membership {
+	return membership.HasUserWith(entuser.DeletedAtIsNil())
+}
 
-	err := r.db.WithContext(ctx).
-		Table("memberships AS m").
-		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ? AND m.id = ?", orgID, memberID).
-		Scan(&rows).Error
-	if err != nil {
-		return nil, fmt.Errorf("store: member: %w", err)
+func (r *Orgs) memberRows(
+	ctx context.Context,
+	page *memberPage,
+	preds ...predicate.Membership,
+) ([]memberRow, error) {
+	query := r.db.Ent().Membership.Query().
+		Where(append(preds, liveUser())...).
+		WithUser().
+		Order(membership.ByUserField(entuser.FieldName), ent.Asc(membership.FieldID))
+	if page != nil {
+		query = query.Limit(page.limit).Offset(page.offset)
 	}
 
-	// Scoped by organization, so a membership id from another tenant simply
-	// does not match and comes back as not found. A membership whose account has
-	// been deleted is not found either, the same as in Members.
-	if len(rows) == 0 {
-		return nil, orgs.ErrNotFound
-	}
-
-	members, err := r.attachRoles(ctx, rows)
+	found, err := query.All(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return &members[0], nil
+	out := make([]memberRow, 0, len(found))
+	for _, row := range found {
+		u := row.Edges.User
+		out = append(out, memberRow{
+			ID:       row.ID,
+			UserID:   row.UserID,
+			Name:     u.Name,
+			Email:    u.Email,
+			Status:   models.MembershipStatus(row.Status),
+			JoinedAt: row.JoinedAt,
+		})
+	}
+
+	return out, nil
 }
 
 // attachRoles fills in each member's roles with one further query rather than
@@ -220,21 +264,11 @@ func (r *Orgs) attachRoles(ctx context.Context, rows []memberRow) ([]orgs.Member
 		ids = append(ids, member.ID)
 	}
 
-	var assignments []struct {
-		MembershipID uuid.UUID
-		ID           uuid.UUID
-		Key          string
-		Name         string
-		IsSystem     bool
-	}
-
-	err := r.db.WithContext(ctx).
-		Table("membership_roles AS mr").
-		Select("mr.membership_id, r.id, r.key, r.name, r.is_system").
-		Joins("JOIN roles r ON r.id = mr.role_id").
-		Where("mr.membership_id IN ?", ids).
-		Order("r.key ASC").
-		Scan(&assignments).Error
+	assignments, err := r.db.Ent().MembershipRole.Query().
+		Where(membershiprole.MembershipIDIn(ids...)).
+		WithRole().
+		Order(membershiprole.ByRoleField(role.FieldKey)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: member roles: %w", err)
 	}
@@ -245,13 +279,18 @@ func (r *Orgs) attachRoles(ctx context.Context, rows []memberRow) ([]orgs.Member
 	}
 
 	for _, a := range assignments {
+		roleRow := a.Edges.Role
+		if roleRow == nil {
+			continue
+		}
+
 		i, ok := index[a.MembershipID]
 		if !ok {
 			continue
 		}
 
 		out[i].Roles = append(out[i].Roles, orgs.RoleSummary{
-			ID: a.ID, Key: a.Key, Name: a.Name, IsSystem: a.IsSystem,
+			ID: roleRow.ID, Key: roleRow.Key, Name: roleRow.Name, IsSystem: roleRow.IsSystem,
 		})
 	}
 
@@ -265,7 +304,7 @@ func (r *Orgs) AddMember(
 	invitedBy uuid.UUID,
 	at time.Time,
 ) (*orgs.Member, error) {
-	membership := &models.Membership{
+	m := &models.Membership{
 		OrganizationID: orgID,
 		UserID:         userID,
 		Status:         models.MembershipActive,
@@ -273,19 +312,28 @@ func (r *Orgs) AddMember(
 
 	if invitedBy != uuid.Nil {
 		by := invitedBy
-		membership.InvitedBy = &by
+		m.InvitedBy = &by
 	}
 
-	membership.Activate(at)
+	m.Activate(at)
+
+	var membershipID uuid.UUID
 
 	// This used to open a savepoint, attempt the insert, roll back on a unique
 	// violation and claim an outstanding invitation instead — because an invitation
 	// was a membership row and the index refused the second one. Invitations have
 	// their own table now, so provisioning is an insert and a duplicate means what
 	// it says.
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(membership).Error; err != nil {
-			if errors.Is(err, gorm.ErrDuplicatedKey) {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		created, err := tx.Membership.Create().
+			SetOrganizationID(m.OrganizationID).
+			SetUserID(m.UserID).
+			SetStatus(membership.Status(m.Status)).
+			SetNillableInvitedBy(m.InvitedBy).
+			SetNillableJoinedAt(m.JoinedAt).
+			Save(ctx)
+		if err != nil {
+			if isUniqueViolation(err) {
 				return orgs.ErrAlreadyMember
 			}
 
@@ -293,18 +341,20 @@ func (r *Orgs) AddMember(
 			// untranslated it arrives as an opaque 500, and this path takes an
 			// account id straight from a request — the platform endpoint that
 			// appoints an owner.
-			if errors.Is(err, gorm.ErrForeignKeyViolated) {
+			if isForeignKeyViolation(err) {
 				return orgs.ErrNotFound
 			}
 
 			return err
 		}
 
-		if err := assignRoles(tx, orgID, membership.ID, roleIDs); err != nil {
+		membershipID = created.ID
+
+		if err := assignMembershipRoles(ctx, tx, orgID, created.ID, roleIDs); err != nil {
 			return err
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			SubjectID:      &userID,
 			Action:         models.ActionMemberJoined,
@@ -314,7 +364,7 @@ func (r *Orgs) AddMember(
 		return nil, translateOrgError("add member", err)
 	}
 
-	return r.Member(ctx, orgID, membership.ID)
+	return r.Member(ctx, orgID, membershipID)
 }
 
 func (r *Orgs) SetMemberStatus(
@@ -324,38 +374,45 @@ func (r *Orgs) SetMemberStatus(
 	at time.Time,
 	guard orgs.OwnerGuard,
 ) error {
-	updates := map[string]any{"status": status}
-
-	// Reinstating somebody who never accepted stamps the join date; one who
-	// already has one keeps it, so "joined three years ago" is not rewritten to
-	// "joined on Tuesday".
-	if status.GrantsPermissions() {
-		updates["joined_at"] = gorm.Expr("COALESCE(joined_at, ?::timestamptz)", at.UTC())
-	}
-
 	action := models.ActionMemberSuspended
 	if status.GrantsPermissions() {
 		action = models.ActionMemberReinstated
 	}
 
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := applyOwnerGuard(tx, orgID, memberID, guard); err != nil {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		if err := applyOwnerGuard(ctx, tx, orgID, memberID, guard); err != nil {
 			return err
 		}
 
-		res := tx.Session(&gorm.Session{SkipHooks: true}).
-			Model(&models.Membership{}).
-			Where("id = ? AND organization_id = ?", memberID, orgID).
-			Updates(updates)
-		if res.Error != nil {
-			return res.Error
+		update := tx.Membership.Update().
+			Where(membership.ID(memberID), membership.OrganizationID(orgID)).
+			SetStatus(membership.Status(status))
+
+		// Reinstating somebody who never accepted stamps the join date; one who
+		// already has one keeps it, so "joined three years ago" is not rewritten to
+		// "joined on Tuesday".
+		if status.GrantsPermissions() {
+			update.Modify(func(u *entsql.UpdateBuilder) {
+				u.Set(membership.FieldJoinedAt, entsql.ExprFunc(func(b *entsql.Builder) {
+					b.WriteString("COALESCE(").
+						Ident(membership.FieldJoinedAt).
+						WriteString(", ").
+						Arg(at.UTC()).
+						WriteString("::timestamptz)")
+				}))
+			})
 		}
 
-		if res.RowsAffected == 0 {
+		affected, err := update.Save(ctx)
+		if err != nil {
+			return err
+		}
+
+		if affected == 0 {
 			return orgs.ErrNotFound
 		}
 
-		return recordAboutMember(ctx, tx, orgID, memberID, &models.AuthzEvent{
+		return recordAboutMemberEnt(ctx, tx, orgID, memberID, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         action,
 			Detail:         string(status),
@@ -371,25 +428,28 @@ func (r *Orgs) RemoveMember(
 	action models.AuthzAction,
 	guard orgs.OwnerGuard,
 ) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := applyOwnerGuard(tx, orgID, memberID, guard); err != nil {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		if err := applyOwnerGuard(ctx, tx, orgID, memberID, guard); err != nil {
 			return err
 		}
 
 		// The subject is read before the row goes, or there is nothing left to
-		// attribute the entry to.
+		// attribute the entry to. This does not look the member up through users:
+		// a membership whose account is gone is still a row that has to be
+		// removable, and every other method reports that row as not found.
 		event := &models.AuthzEvent{OrganizationID: &orgID, Action: action}
-		if err := recordAboutMember(ctx, tx, orgID, memberID, event); err != nil {
+		if err := recordAboutMemberEnt(ctx, tx, orgID, memberID, event); err != nil {
 			return err
 		}
 
-		res := tx.Where("id = ? AND organization_id = ?", memberID, orgID).
-			Delete(&models.Membership{})
-		if res.Error != nil {
-			return res.Error
+		affected, err := tx.Membership.Delete().
+			Where(membership.ID(memberID), membership.OrganizationID(orgID)).
+			Exec(ctx)
+		if err != nil {
+			return err
 		}
 
-		if res.RowsAffected == 0 {
+		if affected == 0 {
 			return orgs.ErrNotFound
 		}
 
@@ -405,68 +465,39 @@ func (r *Orgs) ReplaceMemberRoles(
 	roleIDs []uuid.UUID,
 	guard orgs.OwnerGuard,
 ) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := applyOwnerGuard(tx, orgID, memberID, guard); err != nil {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		if err := applyOwnerGuard(ctx, tx, orgID, memberID, guard); err != nil {
 			return err
 		}
 
-		var count int64
-		if err := tx.Model(&models.Membership{}).
-			Where("id = ? AND organization_id = ?", memberID, orgID).
-			Count(&count).Error; err != nil {
+		n, err := tx.Membership.Query().
+			Where(membership.ID(memberID), membership.OrganizationID(orgID)).
+			Count(ctx)
+		if err != nil {
 			return err
 		}
 
-		if count == 0 {
+		if n == 0 {
 			return orgs.ErrNotFound
 		}
 
-		if err := tx.Where("membership_id = ?", memberID).Delete(&models.MembershipRole{}).Error; err != nil {
+		if _, err := tx.MembershipRole.Delete().
+			Where(membershiprole.MembershipID(memberID)).
+			Exec(ctx); err != nil {
 			return err
 		}
 
-		if err := assignRoles(tx, orgID, memberID, roleIDs); err != nil {
+		if err := assignMembershipRoles(ctx, tx, orgID, memberID, roleIDs); err != nil {
 			return err
 		}
 
-		return recordAboutMember(ctx, tx, orgID, memberID, &models.AuthzEvent{
+		return recordAboutMemberEnt(ctx, tx, orgID, memberID, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         models.ActionMemberRolesChanged,
 		})
 	})
 
 	return translateOrgError("replace member roles", err)
-}
-
-// assignRoles inserts the assignments, refusing any role that is not this
-// organization's.
-//
-// The check is a filtered count rather than a foreign key, because the foreign
-// key only says the role exists somewhere. Borrowing another tenant's role id
-// would otherwise be a perfectly valid insert.
-func assignRoles(tx *gorm.DB, orgID, membershipID uuid.UUID, roleIDs []uuid.UUID) error {
-	if len(roleIDs) == 0 {
-		return nil
-	}
-
-	var owned int64
-	if err := tx.Model(&models.Role{}).
-		Where("organization_id = ? AND id IN ?", orgID, roleIDs).
-		Distinct("id").
-		Count(&owned).Error; err != nil {
-		return err
-	}
-
-	if int(owned) != len(uniqueIDs(roleIDs)) {
-		return orgs.ErrNotFound
-	}
-
-	rows := make([]models.MembershipRole, 0, len(roleIDs))
-	for _, roleID := range uniqueIDs(roleIDs) {
-		rows = append(rows, models.MembershipRole{MembershipID: membershipID, RoleID: roleID})
-	}
-
-	return tx.Create(&rows).Error
 }
 
 func uniqueIDs(ids []uuid.UUID) []uuid.UUID {
@@ -495,29 +526,33 @@ func containsID(ids []uuid.UUID, id uuid.UUID) bool {
 // the order the settings screen shows them in, and key is unique within an
 // organization, so the order is already total and the pages are stable.
 func (r *Orgs) Roles(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]orgs.Role, error) {
-	var rows []models.Role
-	if err := r.db.WithContext(ctx).
-		Where("organization_id = ?", orgID).
-		Order("is_system DESC, key ASC").
+	found, err := r.db.Ent().Role.Query().
+		Where(role.OrganizationID(orgID)).
+		Order(ent.Desc(role.FieldIsSystem), ent.Asc(role.FieldKey)).
 		Limit(limit).
 		Offset(offset).
-		Find(&rows).Error; err != nil {
+		All(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("store: roles: %w", err)
+	}
+
+	rows := make([]models.Role, 0, len(found))
+	for _, row := range found {
+		rows = append(rows, roleModel(row))
 	}
 
 	return r.decorateRoles(ctx, rows)
 }
 
 func (r *Orgs) Role(ctx context.Context, orgID, roleID uuid.UUID) (*orgs.Role, error) {
-	var row models.Role
-
-	err := r.db.WithContext(ctx).
-		First(&row, "id = ? AND organization_id = ?", roleID, orgID).Error
+	row, err := r.db.Ent().Role.Query().
+		Where(role.ID(roleID), role.OrganizationID(orgID)).
+		Only(ctx)
 	if err != nil {
 		return nil, translateOrgError("role", err)
 	}
 
-	decorated, err := r.decorateRoles(ctx, []models.Role{row})
+	decorated, err := r.decorateRoles(ctx, []models.Role{roleModel(row)})
 	if err != nil {
 		return nil, err
 	}
@@ -538,26 +573,20 @@ func (r *Orgs) decorateRoles(ctx context.Context, rows []models.Role) ([]orgs.Ro
 	}
 
 	ids := make([]uuid.UUID, 0, len(out))
-	for _, role := range out {
-		ids = append(ids, role.ID)
+	for _, roleRow := range out {
+		ids = append(ids, roleRow.ID)
 	}
 
 	index := make(map[uuid.UUID]int, len(out))
-	for i, role := range out {
-		index[role.ID] = i
+	for i, roleRow := range out {
+		index[roleRow.ID] = i
 	}
 
-	var permissions []struct {
-		RoleID        uuid.UUID
-		PermissionKey string
-	}
-
-	if err := r.db.WithContext(ctx).
-		Table("role_permissions").
-		Select("role_id, permission_key").
-		Where("role_id IN ?", ids).
-		Order("permission_key ASC").
-		Scan(&permissions).Error; err != nil {
+	permissions, err := r.db.Ent().RolePermission.Query().
+		Where(rolepermission.RoleIDIn(ids...)).
+		Order(ent.Asc(rolepermission.FieldPermissionKey)).
+		All(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("store: role permissions: %w", err)
 	}
 
@@ -573,23 +602,16 @@ func (r *Orgs) decorateRoles(ctx context.Context, rows []models.Role) ([]orgs.Ro
 		out[i].Permissions = append(out[i].Permissions, authz.Permission(row.PermissionKey))
 	}
 
-	var counts []struct {
-		RoleID uuid.UUID
-		Total  int
-	}
-
-	if err := r.db.WithContext(ctx).
-		Table("membership_roles").
-		Select("role_id, COUNT(*) AS total").
-		Where("role_id IN ?", ids).
-		Group("role_id").
-		Scan(&counts).Error; err != nil {
+	holders, err := r.db.Ent().MembershipRole.Query().
+		Where(membershiprole.RoleIDIn(ids...)).
+		All(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("store: role holders: %w", err)
 	}
 
-	for _, row := range counts {
+	for _, row := range holders {
 		if i, ok := index[row.RoleID]; ok {
-			out[i].Members = row.Total
+			out[i].Members++
 		}
 	}
 
@@ -599,49 +621,67 @@ func (r *Orgs) decorateRoles(ctx context.Context, rows []models.Role) ([]orgs.Ro
 func (r *Orgs) CreateRole(
 	ctx context.Context,
 	orgID uuid.UUID,
-	role *models.Role,
+	roleRow *models.Role,
 	permissions []authz.Permission,
 ) (*orgs.Role, error) {
-	role.OrganizationID = orgID
+	roleRow.OrganizationID = orgID
 
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(role).Error; err != nil {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		create := tx.Role.Create().
+			SetOrganizationID(orgID).
+			SetKey(roleRow.Key).
+			SetName(roleRow.Name).
+			SetDescription(roleRow.Description).
+			SetIsSystem(roleRow.IsSystem)
+		if roleRow.ID != uuid.Nil {
+			create = create.SetID(roleRow.ID)
+		}
+
+		created, err := create.Save(ctx)
+		if err != nil {
 			return err
 		}
 
-		if err := replacePermissions(tx, role.ID, permissions); err != nil {
+		roleRow.ID = created.ID
+		roleRow.CreatedAt = created.CreatedAt
+		roleRow.UpdatedAt = created.UpdatedAt
+
+		if err := insertRolePermissions(ctx, tx, created.ID, permissions); err != nil {
 			return err
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         models.ActionRoleCreated,
-			RoleID:         &role.ID,
-			Detail:         role.Key,
+			RoleID:         &roleRow.ID,
+			Detail:         roleRow.Key,
 		})
 	})
 	if err != nil {
 		return nil, translateOrgError("create role", err)
 	}
 
-	return r.Role(ctx, orgID, role.ID)
+	return r.Role(ctx, orgID, roleRow.ID)
 }
 
 func (r *Orgs) UpdateRole(ctx context.Context, orgID, roleID uuid.UUID, name, description string) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Session(&gorm.Session{SkipHooks: true}).
-			Model(&models.Role{}).
-			Where("id = ? AND organization_id = ? AND is_system = false", roleID, orgID).
-			Updates(map[string]any{"name": name, "description": description})
-		if res.Error != nil {
-			return res.Error
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		// SetDescription("") must write: an empty description is a value, not an
+		// omit. ClearDescription would leave the previous text in place.
+		affected, err := tx.Role.Update().
+			Where(role.ID(roleID), role.OrganizationID(orgID), role.IsSystem(false)).
+			SetName(name).
+			SetDescription(description).
+			Save(ctx)
+		if err != nil {
+			return err
 		}
 
-		if res.RowsAffected == 0 {
+		if affected == 0 {
 			return orgs.ErrNotFound
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         models.ActionRoleUpdated,
 			RoleID:         &roleID,
@@ -655,46 +695,52 @@ func (r *Orgs) UpdateRole(ctx context.Context, orgID, roleID uuid.UUID, name, de
 	return nil
 }
 
-// DeleteRole loads the row first so BeforeDelete sees IsSystem — a bare
-// Where(...).Delete() hands the hook a zero-valued receiver and the protection
-// would not apply.
+// DeleteRole loads the row first so IsSystem is visible — a delete by predicate
+// alone would not see the flag, and a shipped role would go.
 func (r *Orgs) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard orgs.RoleGuard) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
 		// The same lock every other serialised change here takes, so this and a
 		// concurrent role assignment cannot interleave. Counting holders without it
 		// answers a question that stops being true before the delete lands.
-		if err := lockOrganization(tx, orgID); err != nil {
+		if err := lockOrganization(ctx, tx, orgID); err != nil {
 			return err
 		}
 
-		var role models.Role
-		if err := tx.First(&role, "id = ? AND organization_id = ?", roleID, orgID).Error; err != nil {
+		row, err := tx.Role.Query().
+			Where(role.ID(roleID), role.OrganizationID(orgID)).
+			Only(ctx)
+		if err != nil {
 			return err
 		}
 
-		var holders int64
-		if err := tx.Model(&models.MembershipRole{}).
-			Where("role_id = ?", roleID).Count(&holders).Error; err != nil {
+		if row.IsSystem {
+			return models.ErrRoleIsSystem
+		}
+
+		holders, err := tx.MembershipRole.Query().
+			Where(membershiprole.RoleID(roleID)).
+			Count(ctx)
+		if err != nil {
 			return err
 		}
 
-		if err := guard(int(holders)); err != nil {
+		if err := guard(holders); err != nil {
 			return err
 		}
 
 		// Recorded before the delete: the role id is captured while the row is
 		// still there, and the key with it, so an entry about a role that no
 		// longer exists still says which one.
-		if err := record(ctx, tx, &models.AuthzEvent{
+		if err := recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         models.ActionRoleDeleted,
 			RoleID:         &roleID,
-			Detail:         role.Key,
+			Detail:         row.Key,
 		}); err != nil {
 			return err
 		}
 
-		return tx.Delete(&role).Error
+		return tx.Role.DeleteOneID(row.ID).Exec(ctx)
 	})
 
 	return translateOrgError("delete role", err)
@@ -705,27 +751,29 @@ func (r *Orgs) ReplaceRolePermissions(
 	orgID, roleID uuid.UUID,
 	permissions []authz.Permission,
 ) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&models.Role{}).
-			Where("id = ? AND organization_id = ?", roleID, orgID).
-			Count(&count).Error; err != nil {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		n, err := tx.Role.Query().
+			Where(role.ID(roleID), role.OrganizationID(orgID)).
+			Count(ctx)
+		if err != nil {
 			return err
 		}
 
-		if count == 0 {
+		if n == 0 {
 			return orgs.ErrNotFound
 		}
 
-		if err := tx.Where("role_id = ?", roleID).Delete(&models.RolePermission{}).Error; err != nil {
+		if _, err := tx.RolePermission.Delete().
+			Where(rolepermission.RoleID(roleID)).
+			Exec(ctx); err != nil {
 			return err
 		}
 
-		if err := replacePermissions(tx, roleID, permissions); err != nil {
+		if err := insertRolePermissions(ctx, tx, roleID, permissions); err != nil {
 			return err
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         models.ActionRolePermissionsChanged,
 			RoleID:         &roleID,
@@ -736,17 +784,19 @@ func (r *Orgs) ReplaceRolePermissions(
 	return translateOrgError("replace role permissions", err)
 }
 
-func replacePermissions(tx *gorm.DB, roleID uuid.UUID, permissions []authz.Permission) error {
+func insertRolePermissions(ctx context.Context, tx *ent.Tx, roleID uuid.UUID, permissions []authz.Permission) error {
 	if len(permissions) == 0 {
 		return nil
 	}
 
-	rows := make([]models.RolePermission, 0, len(permissions))
+	creates := make([]*ent.RolePermissionCreate, 0, len(permissions))
 	for _, perm := range permissions {
-		rows = append(rows, models.RolePermission{RoleID: roleID, PermissionKey: string(perm)})
+		creates = append(creates, tx.RolePermission.Create().
+			SetRoleID(roleID).
+			SetPermissionKey(string(perm)))
 	}
 
-	return tx.Create(&rows).Error
+	return tx.RolePermission.CreateBulk(creates...).Exec(ctx)
 }
 
 // MembershipsForUser lists the account's organizations with the roles it holds
@@ -758,63 +808,52 @@ func replacePermissions(tx *gorm.DB, roleID uuid.UUID, permissions []authz.Permi
 // field to it. The second query is a single IN over the memberships already
 // found.
 func (r *Orgs) MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]orgs.Membership, error) {
-	var rows []struct {
-		MembershipID uuid.UUID
-		Status       models.MembershipStatus
-		models.Organization
-	}
-
-	err := r.db.WithContext(ctx).
-		Table("memberships AS m").
-		Select("m.id AS membership_id, m.status, o.*").
-		Joins("JOIN organizations o ON o.id = m.organization_id AND o.deleted_at IS NULL").
-		// Only this account's memberships. The subquery that also matched an
-		// invitation by address is gone with the status it looked for: an
-		// invitation is not one of the organizations you belong to.
-		Where("m.user_id = ?", userID).
-		Order("o.name ASC").
-		Scan(&rows).Error
+	found, err := r.db.Ent().Membership.Query().
+		Where(
+			membership.UserID(userID),
+			membership.HasOrganizationWith(organization.DeletedAtIsNil()),
+		).
+		WithOrganization().
+		Order(membership.ByOrganizationField(organization.FieldName)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: memberships for user: %w", err)
 	}
 
-	if len(rows) == 0 {
+	if len(found) == 0 {
 		return nil, nil
 	}
 
-	ids := make([]uuid.UUID, 0, len(rows))
-	for _, row := range rows {
-		ids = append(ids, row.MembershipID)
+	ids := make([]uuid.UUID, 0, len(found))
+	for _, row := range found {
+		ids = append(ids, row.ID)
 	}
 
-	var assignments []struct {
-		MembershipID uuid.UUID
-		Key          string
-	}
-
-	err = r.db.WithContext(ctx).
-		Table("membership_roles AS mr").
-		Select("mr.membership_id, r.key").
-		Joins("JOIN roles r ON r.id = mr.role_id").
-		Where("mr.membership_id IN ?", ids).
-		Order("r.key ASC").
-		Scan(&assignments).Error
+	assignments, err := r.db.Ent().MembershipRole.Query().
+		Where(membershiprole.MembershipIDIn(ids...)).
+		WithRole().
+		Order(membershiprole.ByRoleField(role.FieldKey)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: membership roles: %w", err)
 	}
 
 	keysByMembership := make(map[uuid.UUID][]string, len(ids))
 	for _, a := range assignments {
-		keysByMembership[a.MembershipID] = append(keysByMembership[a.MembershipID], a.Key)
+		if a.Edges.Role == nil {
+			continue
+		}
+
+		keysByMembership[a.MembershipID] = append(keysByMembership[a.MembershipID], a.Edges.Role.Key)
 	}
 
-	out := make([]orgs.Membership, 0, len(rows))
-	for _, row := range rows {
+	out := make([]orgs.Membership, 0, len(found))
+	for _, row := range found {
 		out = append(out, orgs.Membership{
-			ID:           row.MembershipID,
-			Organization: row.Organization,
-			Status:       row.Status,
-			RoleKeys:     keysByMembership[row.MembershipID],
+			ID:           row.ID,
+			Organization: organizationModel(row.Edges.Organization),
+			Status:       models.MembershipStatus(row.Status),
+			RoleKeys:     keysByMembership[row.ID],
 		})
 	}
 
@@ -824,13 +863,16 @@ func (r *Orgs) MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]orgs
 // --- orgs.Provisioner ---
 
 func (r *Orgs) OrganizationBySlug(ctx context.Context, slug string) (*models.Organization, error) {
-	var org models.Organization
-
-	if err := r.db.WithContext(ctx).First(&org, "slug = ?", slug).Error; err != nil {
+	row, err := r.db.Ent().Organization.Query().
+		Where(organization.Slug(slug)).
+		Only(ctx)
+	if err != nil {
 		return nil, translateOrgError("organization by slug", err)
 	}
 
-	return &org, nil
+	out := organizationModel(row)
+
+	return &out, nil
 }
 
 // CreateOrganization stores the organization and materialises the shipped roles
@@ -845,34 +887,47 @@ func (r *Orgs) CreateOrganization(
 	org *models.Organization,
 	roles []authz.RoleDefinition,
 ) (*models.Organization, error) {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(org).Error; err != nil {
-			if errors.Is(err, gorm.ErrDuplicatedKey) {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		create := tx.Organization.Create().
+			SetSlug(org.Slug).
+			SetName(org.Name).
+			SetIsProtected(org.IsProtected)
+		if org.ID != uuid.Nil {
+			create = create.SetID(org.ID)
+		}
+
+		created, err := create.Save(ctx)
+		if err != nil {
+			if isUniqueViolation(err) {
 				return orgs.ErrSlugTaken
 			}
 
 			return err
 		}
 
-		for _, def := range roles {
-			role := &models.Role{
-				OrganizationID: org.ID,
-				Key:            string(def.Key),
-				Name:           def.Name,
-				Description:    def.Description,
-				IsSystem:       true,
-			}
+		org.ID = created.ID
+		org.CreatedAt = created.CreatedAt
+		org.UpdatedAt = created.UpdatedAt
+		org.IsProtected = created.IsProtected
 
-			if err := tx.Create(role).Error; err != nil {
+		for _, def := range roles {
+			createdRole, err := tx.Role.Create().
+				SetOrganizationID(org.ID).
+				SetKey(string(def.Key)).
+				SetName(def.Name).
+				SetDescription(def.Description).
+				SetIsSystem(true).
+				Save(ctx)
+			if err != nil {
 				return err
 			}
 
-			if err := replacePermissions(tx, role.ID, def.Permissions); err != nil {
+			if err := insertRolePermissions(ctx, tx, createdRole.ID, def.Permissions); err != nil {
 				return err
 			}
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			OrganizationID: &org.ID,
 			Action:         models.ActionOrganizationCreated,
 			Detail:         org.Slug,
@@ -915,36 +970,60 @@ func (r *Orgs) AllOrganizations(
 	filter orgs.OrganizationFilter,
 	limit, offset int,
 ) ([]orgs.OrganizationSummary, error) {
-	type row struct {
-		models.Organization
-		Owners int
-	}
-
-	var rows []row
-
-	// Queried through the model so GORM's soft-delete scope still applies: a
-	// deleted organization has no owners either, and listing it as ownerless would
-	// send an administrator to appoint one.
-	query := r.db.WithContext(ctx).
-		Model(&models.Organization{}).
-		Select("organizations.*, " + activeOwners + " AS owners")
+	// Raw SQL, the same shape audit uses: a correlated subquery over four tables
+	// is what this listing *is*, and the interceptor's table alias would make
+	// `organizations.id` inside activeOwners a guess. deleted_at is written out
+	// because no ORM's soft-delete scope reaches a query built from table names.
+	query := `
+		SELECT organizations.id, organizations.created_at, organizations.updated_at,
+		       organizations.deleted_at, organizations.is_protected, organizations.slug,
+		       organizations.name, ` + activeOwners + ` AS owners
+		FROM organizations
+		WHERE organizations.deleted_at IS NULL`
 
 	if filter.WithoutOwner {
-		query = query.Where(activeOwners + " = 0")
+		query += ` AND ` + activeOwners + ` = 0`
 	}
 
-	err := query.
-		Order("organizations.id DESC").
-		Limit(limit).
-		Offset(offset).
-		Scan(&rows).Error
+	query += `
+		ORDER BY organizations.id DESC
+		LIMIT $1 OFFSET $2`
+
+	rows, err := r.db.SQL().QueryContext(ctx, query, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("store: all organizations: %w", err)
 	}
 
-	out := make([]orgs.OrganizationSummary, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, orgs.OrganizationSummary{Organization: r.Organization, Owners: r.Owners})
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	out := make([]orgs.OrganizationSummary, 0)
+
+	for rows.Next() {
+		var (
+			org       models.Organization
+			deletedAt sql.NullTime
+			owners    int
+		)
+
+		if err := rows.Scan(
+			&org.ID, &org.CreatedAt, &org.UpdatedAt,
+			&deletedAt, &org.IsProtected, &org.Slug, &org.Name, &owners,
+		); err != nil {
+			return nil, fmt.Errorf("store: all organizations: scan: %w", err)
+		}
+
+		if deletedAt.Valid {
+			org.DeletedAt.Time = deletedAt.Time
+			org.DeletedAt.Valid = true
+		}
+
+		out = append(out, orgs.OrganizationSummary{Organization: org, Owners: owners})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: all organizations: %w", err)
 	}
 
 	return out, nil
@@ -959,32 +1038,35 @@ func (r *Orgs) GrantSystemRole(
 	key authz.RoleKey,
 	grantedBy uuid.UUID,
 ) error {
-	grant := &models.UserSystemRole{UserID: userID, RoleKey: string(key)}
-	if grantedBy != uuid.Nil {
-		by := grantedBy
-		grant.GrantedBy = &by
-	}
-
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
 		// ON CONFLICT DO NOTHING rather than inserting and recovering from the
 		// unique violation. A violation aborts the whole Postgres transaction, so
-		// swallowing the error and returning nil asks GORM to commit a transaction
-		// that is already dead — "commit unexpectedly resulted in rollback". The
-		// old AddMember worked around exactly this with a savepoint; one statement
-		// that cannot fail is better than recovering from one that does.
-		res := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(grant)
-		if res.Error != nil {
-			return res.Error
+		// swallowing the error and returning nil asks the driver to commit a
+		// transaction that is already dead — "commit unexpectedly resulted in
+		// rollback". The old AddMember worked around exactly this with a
+		// savepoint; one statement that cannot fail is better than recovering
+		// from one that does.
+		//
+		// ID() uses RETURNING. A conflict returns no row, which is how this tells
+		// "already granted" from "just granted" without a second statement that
+		// could disagree.
+		create := tx.UserSystemRole.Create().
+			SetUserID(userID).
+			SetRoleKey(string(key)).
+			SetNillableGrantedBy(grantedByPtr(grantedBy)).
+			OnConflictColumns(usersystemrole.FieldUserID, usersystemrole.FieldRoleKey).
+			DoNothing()
+
+		_, err := create.ID(ctx)
+		if err != nil {
+			if isNotFound(err) || errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+
+			return err
 		}
 
-		// Already granted. Idempotent, and nothing changed, so nothing is recorded
-		// either — an entry for a grant that did not happen would be a second
-		// answer to "when did they get this".
-		if res.RowsAffected == 0 {
-			return nil
-		}
-
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			SubjectID: &userID,
 			Action:    models.ActionSystemRoleGranted,
 			Detail:    string(key),
@@ -994,20 +1076,29 @@ func (r *Orgs) GrantSystemRole(
 	return translateOrgError("grant system role", err)
 }
 
+func grantedByPtr(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+
+	return &id
+}
+
 func (r *Orgs) RevokeSystemRole(ctx context.Context, userID uuid.UUID, key authz.RoleKey) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Where("user_id = ? AND role_key = ?", userID, string(key)).
-			Delete(&models.UserSystemRole{})
-		if res.Error != nil {
-			return res.Error
+	err := r.withTx(ctx, func(tx *ent.Tx) error {
+		affected, err := tx.UserSystemRole.Delete().
+			Where(usersystemrole.UserID(userID), usersystemrole.RoleKey(string(key))).
+			Exec(ctx)
+		if err != nil {
+			return err
 		}
 
 		// Nothing to revoke is not an error, but it is also not an event.
-		if res.RowsAffected == 0 {
+		if affected == 0 {
 			return nil
 		}
 
-		return record(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &models.AuthzEvent{
 			SubjectID: &userID,
 			Action:    models.ActionSystemRoleRevoked,
 			Detail:    string(key),
@@ -1018,36 +1109,25 @@ func (r *Orgs) RevokeSystemRole(ctx context.Context, userID uuid.UUID, key authz
 }
 
 func (r *Orgs) SystemRoleHolders(ctx context.Context) ([]orgs.SystemRoleHolder, error) {
-	var rows []struct {
-		UserID    uuid.UUID
-		Name      string
-		Email     string
-		RoleKey   string
-		GrantedBy *uuid.UUID
-		GrantedAt time.Time
-	}
-
-	// Inner join: a grant belonging to a deleted account confers nothing, the same
-	// rule every membership lookup follows.
-	err := r.db.WithContext(ctx).
-		Table("user_system_roles AS usr").
-		Select("usr.user_id, u.name, u.email, usr.role_key, usr.granted_by, usr.created_at AS granted_at").
-		Joins("JOIN users u ON u.id = usr.user_id AND u.deleted_at IS NULL").
-		Order("u.name ASC, usr.role_key ASC").
-		Scan(&rows).Error
+	found, err := r.db.Ent().UserSystemRole.Query().
+		Where(usersystemrole.HasUserWith(entuser.DeletedAtIsNil())).
+		WithUser().
+		Order(usersystemrole.ByUserField(entuser.FieldName), usersystemrole.ByRoleKey()).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: system role holders: %w", err)
 	}
 
-	out := make([]orgs.SystemRoleHolder, 0, len(rows))
-	for _, row := range rows {
+	out := make([]orgs.SystemRoleHolder, 0, len(found))
+	for _, row := range found {
+		u := row.Edges.User
 		out = append(out, orgs.SystemRoleHolder{
 			UserID:    row.UserID,
-			Name:      row.Name,
-			Email:     row.Email,
+			Name:      u.Name,
+			Email:     u.Email,
 			RoleKey:   row.RoleKey,
 			GrantedBy: row.GrantedBy,
-			GrantedAt: row.GrantedAt,
+			GrantedAt: row.CreatedAt,
 		})
 	}
 
@@ -1055,14 +1135,14 @@ func (r *Orgs) SystemRoleHolders(ctx context.Context) ([]orgs.SystemRoleHolder, 
 }
 
 func (r *Orgs) RoleByKey(ctx context.Context, orgID uuid.UUID, key string) (*orgs.Role, error) {
-	var row models.Role
-
-	if err := r.db.WithContext(ctx).
-		First(&row, "organization_id = ? AND key = ?", orgID, key).Error; err != nil {
+	row, err := r.db.Ent().Role.Query().
+		Where(role.OrganizationID(orgID), role.Key(key)).
+		Only(ctx)
+	if err != nil {
 		return nil, translateOrgError("role by key", err)
 	}
 
-	decorated, err := r.decorateRoles(ctx, []models.Role{row})
+	decorated, err := r.decorateRoles(ctx, []models.Role{roleModel(row)})
 	if err != nil {
 		return nil, err
 	}
@@ -1071,14 +1151,7 @@ func (r *Orgs) RoleByKey(ctx context.Context, orgID uuid.UUID, key string) (*org
 }
 
 func (r *Orgs) MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*orgs.Member, error) {
-	var rows []memberRow
-
-	err := r.db.WithContext(ctx).
-		Table("memberships AS m").
-		Select("m.id, m.user_id, u.name, u.email, m.status, m.joined_at").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ? AND m.user_id = ?", orgID, userID).
-		Scan(&rows).Error
+	rows, err := r.memberRows(ctx, nil, membership.OrganizationID(orgID), membership.UserID(userID))
 	if err != nil {
 		return nil, fmt.Errorf("store: member by user: %w", err)
 	}
@@ -1096,19 +1169,22 @@ func (r *Orgs) MemberByUser(ctx context.Context, orgID, userID uuid.UUID) (*orgs
 }
 
 func (r *Orgs) MemberPermissions(ctx context.Context, orgID, memberID uuid.UUID) ([]authz.Permission, error) {
-	var keys []string
-
 	// Scoped by organization for the same reason every other method here is: a
 	// membership id from another tenant must answer nothing rather than answer
 	// truthfully. Status is not filtered — see the interface for why.
-	err := r.db.WithContext(ctx).
-		Table("membership_roles AS mr").
-		Distinct("rp.permission_key").
-		Joins("JOIN memberships m ON m.id = mr.membership_id").
-		Joins("JOIN role_permissions rp ON rp.role_id = mr.role_id").
-		Where("m.id = ? AND m.organization_id = ?", memberID, orgID).
-		Order("rp.permission_key ASC").
-		Scan(&keys).Error
+	keys, err := r.db.Ent().RolePermission.Query().
+		Where(rolepermission.HasRoleWith(
+			role.HasMembershipRolesWith(
+				membershiprole.HasMembershipWith(
+					membership.ID(memberID),
+					membership.OrganizationID(orgID),
+				),
+			),
+		)).
+		Unique(true).
+		Order(ent.Asc(rolepermission.FieldPermissionKey)).
+		Select(rolepermission.FieldPermissionKey).
+		Strings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: member permissions: %w", err)
 	}
@@ -1127,47 +1203,41 @@ func (r *Orgs) MemberPermissions(ctx context.Context, orgID, memberID uuid.UUID)
 // One lock object for all of them on purpose: last-owner checks and role deletes
 // both need to be ordered against concurrent role assignments, and taking two
 // different locks in two different orders is how deadlocks are built.
-func lockOrganization(tx *gorm.DB, orgID uuid.UUID) error {
-	return tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		First(&models.Organization{}, "id = ?", orgID).Error
+func lockOrganization(ctx context.Context, tx *ent.Tx, orgID uuid.UUID) error {
+	_, err := tx.Organization.Query().
+		Where(organization.ID(orgID)).
+		ForUpdate().
+		Only(ctx)
+
+	return err
 }
 
 // ownerStateTx assembles the facts the domain's last-owner rule decides from.
 //
 // Both numbers come from the same join, so they cannot disagree about a
 // membership whose account has been deleted — the disagreement that once made such
-// a row impossible to remove. The join to users is inner: a membership that
-// outlived its account holds nothing.
-func ownerStateTx(tx *gorm.DB, orgID, memberID uuid.UUID) (orgs.OwnerState, error) {
-	var rows []struct {
-		MembershipID uuid.UUID
-	}
-
-	err := tx.Table("membership_roles AS mr").
-		Select("m.id AS membership_id").
-		Joins("JOIN memberships m ON m.id = mr.membership_id").
-		Joins("JOIN roles r ON r.id = mr.role_id").
-		Joins("JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL").
-		Where("m.organization_id = ? AND m.status = ? AND r.key = ?",
-			orgID, models.MembershipActive, string(authz.RoleOwner)).
-		Scan(&rows).Error
+// a row impossible to remove. liveUser is inner: a membership that outlived its
+// account holds nothing. The predicates here are the same definition as
+// activeOwners; TestTheOwnerCountAgreesWithTheOwnerRule is what keeps them so.
+func ownerStateTx(ctx context.Context, tx *ent.Tx, orgID, memberID uuid.UUID) (orgs.OwnerState, error) {
+	ids, err := tx.Membership.Query().
+		Where(
+			membership.OrganizationID(orgID),
+			membership.StatusEQ(membership.StatusActive),
+			liveUser(),
+			membership.HasRolesWith(membershiprole.HasRoleWith(role.KeyEQ(string(authz.RoleOwner)))),
+		).
+		IDs(ctx)
 	if err != nil {
 		return orgs.OwnerState{}, err
 	}
 
-	state := orgs.OwnerState{}
-	seen := map[uuid.UUID]struct{}{}
-
-	for _, row := range rows {
-		if _, dup := seen[row.MembershipID]; dup {
-			continue
-		}
-
-		seen[row.MembershipID] = struct{}{}
-		state.Owners++
-
-		if row.MembershipID == memberID {
+	state := orgs.OwnerState{Owners: len(ids)}
+	for _, id := range ids {
+		if id == memberID {
 			state.SubjectHoldsOwner = true
+
+			break
 		}
 	}
 
@@ -1175,15 +1245,60 @@ func ownerStateTx(tx *gorm.DB, orgID, memberID uuid.UUID) (orgs.OwnerState, erro
 }
 
 // applyOwnerGuard locks the organization, reads the state and asks the domain.
-func applyOwnerGuard(tx *gorm.DB, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
-	if err := lockOrganization(tx, orgID); err != nil {
+func applyOwnerGuard(ctx context.Context, tx *ent.Tx, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
+	if err := lockOrganization(ctx, tx, orgID); err != nil {
 		return err
 	}
 
-	state, err := ownerStateTx(tx, orgID, memberID)
+	state, err := ownerStateTx(ctx, tx, orgID, memberID)
 	if err != nil {
 		return err
 	}
 
 	return guard(state)
+}
+
+// recordAboutMemberEnt fills in the subject from a membership before writing.
+//
+// The audit is about people, and a membership id means nothing to somebody
+// reading the history a year later. Resolving it here rather than at read time
+// also means the entry survives the membership being deleted, which is exactly
+// the case "who removed them" is asked about.
+func recordAboutMemberEnt(
+	ctx context.Context,
+	tx *ent.Tx,
+	orgID, memberID uuid.UUID,
+	event *models.AuthzEvent,
+) error {
+	if audit.ActorFrom(ctx).IsZero() {
+		return nil
+	}
+
+	row, err := tx.Membership.Query().
+		Where(membership.ID(memberID), membership.OrganizationID(orgID)).
+		Only(ctx)
+	if err != nil {
+		return fmt.Errorf("store: audit subject: %w", err)
+	}
+
+	subject := row.UserID
+	event.SubjectID = &subject
+
+	return recordEnt(ctx, tx, event)
+}
+
+func roleModel(row *ent.Role) models.Role {
+	out := models.Role{
+		OrganizationID: row.OrganizationID,
+		Key:            row.Key,
+		Name:           row.Name,
+		Description:    row.Description,
+		IsSystem:       row.IsSystem,
+	}
+
+	out.ID = row.ID
+	out.CreatedAt = row.CreatedAt
+	out.UpdatedAt = row.UpdatedAt
+
+	return out
 }
