@@ -12,14 +12,14 @@ updates:
       # One PR for the patch noise, individual PRs for anything that can
       # actually change behaviour.
       patch:
-        update-types: [patch]
+        update-types: [ patch ]
     ignore:
       # huma is deliberately excluded from automatic minor bumps: it generates
       # the OpenAPI document, so a minor release can move the committed
       # contract. Update it on purpose, then run `task openapi` and read the
       # diff. Patch releases still come through the group above.
       - dependency-name: github.com/danielgtaylor/huma/v2
-        update-types: [version-update:semver-minor, version-update:semver-major]
+        update-types: [ version-update:semver-minor, version-update:semver-major ]
 
   # The generator is a module of its own and would otherwise never be
   # updated.

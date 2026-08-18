@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"fmt"
@@ -19,8 +19,8 @@ import (
 // not have, by design. So an organization made through the API had nobody in it and
 // no way to get anybody: the only way out was SQL.
 func TestAnOrganizationCreatedByThePlatformCanBeGivenAnOwner(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	// Somebody to put in charge, who is not the caller.
 	outsider := registerOutsider(t, f)
@@ -34,8 +34,8 @@ func TestAnOrganizationCreatedByThePlatformCanBeGivenAnOwner(t *testing.T) {
 
 	// Empty, and the platform admin has no standing inside it — that is the design,
 	// and it is what made the organization unusable.
-	if code := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+created.ID.String(), "", f.token, "")).Code; code != http.StatusNotFound {
+	if code := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+created.ID.String(), "", f.Token, "")).Code; code != http.StatusNotFound {
 		t.Errorf("the platform admin reads the new organization = %d, want 404", code)
 	}
 
@@ -44,15 +44,15 @@ func TestAnOrganizationCreatedByThePlatformCanBeGivenAnOwner(t *testing.T) {
 		expect(t, http.StatusNoContent)
 
 	// The appointed owner can now administer it, which is the whole point.
-	ownerToken := signIn(t, f.server, outsider, "twelve-chars")
+	ownerToken := signIn(t, f.Server, outsider, "twelve-chars")
 
-	if code := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+created.ID.String(), "", ownerToken, "")).Code; code != http.StatusOK {
+	if code := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+created.ID.String(), "", ownerToken, "")).Code; code != http.StatusOK {
 		t.Fatalf("the appointed owner reads the organization = %d, want 200", code)
 	}
 
 	// Including inviting somebody, which is the permission that was unreachable.
-	invite := do(t, f.server.http.Handler, authed(t, http.MethodPost,
+	invite := Do(t, f.Server.Handler(), Authed(t, http.MethodPost,
 		"/v1/orgs/"+created.ID.String()+"/members", `{"email":"someone@example.com","role_ids":[]}`,
 		ownerToken, ""))
 	if invite.Code != http.StatusCreated {
@@ -61,8 +61,8 @@ func TestAnOrganizationCreatedByThePlatformCanBeGivenAnOwner(t *testing.T) {
 
 	// Appointing does not hand out the installation-wide role: owning one
 	// organization and administering the installation are separate authorizations.
-	if code := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/platform/organizations", "", ownerToken, "")).Code; code != http.StatusForbidden {
+	if code := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/platform/organizations", "", ownerToken, "")).Code; code != http.StatusForbidden {
 		t.Errorf("the new owner reaches the platform listing = %d, want 403", code)
 	}
 }
@@ -70,11 +70,11 @@ func TestAnOrganizationCreatedByThePlatformCanBeGivenAnOwner(t *testing.T) {
 // TestAppointingAnOwnerIsAudited puts the change in the organization's own log,
 // where whoever runs that organization will look for it.
 func TestAppointingAnOwnerIsAudited(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
-	target := f.repo.SeedOrganization("globex", "Globex")
-	f.repo.SeedShippedRole(target, authz.RoleOwner)
+	target := f.Repo.SeedOrganization("globex", "Globex")
+	f.Repo.SeedShippedRole(target, authz.RoleOwner)
 
 	outsider := registerOutsider(t, f)
 	outsiderID := accountIDByEmail(t, f, outsider)
@@ -91,7 +91,7 @@ func TestAppointingAnOwnerIsAudited(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/platform/audit", "").
 		expect(t, http.StatusOK).decode(t, &log)
 
-	if !hasEvent(log.Events, string(ent.ActionMemberJoined), f.userID, outsiderID) {
+	if !hasEvent(log.Events, string(ent.ActionMemberJoined), f.UserID, outsiderID) {
 		t.Errorf("no %s entry attributing the appointment to the caller; the log has %+v",
 			ent.ActionMemberJoined, log.Events)
 	}
@@ -100,11 +100,11 @@ func TestAppointingAnOwnerIsAudited(t *testing.T) {
 // TestAppointingAnOwnerRefusesWhatDoesNotExist keeps the two ids from producing a
 // 500 out of an untranslated driver error.
 func TestAppointingAnOwnerRefusesWhatDoesNotExist(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
-	target := f.repo.SeedOrganization("globex", "Globex")
-	f.repo.SeedShippedRole(target, authz.RoleOwner)
+	target := f.Repo.SeedOrganization("globex", "Globex")
+	f.Repo.SeedShippedRole(target, authz.RoleOwner)
 
 	// An account that does not exist.
 	body := fmt.Sprintf(`{"user_id":%q}`, uuid.Must(uuid.NewV7()))
@@ -119,14 +119,14 @@ func TestAppointingAnOwnerRefusesWhatDoesNotExist(t *testing.T) {
 
 	// And a deleted one: its roles outlive the soft delete, so without the explicit
 	// check an owner could be appointed to an organization that is gone.
-	f.repo.SeedSoftDeletedOrganization(target)
+	f.Repo.SeedSoftDeletedOrganization(target)
 	f.call(t, http.MethodPost, "/v1/platform/organizations/"+target.String()+"/owners", body).
 		expect(t, http.StatusNotFound)
 }
 
 // accountIDByEmail finds an account through the platform listing, which is the only
 // place a caller can see somebody else's id.
-func accountIDByEmail(t *testing.T, f *authzFixture, email string) uuid.UUID {
+func accountIDByEmail(t *testing.T, f *AuthzFixture, email string) uuid.UUID {
 	t.Helper()
 
 	var out struct {

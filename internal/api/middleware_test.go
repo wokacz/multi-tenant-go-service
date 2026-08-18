@@ -57,7 +57,7 @@ func TestPublicOperationsAllExist(t *testing.T) {
 func TestUnauthorizedCarriesTheBearerChallenge(t *testing.T) {
 	s, _ := newTestServer(t)
 
-	rec := do(t, s.http.Handler, request(t, http.MethodGet, "/v1/me", ""))
+	rec := do(t, s.Handler(), request(t, http.MethodGet, "/v1/me", ""))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
@@ -77,7 +77,7 @@ func TestUnauthorizedCarriesTheBearerChallenge(t *testing.T) {
 func TestPanicBecomesAProblemDocument(t *testing.T) {
 	s, _ := newTestServer(t)
 
-	mux, ok := s.http.Handler.(interface {
+	mux, ok := s.Handler().(interface {
 		Get(string, http.HandlerFunc)
 	})
 	if !ok {
@@ -86,7 +86,7 @@ func TestPanicBecomesAProblemDocument(t *testing.T) {
 
 	mux.Get("/boom", func(http.ResponseWriter, *http.Request) { panic("boom") })
 
-	rec := do(t, s.http.Handler, request(t, http.MethodGet, "/boom", ""))
+	rec := do(t, s.Handler(), request(t, http.MethodGet, "/boom", ""))
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
@@ -137,7 +137,7 @@ func TestRateLimitAppliesToEveryCostlyRoute(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			// A server per subtest, so one route's bucket cannot drain
 			// another's and make this pass for the wrong reason.
-			s, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+			s, _, _ := newTestAPIConfig(t, harnessMailer{}, memory.NewUsers(), func(cfg *config.Config) {
 				cfg.RegisterPerMinute = perMinute
 				cfg.LoginPerMinute = perMinute
 				cfg.ResetPerMinute = perMinute
@@ -150,7 +150,7 @@ func TestRateLimitAppliesToEveryCostlyRoute(t *testing.T) {
 			last := 0
 
 			for i := 0; i <= perMinute; i++ {
-				got := do(t, s.http.Handler, withDeviceToken(request(t, http.MethodPost, path, body)))
+				got := do(t, s.Handler(), withDeviceToken(request(t, http.MethodPost, path, body)))
 				last = got.Code
 
 				if got.Code == http.StatusTooManyRequests {
@@ -184,7 +184,7 @@ func TestRateLimitKeysOnForwardedIPOnlyFromTrustedProxies(t *testing.T) {
 	body := `{"email":"ada@example.com","password":"twelve-chars"}`
 
 	t.Run("untrusted peer cannot mint buckets with X-Forwarded-For", func(t *testing.T) {
-		s, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+		s, _, _ := newTestAPIConfig(t, harnessMailer{}, memory.NewUsers(), func(cfg *config.Config) {
 			cfg.LoginPerMinute = perMinute
 		})
 
@@ -192,7 +192,7 @@ func TestRateLimitKeysOnForwardedIPOnlyFromTrustedProxies(t *testing.T) {
 		for i := 0; i <= perMinute; i++ {
 			req := request(t, http.MethodPost, "/v1/sessions", body)
 			req.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i+1))
-			last = do(t, s.http.Handler, req).Code
+			last = do(t, s.Handler(), req).Code
 			if last == http.StatusTooManyRequests {
 				return
 			}
@@ -202,7 +202,7 @@ func TestRateLimitKeysOnForwardedIPOnlyFromTrustedProxies(t *testing.T) {
 	})
 
 	t.Run("trusted proxy uses the forwarded client address", func(t *testing.T) {
-		s, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+		s, _, _ := newTestAPIConfig(t, harnessMailer{}, memory.NewUsers(), func(cfg *config.Config) {
 			cfg.LoginPerMinute = perMinute
 			cfg.TrustedProxies = []net.IPNet{*cidr}
 		})
@@ -211,20 +211,12 @@ func TestRateLimitKeysOnForwardedIPOnlyFromTrustedProxies(t *testing.T) {
 			req := request(t, http.MethodPost, "/v1/sessions", body)
 			req.RemoteAddr = "127.0.0.1:1"
 			req.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i+1))
-			got := do(t, s.http.Handler, req).Code
+			got := do(t, s.Handler(), req).Code
 			if got == http.StatusTooManyRequests {
 				t.Fatalf("request %d from distinct forwarded IPs = 429, want the limiter to key per client", i+1)
 			}
 		}
 	})
-}
-
-// withDeviceToken satisfies the required header on /v1/sessions/verify so the
-// request reaches the limiter instead of being rejected as malformed.
-func withDeviceToken(req *http.Request) *http.Request {
-	req.Header.Set("X-Device-Token", "irrelevant-for-rate-limiting")
-
-	return req
 }
 
 func forEachOperation(spec *huma.OpenAPI, fn func(*huma.Operation)) {

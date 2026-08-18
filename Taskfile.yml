@@ -4,7 +4,7 @@ version: "3"
 
 # Nothing else reads .env — the app takes its configuration straight from the
 # environment, so without this the README's "cp .env.example .env" has no effect.
-dotenv: [".env"]
+dotenv: [ ".env" ]
 
 vars:
   BIN: bin/api
@@ -100,7 +100,7 @@ tasks:
 
   ent:generate:
     desc: Regenerate the ent client from internal/store/ent/schema
-    aliases: [ent]
+    aliases: [ ent ]
     # Two steps on purpose. The generator lives in tools/entgen, a module of its own,
     # so its dependencies stay out of the API's graph — and so that `go mod tidy` in
     # the main module cannot downgrade one of them to a version that does not compile,
@@ -160,7 +160,7 @@ tasks:
   migrate:diff:
     desc: Generate a migration from changes to the ent schema (NAME=... required)
     requires:
-      vars: [NAME]
+      vars: [ NAME ]
     vars:
       PORT: '{{.PORT | default "55442"}}'
       NAME_DB: mtgs-atlas-dev
@@ -193,13 +193,13 @@ tasks:
   # one-shot migrate container as a daemon that never became healthy.
   compose:up:
     desc: Start the development stack (Postgres, migrations, API)
-    aliases: [up]
+    aliases: [ up ]
     cmds:
       - docker compose up -d --wait {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}api{{end}}
 
   compose:down:
     desc: Stop the stack (data and caches stay)
-    aliases: [down]
+    aliases: [ down ]
     cmds:
       - docker compose down {{.CLI_ARGS}}
 
@@ -237,7 +237,7 @@ tasks:
 
   compose:otel:
     desc: Start the observability stack (Grafana on :3000, OTLP on :4318)
-    aliases: [otel]
+    aliases: [ otel ]
     # The API is already configured to export to it; this only starts the receiver.
     # Restarting the api service is not needed — the exporter retries.
     cmds:

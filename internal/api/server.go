@@ -272,6 +272,12 @@ func Spec() ([]byte, error) {
 	return out, nil
 }
 
+// Handler returns the root HTTP handler. Tests route requests through it
+// in-process rather than binding a port.
+func (s *Server) Handler() http.Handler {
+	return s.http.Handler
+}
+
 // Run serves until ctx is cancelled, then drains in-flight requests.
 func (s *Server) Run(ctx context.Context) error {
 	// Bind before announcing anything: a port clash should fail here rather

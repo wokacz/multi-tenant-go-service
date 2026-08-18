@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/wokacz/multi-tenant-go-service/internal/api"
 )
 
 type deviceList struct {
@@ -38,14 +40,14 @@ func decodeInto[T any](t *testing.T, body []byte) T {
 
 // enableTwoFactorOverHTTP walks the real endpoints rather than reaching into
 // the service, so the test covers the wiring as well as the rules.
-func enableTwoFactorOverHTTP(t *testing.T, s *Server) sessionBody {
+func enableTwoFactorOverHTTP(t *testing.T, s *api.Server) SessionBody {
 	t.Helper()
 
-	registerAda(t, s)
-	first := signInAda(t, s, "", http.StatusCreated)
+	RegisterAda(t, s)
+	first := SignInAda(t, s, "", http.StatusCreated)
 
-	rec := do(t, s.http.Handler, authed(t, http.MethodPut, "/v1/me/two-factor",
-		`{"password":"`+testPassword+`","enabled":true}`, first.Token, first.DeviceToken))
+	rec := Do(t, s.Handler(), Authed(t, http.MethodPut, "/v1/me/two-factor",
+		`{"password":"`+TestPassword+`","enabled":true}`, first.Token, first.DeviceToken))
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("enable two-factor status = %d body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -54,16 +56,14 @@ func enableTwoFactorOverHTTP(t *testing.T, s *Server) sessionBody {
 }
 
 func TestTwoFactorSignInOverHTTP(t *testing.T) {
-	s, mailer := newTestServer(t)
+	s, mailer := NewTestServer(t)
 	trusted := enableTwoFactorOverHTTP(t, s)
 
-	// The device that switched it on stays trusted and is let straight in.
-	if again := signInAda(t, s, trusted.DeviceToken, http.StatusCreated); again.TwoFactorRequired {
+	if again := SignInAda(t, s, trusted.DeviceToken, http.StatusCreated); again.TwoFactorRequired {
 		t.Fatal("the enrolling device was challenged")
 	}
 
-	// A client with no device token is not.
-	challenge := signInAda(t, s, "", http.StatusAccepted)
+	challenge := SignInAda(t, s, "", http.StatusAccepted)
 
 	if !challenge.TwoFactorRequired {
 		t.Fatal("two_factor_required is false on a 202")
@@ -77,25 +77,24 @@ func TestTwoFactorSignInOverHTTP(t *testing.T) {
 		t.Fatal("the challenge did not hand out a device token")
 	}
 
-	if mailer.twoFactorCode == "" || mailer.twoFactorTo != testEmail {
-		t.Fatalf("mailer got to=%q code=%q", mailer.twoFactorTo, mailer.twoFactorCode)
+	if mailer.TwoFactorCode == "" || mailer.TwoFactorTo != TestEmail {
+		t.Fatalf("mailer got to=%q code=%q", mailer.TwoFactorTo, mailer.TwoFactorCode)
 	}
 
-	// The code must not travel in the response body.
-	if body := challenge.DeviceToken; body == mailer.twoFactorCode {
+	if body := challenge.DeviceToken; body == mailer.TwoFactorCode {
 		t.Fatal("the emailed code leaked into the response")
 	}
 
-	verify := request(t, http.MethodPost, "/v1/sessions/verify",
-		`{"email":"`+testEmail+`","code":"`+mailer.twoFactorCode+`"}`)
+	verify := Request(t, http.MethodPost, "/v1/sessions/verify",
+		`{"email":"`+TestEmail+`","code":"`+mailer.TwoFactorCode+`"}`)
 	verify.Header.Set("X-Device-Token", challenge.DeviceToken)
 
-	rec := do(t, s.http.Handler, verify)
+	rec := Do(t, s.Handler(), verify)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("verify status = %d body %s", rec.Code, rec.Body.Bytes())
 	}
 
-	session := decodeSession(t, rec)
+	session := DecodeSession(t, rec)
 	if session.Token == "" {
 		t.Fatal("verify issued no token")
 	}
@@ -104,55 +103,50 @@ func TestTwoFactorSignInOverHTTP(t *testing.T) {
 		t.Error("user response does not report two-factor as on")
 	}
 
-	// The token works, and the device is trusted from now on.
-	me := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me", "", session.Token, ""))
+	me := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me", "", session.Token, ""))
 	if me.Code != http.StatusOK {
 		t.Fatalf("GET /v1/me status = %d", me.Code)
 	}
 
-	if after := signInAda(t, s, challenge.DeviceToken, http.StatusCreated); after.TwoFactorRequired {
+	if after := SignInAda(t, s, challenge.DeviceToken, http.StatusCreated); after.TwoFactorRequired {
 		t.Fatal("a verified device was challenged again")
 	}
 }
 
 func TestVerifyRejectsAWrongCode(t *testing.T) {
-	s, mailer := newTestServer(t)
+	s, mailer := NewTestServer(t)
 	enableTwoFactorOverHTTP(t, s)
 
-	challenge := signInAda(t, s, "", http.StatusAccepted)
+	challenge := SignInAda(t, s, "", http.StatusAccepted)
 
 	wrong := "000000"
-	if wrong == mailer.twoFactorCode {
+	if wrong == mailer.TwoFactorCode {
 		wrong = "111111"
 	}
 
-	verify := request(t, http.MethodPost, "/v1/sessions/verify",
-		`{"email":"`+testEmail+`","code":"`+wrong+`"}`)
+	verify := Request(t, http.MethodPost, "/v1/sessions/verify",
+		`{"email":"`+TestEmail+`","code":"`+wrong+`"}`)
 	verify.Header.Set("X-Device-Token", challenge.DeviceToken)
 
-	if rec := do(t, s.http.Handler, verify); rec.Code != http.StatusUnauthorized {
+	if rec := Do(t, s.Handler(), verify); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("verify status = %d, want 401; body %s", rec.Code, rec.Body.Bytes())
 	}
 }
 
-// TestRevokingADeviceInvalidatesItsTokenImmediately is the reason the device id
-// is a claim. Without it, revoking would only take effect when the token
-// expired, and "sign this device out" would be a promise the API does not keep.
 func TestRevokingADeviceInvalidatesItsTokenImmediately(t *testing.T) {
-	s, _ := newTestServer(t)
-	registerAda(t, s)
+	s, _ := NewTestServer(t)
+	RegisterAda(t, s)
 
-	first := signInAda(t, s, "", http.StatusCreated)
-	second := signInAda(t, s, "", http.StatusCreated)
+	first := SignInAda(t, s, "", http.StatusCreated)
+	second := SignInAda(t, s, "", http.StatusCreated)
 
-	// Both tokens work to begin with.
 	for name, token := range map[string]string{"first": first.Token, "second": second.Token} {
-		if rec := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me", "", token, "")); rec.Code != http.StatusOK {
+		if rec := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me", "", token, "")); rec.Code != http.StatusOK {
 			t.Fatalf("%s token status = %d, want 200", name, rec.Code)
 		}
 	}
 
-	listed := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me/devices", "", second.Token, ""))
+	listed := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me/devices", "", second.Token, ""))
 	if listed.Code != http.StatusOK {
 		t.Fatalf("list devices status = %d body %s", listed.Code, listed.Body.Bytes())
 	}
@@ -176,53 +170,50 @@ func TestRevokingADeviceInvalidatesItsTokenImmediately(t *testing.T) {
 		t.Fatalf("expected exactly one current device, got %+v", devices.Devices)
 	}
 
-	revoked := do(t, s.http.Handler, authed(t, http.MethodDelete, "/v1/me/devices/"+other.String(), "", second.Token, ""))
+	revoked := Do(t, s.Handler(), Authed(t, http.MethodDelete, "/v1/me/devices/"+other.String(), "", second.Token, ""))
 	if revoked.Code != http.StatusNoContent {
 		t.Fatalf("revoke status = %d body %s", revoked.Code, revoked.Body.Bytes())
 	}
 
-	// The revoked device's token stops working on its very next request.
-	if rec := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me", "", first.Token, "")); rec.Code != http.StatusUnauthorized {
+	if rec := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me", "", first.Token, "")); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("revoked device token status = %d, want 401", rec.Code)
 	}
 
-	// The caller's own token is untouched.
-	if rec := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me", "", second.Token, "")); rec.Code != http.StatusOK {
+	if rec := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me", "", second.Token, "")); rec.Code != http.StatusOK {
 		t.Fatalf("own token status = %d, want 200", rec.Code)
 	}
 
-	// And that device can no longer sign in at all.
-	req := request(t, http.MethodPost, "/v1/sessions", testSignInAda)
+	req := Request(t, http.MethodPost, "/v1/sessions", TestSignInAda)
 	req.Header.Set("X-Device-Token", first.DeviceToken)
 
-	if rec := do(t, s.http.Handler, req); rec.Code != http.StatusForbidden {
+	if rec := Do(t, s.Handler(), req); rec.Code != http.StatusForbidden {
 		t.Fatalf("revoked device sign-in status = %d, want 403; body %s", rec.Code, rec.Body.Bytes())
 	}
 }
 
 func TestRevokeRejectsAnotherAccountsDevice(t *testing.T) {
-	s, _ := newTestServer(t)
-	registerAda(t, s)
-	ada := signInAda(t, s, "", http.StatusCreated)
+	s, _ := NewTestServer(t)
+	RegisterAda(t, s)
+	ada := SignInAda(t, s, "", http.StatusCreated)
 
-	if rec := postJSON(t, s.http.Handler, "/v1/users",
+	if rec := PostJSON(t, s.Handler(), "/v1/users",
 		`{"name":"Bob","email":"bob@example.com","password":"twelve-chars","password_confirm":"twelve-chars"}`); rec.Code != http.StatusNoContent {
 		t.Fatalf("create bob status = %d", rec.Code)
 	}
 
-	bobIn := postJSON(t, s.http.Handler, "/v1/sessions", `{"email":"bob@example.com","password":"twelve-chars"}`)
+	bobIn := PostJSON(t, s.Handler(), "/v1/sessions", `{"email":"bob@example.com","password":"twelve-chars"}`)
 	if bobIn.Code != http.StatusCreated {
 		t.Fatalf("bob sign-in status = %d", bobIn.Code)
 	}
 
-	bobDevices := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me/devices", "", decodeSession(t, bobIn).Token, ""))
+	bobDevices := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me/devices", "", DecodeSession(t, bobIn).Token, ""))
 	bobList := decodeInto[deviceList](t, bobDevices.Body.Bytes())
 
 	if len(bobList.Devices) != 1 {
 		t.Fatalf("bob devices = %d, want 1", len(bobList.Devices))
 	}
 
-	rec := do(t, s.http.Handler, authed(t, http.MethodDelete,
+	rec := Do(t, s.Handler(), Authed(t, http.MethodDelete,
 		"/v1/me/devices/"+bobList.Devices[0].ID.String(), "", ada.Token, ""))
 
 	if rec.Code != http.StatusNotFound {
@@ -231,17 +222,17 @@ func TestRevokeRejectsAnotherAccountsDevice(t *testing.T) {
 }
 
 func TestLoginEventsRecordSuccessAndFailure(t *testing.T) {
-	s, _ := newTestServer(t)
-	registerAda(t, s)
+	s, _ := NewTestServer(t)
+	RegisterAda(t, s)
 
-	session := signInAda(t, s, "", http.StatusCreated)
+	session := SignInAda(t, s, "", http.StatusCreated)
 
-	bad := postJSON(t, s.http.Handler, "/v1/sessions", `{"email":"ada@example.com","password":"wrong-password"}`)
+	bad := PostJSON(t, s.Handler(), "/v1/sessions", `{"email":"ada@example.com","password":"wrong-password"}`)
 	if bad.Code != http.StatusUnauthorized {
 		t.Fatalf("bad password status = %d, want 401", bad.Code)
 	}
 
-	rec := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me/login-events", "", session.Token, ""))
+	rec := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me/login-events", "", session.Token, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("login events status = %d body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -265,25 +256,23 @@ func TestLoginEventsRecordSuccessAndFailure(t *testing.T) {
 }
 
 func TestSetTwoFactorNeedsTokenAndPassword(t *testing.T) {
-	s, _ := newTestServer(t)
-	registerAda(t, s)
-	session := signInAda(t, s, "", http.StatusCreated)
+	s, _ := NewTestServer(t)
+	RegisterAda(t, s)
+	session := SignInAda(t, s, "", http.StatusCreated)
 
-	// No bearer token at all.
-	anon := do(t, s.http.Handler, request(t, http.MethodPut, "/v1/me/two-factor",
-		`{"password":"`+testPassword+`","enabled":true}`))
+	anon := Do(t, s.Handler(), Request(t, http.MethodPut, "/v1/me/two-factor",
+		`{"password":"`+TestPassword+`","enabled":true}`))
 	if anon.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous status = %d, want 401", anon.Code)
 	}
 
-	// Valid token, wrong password.
-	wrong := do(t, s.http.Handler, authed(t, http.MethodPut, "/v1/me/two-factor",
+	wrong := Do(t, s.Handler(), Authed(t, http.MethodPut, "/v1/me/two-factor",
 		`{"password":"not-the-password","enabled":true}`, session.Token, session.DeviceToken))
 	if wrong.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong password status = %d, want 401", wrong.Code)
 	}
 
-	me := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me", "", session.Token, ""))
+	me := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me", "", session.Token, ""))
 
 	var body struct {
 		TwoFactorEnabled bool `json:"two_factor_enabled"`

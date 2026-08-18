@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"net/http"
@@ -9,16 +9,16 @@ import (
 // ready for, and it is deliberate rather than incidental.
 //
 // Somebody changing their password either thinks it was known to somebody else, in
-// which case every session should end, or they do not, in which case signing in
+// which case every session should end, or they Do not, in which case signing in
 // again costs one screen. Keeping this session alive would mean issuing a token
 // here, and the endpoint that issues tokens is the one that decides whether a
 // second factor is needed.
 func TestChangingThePasswordEndsEverySession(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	const next = "a-longer-secret"
 
-	body := `{"current_password":"` + testPassword + `","password":"` + next +
+	body := `{"current_password":"` + TestPassword + `","password":"` + next +
 		`","password_confirm":"` + next + `"}`
 
 	f.call(t, http.MethodPost, "/v1/me/password", body).
@@ -27,11 +27,11 @@ func TestChangingThePasswordEndsEverySession(t *testing.T) {
 	// The token that made the change is dead with the rest of them.
 	f.call(t, http.MethodGet, "/v1/me", "").expect(t, http.StatusUnauthorized)
 
-	if got := signInStatus(t, f.server, testEmail, testPassword); got != http.StatusUnauthorized {
+	if got := signInStatus(t, f.Server, TestEmail, TestPassword); got != http.StatusUnauthorized {
 		t.Errorf("the old password still signs in (%d)", got)
 	}
 
-	if got := signInStatus(t, f.server, testEmail, next); got != http.StatusCreated {
+	if got := signInStatus(t, f.Server, TestEmail, next); got != http.StatusCreated {
 		t.Errorf("the new password does not sign in (%d)", got)
 	}
 }
@@ -40,14 +40,14 @@ func TestChangingThePasswordEndsEverySession(t *testing.T) {
 // token that leaked out of a browser must not be able to make the one change that
 // locks the owner out of their own account.
 func TestChangingThePasswordNeedsTheCurrentOne(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	const next = "a-longer-secret"
 
 	body := `{"current_password":"not-the-password","password":"` + next +
 		`","password_confirm":"` + next + `"}`
 
-	var doc problemBody
+	var doc ProblemBody
 	f.call(t, http.MethodPost, "/v1/me/password", body).
 		expect(t, http.StatusUnauthorized).decode(t, &doc)
 
@@ -55,7 +55,7 @@ func TestChangingThePasswordNeedsTheCurrentOne(t *testing.T) {
 		t.Errorf("code = %q, want invalid_credentials", doc.Code)
 	}
 
-	if got := signInStatus(t, f.server, testEmail, testPassword); got != http.StatusCreated {
+	if got := signInStatus(t, f.Server, TestEmail, TestPassword); got != http.StatusCreated {
 		t.Errorf("the old password no longer signs in (%d); a refused change must "+
 			"change nothing", got)
 	}
@@ -64,11 +64,11 @@ func TestChangingThePasswordNeedsTheCurrentOne(t *testing.T) {
 // TestANewPasswordMustBeConfirmed covers the pair of rules the reset path already
 // applies, reached from the other direction.
 func TestANewPasswordMustBeConfirmed(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	var doc problemBody
+	var doc ProblemBody
 	f.call(t, http.MethodPost, "/v1/me/password",
-		`{"current_password":"`+testPassword+`","password":"a-longer-secret","password_confirm":"a-longer-secre"}`).
+		`{"current_password":"`+TestPassword+`","password":"a-longer-secret","password_confirm":"a-longer-secre"}`).
 		expect(t, http.StatusUnprocessableEntity).decode(t, &doc)
 
 	if doc.Code != "password_mismatch" {
@@ -81,22 +81,22 @@ func TestANewPasswordMustBeConfirmed(t *testing.T) {
 // password or being suspended, and wanting one without the other is the ordinary
 // case — a session left open on a machine somebody no longer has.
 func TestSigningOutEverywhereKillsTheTokensAndKeepsThePassword(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	// A second session for the same account, to show this is not just about the
 	// token that asked.
-	other := signInAda(t, f.server, "", http.StatusCreated)
+	other := SignInAda(t, f.Server, "", http.StatusCreated)
 
 	f.call(t, http.MethodDelete, "/v1/me/sessions", "").expect(t, http.StatusNoContent)
 
 	f.call(t, http.MethodGet, "/v1/me", "").expect(t, http.StatusUnauthorized)
 
-	if got := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/me", "", other.Token, "")).Code; got != http.StatusUnauthorized {
+	if got := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/me", "", other.Token, "")).Code; got != http.StatusUnauthorized {
 		t.Errorf("the other session survived (%d)", got)
 	}
 
-	if got := signInStatus(t, f.server, testEmail, testPassword); got != http.StatusCreated {
+	if got := signInStatus(t, f.Server, TestEmail, TestPassword); got != http.StatusCreated {
 		t.Errorf("signing in again = %d, want 201; the password is untouched", got)
 	}
 }
@@ -107,12 +107,12 @@ func TestSigningOutEverywhereKillsTheTokensAndKeepsThePassword(t *testing.T) {
 //
 // Signing in again uses the device token from before, because a sign-in without one
 // mints a new device — which would make the count go up for a reason that has
-// nothing to do with what this is testing.
+// nothing to Do with what this is testing.
 func TestSigningOutEverywhereLeavesDevicesAlone(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	known := signInAda(t, f.server, "", http.StatusCreated)
-	f.token = known.Token
+	known := SignInAda(t, f.Server, "", http.StatusCreated)
+	f.Token = known.Token
 
 	before := len(f.devices(t))
 	if before == 0 {
@@ -124,8 +124,8 @@ func TestSigningOutEverywhereLeavesDevicesAlone(t *testing.T) {
 
 	// 201 rather than the 401 a revoked device gets: the device is still trusted,
 	// only the tokens are gone.
-	again := signInAda(t, f.server, known.DeviceToken, http.StatusCreated)
-	f.token = again.Token
+	again := SignInAda(t, f.Server, known.DeviceToken, http.StatusCreated)
+	f.Token = again.Token
 
 	if after := len(f.devices(t)); after != before {
 		t.Errorf("device count went from %d to %d", before, after)
@@ -133,7 +133,7 @@ func TestSigningOutEverywhereLeavesDevicesAlone(t *testing.T) {
 }
 
 // devices lists the caller's devices.
-func (f *authzFixture) devices(t *testing.T) []struct {
+func (f *AuthzFixture) devices(t *testing.T) []struct {
 	ID string `json:"id"`
 } {
 	t.Helper()

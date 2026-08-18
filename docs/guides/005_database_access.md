@@ -4,7 +4,8 @@ Pułapki, które w tym projekcie już raz kosztowały czas. Każda ma test, któ
 
 ## Połączenie
 
-`store.OpenPostgres` otwiera pulę przez pgx (`database/sql`) i buduje na niej klienta ent. Ping jest osobnym krokiem, pod
+`store.OpenPostgres` otwiera pulę przez pgx (`database/sql`) i buduje na niej klienta ent. Ping jest osobnym krokiem,
+pod
 `DBConnectTimeout` — `sql.Open` jest leniwe i samo nic nie udowadnia.
 
 Tłumaczenie naruszeń unikalności jest w repozytorium (`isUniqueViolation`, kod Postgresa `23505`), nie w konfiguracji
@@ -26,8 +27,8 @@ save(row)
 Nakładające się żądania odczytają tę samą wartość i zapiszą tę samą wartość, więc pięć równoległych prób zostawia
 licznik na jedynce. Spóźniony zapis może nawet przywrócić `consumed_at`, które inne żądanie właśnie ustawiło.
 
-**Dobrze** — jeden warunkowy `UPDATE`, przez `Modify`, bo ent umie `AddAttempts(1)`, ale nie „spal kod, gdy ten increment
-dojdzie do limitu":
+**Dobrze** — jeden warunkowy `UPDATE`, przez `Modify`, bo ent umie `AddAttempts(1)`, ale nie „spal kod, gdy ten
+increment dojdzie do limitu":
 
 ```go
 r.db.Ent().EmailChange.Update().
@@ -104,8 +105,8 @@ Sprawdzenie „czy to ostatni właściciel" i mutacja, która odbiera tę zdolno
 `SELECT … FOR UPDATE` na wierszu organizacji. Dwa nakładające się zdegradowania oba widzą `owners > 1` i oba przechodzą,
 jeśli locka nie ma. `TestConcurrentDemotionsLeaveOneOwner` (Postgres) jest tym, co to pilnuje.
 
-Sama reguła nie mieszka jednak w SQL-u. Repozytorium przyjmuje **strażnika** z domeny, bierze blokadę, liczy fakty
-i pyta go o werdykt:
+Sama reguła nie mieszka jednak w SQL-u. Repozytorium przyjmuje **strażnika** z domeny, bierze blokadę, liczy fakty i
+pyta go o werdykt:
 
 ```go
 func applyOwnerGuard(ctx context.Context, tx *ent.Tx, orgID, memberID uuid.UUID, guard orgs.OwnerGuard) error {
@@ -120,8 +121,8 @@ func applyOwnerGuard(ctx context.Context, tx *ent.Tx, orgID, memberID uuid.UUID,
 }
 ```
 
-**Dlaczego tak, a nie regułą w zapytaniu:** reguła zapisana w SQL-u musi być powtórzona w fake'u, a dwie kopie w końcu się
-rozjeżdżają. Tak właśnie powstał błąd, w którym członkostwo z usuniętym kontem liczyło się jako właściciel w jednym
+**Dlaczego tak, a nie regułą w zapytaniu:** reguła zapisana w SQL-u musi być powtórzona w fake'u, a dwie kopie w końcu
+się rozjeżdżają. Tak właśnie powstał błąd, w którym członkostwo z usuniętym kontem liczyło się jako właściciel w jednym
 zapytaniu i nie liczyło w drugim — wiersza nie dało się usunąć w ogóle. Szczegóły w
 [design/007](../design/007_authorization.md).
 

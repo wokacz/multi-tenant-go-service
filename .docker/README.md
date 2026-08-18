@@ -6,8 +6,7 @@ pleasant, nothing more.
 
 How to run either path (containers or host):
 [docs/guides/001](../docs/guides/001_development_environment.md)
-(`task up` / `task run`). Why there is no production image, and why the generator is
-not in the image:
+(`task up` / `task run`). Why there is no production image, and why the generator is not in the image:
 [docs/design/001](../docs/design/001_technology_stack.md#docker-compose).
 
 | File          | What it is                                                         |

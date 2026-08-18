@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ type systemRoleHolders struct {
 	} `json:"holders"`
 }
 
-func listSystemRoles(t *testing.T, f *authzFixture) systemRoleHolders {
+func listSystemRoles(t *testing.T, f *AuthzFixture) systemRoleHolders {
 	t.Helper()
 
 	var out systemRoleHolders
@@ -39,8 +39,8 @@ func listSystemRoles(t *testing.T, f *authzFixture) systemRoleHolders {
 // were dead code, while the design document claimed every change to authority was
 // logged.
 func TestGrantingAnInstallationRoleIsRecorded(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	targetID := accountIDByEmail(t, f, registerOutsider(t, f))
 
@@ -63,8 +63,8 @@ func TestGrantingAnInstallationRoleIsRecorded(t *testing.T) {
 			t.Errorf("role_key = %q, want platform_admin", holder.RoleKey)
 		}
 
-		if holder.GrantedBy == nil || *holder.GrantedBy != f.userID {
-			t.Errorf("granted_by = %v, want the caller %v", holder.GrantedBy, f.userID)
+		if holder.GrantedBy == nil || *holder.GrantedBy != f.UserID {
+			t.Errorf("granted_by = %v, want the caller %v", holder.GrantedBy, f.UserID)
 		}
 	}
 
@@ -80,7 +80,7 @@ func TestGrantingAnInstallationRoleIsRecorded(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/platform/audit", "").
 		expect(t, http.StatusOK).decode(t, &log)
 
-	if !hasEvent(log.Events, string(ent.ActionSystemRoleGranted), f.userID, targetID) {
+	if !hasEvent(log.Events, string(ent.ActionSystemRoleGranted), f.UserID, targetID) {
 		t.Errorf("no %s entry attributing the grant to the caller; the log has %+v",
 			ent.ActionSystemRoleGranted, log.Events)
 	}
@@ -100,11 +100,11 @@ func TestGrantingAnInstallationRoleIsRecorded(t *testing.T) {
 // TestRevokingAnInstallationRoleIsRecorded covers the other half, which had no way
 // to happen at all: the role could be granted and never taken back except in SQL.
 func TestRevokingAnInstallationRoleIsRecorded(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	other := uuid.Must(uuid.NewV7())
-	f.repo.SeedSystemRole(other, string(authz.RolePlatformAdmin))
+	f.Repo.SeedSystemRole(other, string(authz.RolePlatformAdmin))
 
 	path := "/v1/platform/system-roles/" + other.String() + "/" + string(authz.RolePlatformAdmin)
 	f.call(t, http.MethodDelete, path, "").expect(t, http.StatusNoContent)
@@ -121,7 +121,7 @@ func TestRevokingAnInstallationRoleIsRecorded(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/platform/audit", "").
 		expect(t, http.StatusOK).decode(t, &log)
 
-	if !hasEvent(log.Events, string(ent.ActionSystemRoleRevoked), f.userID, other) {
+	if !hasEvent(log.Events, string(ent.ActionSystemRoleRevoked), f.UserID, other) {
 		t.Errorf("no %s entry; the log has %+v", ent.ActionSystemRoleRevoked, log.Events)
 	}
 
@@ -143,14 +143,14 @@ func TestRevokingAnInstallationRoleIsRecorded(t *testing.T) {
 // again, and with no other holder there is nobody left who can. Recovering means the
 // bootstrap command and database access.
 func TestTheLastPlatformAdminCannotRevokeThemselves(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
-	path := "/v1/platform/system-roles/" + f.userID.String() + "/" + string(authz.RolePlatformAdmin)
+	path := "/v1/platform/system-roles/" + f.UserID.String() + "/" + string(authz.RolePlatformAdmin)
 
 	res := f.call(t, http.MethodDelete, path, "").expect(t, http.StatusConflict)
 
-	var doc problemBody
+	var doc ProblemBody
 	res.decode(t, &doc)
 
 	if doc.Code != problem.CodeLastSystemRole {
@@ -161,15 +161,15 @@ func TestTheLastPlatformAdminCannotRevokeThemselves(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/platform/system-roles", "").expect(t, http.StatusOK)
 
 	// With a second holder it goes through: the rule counts rather than forbidding.
-	f.repo.SeedSystemRole(uuid.Must(uuid.NewV7()), string(authz.RolePlatformAdmin))
+	f.Repo.SeedSystemRole(uuid.Must(uuid.NewV7()), string(authz.RolePlatformAdmin))
 	f.call(t, http.MethodDelete, path, "").expect(t, http.StatusNoContent)
 }
 
 // TestOnlyAnInstallationRoleCanBeGrantedThere stops an organization role key being
 // written into user_system_roles, where nothing would ever read it.
 func TestOnlyAnInstallationRoleCanBeGrantedThere(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	for _, key := range []string{string(authz.RoleOwner), "not_a_role"} {
 		body := fmt.Sprintf(`{"user_id":%q,"role_key":%q}`, uuid.Must(uuid.NewV7()), key)
@@ -177,7 +177,7 @@ func TestOnlyAnInstallationRoleCanBeGrantedThere(t *testing.T) {
 		res := f.call(t, http.MethodPost, "/v1/platform/system-roles", body).
 			expect(t, http.StatusUnprocessableEntity)
 
-		var doc problemBody
+		var doc ProblemBody
 		res.decode(t, &doc)
 
 		if doc.Code != problem.CodeInvalidSystemRole {

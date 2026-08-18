@@ -22,13 +22,13 @@ t.Fatalf("attempts = %d, want %d — nakładające się próby zostały zgubione
 | strukturalny / kontraktowy | `internal/architecture_test.go`, `internal/api/authz_test.go` | nie             |
 | modelowy                   | `internal/store/ent/rules_test.go`                            | nie             |
 | domenowy                   | `internal/domain/*/…_test.go` (fake)                          | nie             |
-| HTTP                       | `internal/api/*_http_test.go` (pełny router)                  | nie             |
+| HTTP                       | `internal/api/httptest/*_http_test.go` (pełny router)         | nie             |
 | SQL                        | `internal/store/repositories/*_postgres_test.go`              | **tak**         |
 | kontraktowy (obie impl.)   | `internal/store/repositories/contract/`                       | do połowy       |
 
 Reguła doboru: **jeśli test przeszedłby na fake'u, jego miejsce jest na fake'u.**
-Testy na Postgresie zostawiamy dla tego, co fake udaje w Go. A to, o czym **obie
-implementacje muszą mówić to samo**, idzie do zestawu kontraktowego — patrz niżej.
+Testy na Postgresie zostawiamy dla tego, co fake udaje w Go. A to, o czym **obie implementacje muszą mówić to samo**,
+idzie do zestawu kontraktowego — patrz niżej.
 
 ## Testy strukturalne
 
@@ -96,11 +96,11 @@ sprawdza.
 
 Trzy testy wymagają wpisu dla **każdej** chronionej operacji i przewracają build, gdy go brakuje:
 
-| Test                                   | Plik                    | Czego wymaga                                         |
-|----------------------------------------|-------------------------|------------------------------------------------------|
-| `TestTheSnapshotAgreesWithEnforcement` | `snapshot_http_test.go` | sondy dla operacji organizacyjnej                    |
-| `TestSystemScopeIsEnforcedEndToEnd`    | `platform_http_test.go` | sondy dla operacji platformowej                      |
-| `TestEveryMutatingOperationIsAudited`  | `audit_http_test.go`    | zaklasyfikowania jako mutująca albo tylko do odczytu |
+| Test                                   | Plik                             | Czego wymaga                                         |
+|----------------------------------------|----------------------------------|------------------------------------------------------|
+| `TestTheSnapshotAgreesWithEnforcement` | `httptest/snapshot_http_test.go` | sondy dla operacji organizacyjnej                    |
+| `TestSystemScopeIsEnforcedEndToEnd`    | `httptest/platform_http_test.go` | sondy dla operacji platformowej                      |
+| `TestEveryMutatingOperationIsAudited`  | `httptest/audit_http_test.go`    | zaklasyfikowania jako mutująca albo tylko do odczytu |
 
 To jest celowe utrudnienie: nowa operacja nie przechodzi, dopóki ktoś nie zdecyduje, jak się zachowuje wobec migawki,
 zakresu i dziennika.

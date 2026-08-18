@@ -21,7 +21,7 @@ element, nie czytając wszystkiego od zera.
 | [007 Autoryzacja](design/007_authorization.md)                   | role, uprawnienia, organizacje, anty-eskalacja, migawka, audyt              |
 | [008 Błędy i języki](design/008_errors_and_i18n.md)              | `problem+json`, kody błędów, mapa błędów domenowych, i18n                   |
 | [009 Odporność](design/009_hardening.md)                         | enumeracja kont, limity, koszt bcrypta, nagłówki, produkcja                 |
-| [010 Obserwowalność](design/010_observability.md)                 | ślady, metryki, logi, korelacja, logowanie w terminalu                      |
+| [010 Obserwowalność](design/010_observability.md)                | ślady, metryki, logi, korelacja, logowanie w terminalu                      |
 
 ## Instrukcje
 
@@ -39,21 +39,21 @@ element, nie czytając wszystkiego od zera.
 
 ## Szybkie odpowiedzi
 
-| Pytanie                                           | Gdzie                                             |
-|---------------------------------------------------|---------------------------------------------------|
-| Dlaczego huma nie może wyjść poza `internal/api`? | [design/002](design/002_architecture.md)          |
-| Dlaczego uprawnień nie ma w tokenie?              | [design/007](design/007_authorization.md)         |
-| Kiedy 403, a kiedy 404?                           | [design/007](design/007_authorization.md)         |
-| Co znaczy `code` w odpowiedzi błędnej?            | [design/008](design/008_errors_and_i18n.md)       |
-| Dlaczego licznik prób rusza się w SQL-u?          | [design/006](design/006_devices_and_2fa.md)       |
-| Skąd się bierze pierwszy administrator?           | [design/007](design/007_authorization.md)         |
+| Pytanie                                           | Gdzie                                                 |
+|---------------------------------------------------|-------------------------------------------------------|
+| Dlaczego huma nie może wyjść poza `internal/api`? | [design/002](design/002_architecture.md)              |
+| Dlaczego uprawnień nie ma w tokenie?              | [design/007](design/007_authorization.md)             |
+| Kiedy 403, a kiedy 404?                           | [design/007](design/007_authorization.md)             |
+| Co znaczy `code` w odpowiedzi błędnej?            | [design/008](design/008_errors_and_i18n.md)           |
+| Dlaczego licznik prób rusza się w SQL-u?          | [design/006](design/006_devices_and_2fa.md)           |
+| Skąd się bierze pierwszy administrator?           | [design/007](design/007_authorization.md)             |
 | Jak działają zaproszenia e-mail?                  | [design/007](design/007_authorization.md#zaproszenia) |
-| Dodałem trasę i dostaję 403 — dlaczego?           | [guides/002](guides/002_add_endpoint.md)          |
-| Zmieniłem model i CI protestuje                   | [guides/003](guides/003_models_and_migrations.md) |
-| Test przechodzi u mnie, a na CI nie               | [guides/007](guides/007_write_tests.md)           |
-| Skąd wziąć konta do klikania po aplikacji?        | [guides/009](guides/009_seed_data.md)             |
-| Gdzie zobaczyć ślady i metryki?                   | [design/010](design/010_observability.md)          |
-| Dlaczego log nie ma `trace_id`?                   | [design/010](design/010_observability.md#logi)     |
+| Dodałem trasę i dostaję 403 — dlaczego?           | [guides/002](guides/002_add_endpoint.md)              |
+| Zmieniłem model i CI protestuje                   | [guides/003](guides/003_models_and_migrations.md)     |
+| Test przechodzi u mnie, a na CI nie               | [guides/007](guides/007_write_tests.md)               |
+| Skąd wziąć konta do klikania po aplikacji?        | [guides/009](guides/009_seed_data.md)                 |
+| Gdzie zobaczyć ślady i metryki?                   | [design/010](design/010_observability.md)             |
+| Dlaczego log nie ma `trace_id`?                   | [design/010](design/010_observability.md#logi)        |
 
 ## Konwencja
 

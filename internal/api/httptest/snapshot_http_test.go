@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/api"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
@@ -31,11 +32,11 @@ type snapshotBody struct {
 	} `json:"organizations"`
 }
 
-func (f *authzFixture) snapshot(t *testing.T) snapshotBody {
+func (f *AuthzFixture) snapshot(t *testing.T) snapshotBody {
 	t.Helper()
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/me/permissions", "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/me/permissions", "", f.Token, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("snapshot status = %d, want 200; body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -61,9 +62,9 @@ type probe struct {
 // TestTheSnapshotAgreesWithEnforcement fails when an entry is missing, so
 // adding a gated operation forces it to be described here — which is what makes
 // the matrix below exhaustive rather than "the ones somebody remembered".
-func probesFor(f *authzFixture, roleID uuid.UUID) map[string]probe {
-	org := "/v1/orgs/" + f.orgID.String()
-	member := org + "/members/" + f.membership.String()
+func probesFor(f *AuthzFixture, roleID uuid.UUID) map[string]probe {
+	org := "/v1/orgs/" + f.OrgID.String()
+	member := org + "/members/" + f.Membership.String()
 	role := org + "/roles/" + roleID.String()
 
 	// An invitation id that does not exist is enough: this matrix is about which
@@ -101,7 +102,7 @@ func probesFor(f *authzFixture, roleID uuid.UUID) map[string]probe {
 // TestTheSnapshotAgreesWithEnforcement is the test that keeps the client and
 // the server from drifting apart.
 //
-// The snapshot exists so a UI can hide what the user cannot do. If it ever
+// The snapshot exists so a UI can hide what the user cannot Do. If it ever
 // listed a permission the server would refuse, the product would offer actions
 // that fail; if it omitted one the server would allow, features would be
 // invisible. Neither shows up in any other test, because each half is correct
@@ -118,7 +119,7 @@ func TestTheSnapshotAgreesWithEnforcement(t *testing.T) {
 		"an owner":                          nil, // filled in below from the catalog
 	} {
 		t.Run(name, func(t *testing.T) {
-			f := newAuthzFixture(t)
+			f := NewAuthzFixture(t)
 
 			permissions := granted
 			if permissions == nil {
@@ -130,26 +131,26 @@ func TestTheSnapshotAgreesWithEnforcement(t *testing.T) {
 				keys = append(keys, string(perm))
 			}
 
-			role := f.repo.SeedRole(f.orgID, "probe_role", keys...)
-			f.repo.SeedMemberRoles(f.membership, role)
+			role := f.Repo.SeedRole(f.OrgID, "probe_role", keys...)
+			f.Repo.SeedMemberRoles(f.Membership, role)
 
 			// A second role for the role-shaped probes to act on, so deleting it
 			// does not remove the caller's own permissions mid-test.
-			target := f.repo.SeedRole(f.orgID, "target_role")
+			target := f.Repo.SeedRole(f.OrgID, "target_role")
 
 			snapshot := f.snapshot(t)
 
 			var held []string
 
 			for _, entry := range snapshot.Organizations {
-				if entry.ID == f.orgID {
+				if entry.ID == f.OrgID {
 					held = entry.Permissions
 				}
 			}
 
 			probes := probesFor(f, target)
 
-			for id, rule := range operationAccess {
+			for id, rule := range api.OperationAccess() {
 				if rule.Scope != authz.ScopeOrganization {
 					continue
 				}
@@ -164,15 +165,15 @@ func TestTheSnapshotAgreesWithEnforcement(t *testing.T) {
 					// Fresh state per operation: several of these mutate, and one
 					// deleting the organization would make the next look refused
 					// for the wrong reason.
-					sub := newAuthzFixture(t)
-					subRole := sub.repo.SeedRole(sub.orgID, "probe_role", keys...)
-					sub.repo.SeedMemberRoles(sub.membership, subRole)
-					subTarget := sub.repo.SeedRole(sub.orgID, "target_role")
+					sub := NewAuthzFixture(t)
+					subRole := sub.Repo.SeedRole(sub.OrgID, "probe_role", keys...)
+					sub.Repo.SeedMemberRoles(sub.Membership, subRole)
+					subTarget := sub.Repo.SeedRole(sub.OrgID, "target_role")
 
 					sp := probesFor(sub, subTarget)[id]
 
-					rec := do(t, sub.server.http.Handler,
-						authed(t, sp.method, sp.path, sp.body, sub.token, ""))
+					rec := Do(t, sub.Server.Handler(),
+						Authed(t, sp.method, sp.path, sp.body, sub.Token, ""))
 
 					wantAllowed := slices.Contains(held, string(rule.Permission))
 					gotAllowed := rec.Code != http.StatusForbidden
@@ -200,11 +201,11 @@ func TestTheSnapshotAgreesWithEnforcement(t *testing.T) {
 // client finds it, and that is a better answer than a membership that grants
 // nothing.
 func TestTheSnapshotOmitsOrganizationsThatGrantNothing(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleViewer)
 
-	suspended := f.repo.SeedOrganization("beta", "Beta")
-	f.repo.SeedMember(suspended, f.userID, ent.MembershipSuspended,
-		f.repo.SeedShippedRole(suspended, authz.RoleOwner))
+	suspended := f.Repo.SeedOrganization("beta", "Beta")
+	f.Repo.SeedMember(suspended, f.UserID, ent.MembershipSuspended,
+		f.Repo.SeedShippedRole(suspended, authz.RoleOwner))
 
 	snapshot := f.snapshot(t)
 
@@ -230,11 +231,11 @@ func TestTheSnapshotOmitsOrganizationsThatGrantNothing(t *testing.T) {
 
 // TestTheSnapshotIsScopedToTheCaller is the tenancy check on the read path.
 func TestTheSnapshotIsScopedToTheCaller(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	foreign := f.repo.SeedOrganization("globex", "Globex")
-	f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive,
-		f.repo.SeedShippedRole(foreign, authz.RoleOwner))
+	foreign := f.Repo.SeedOrganization("globex", "Globex")
+	f.Repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive,
+		f.Repo.SeedShippedRole(foreign, authz.RoleOwner))
 
 	snapshot := f.snapshot(t)
 
@@ -246,10 +247,10 @@ func TestTheSnapshotIsScopedToTheCaller(t *testing.T) {
 }
 
 func TestTheSnapshotIsCacheableAndChangesWithPermissions(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleViewer)
 
-	first := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/me/permissions", "", f.token, ""))
+	first := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/me/permissions", "", f.Token, ""))
 	if first.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", first.Code)
 	}
@@ -260,21 +261,21 @@ func TestTheSnapshotIsCacheableAndChangesWithPermissions(t *testing.T) {
 	}
 
 	t.Run("an unchanged snapshot answers 304", func(t *testing.T) {
-		req := authed(t, http.MethodGet, "/v1/me/permissions", "", f.token, "")
+		req := Authed(t, http.MethodGet, "/v1/me/permissions", "", f.Token, "")
 		req.Header.Set("If-None-Match", etag)
 
-		if rec := do(t, f.server.http.Handler, req); rec.Code != http.StatusNotModified {
+		if rec := Do(t, f.Server.Handler(), req); rec.Code != http.StatusNotModified {
 			t.Errorf("status = %d, want 304; body %s", rec.Code, rec.Body.Bytes())
 		}
 	})
 
 	t.Run("granting a role changes the tag", func(t *testing.T) {
-		f.repo.SeedMemberRoles(f.membership, f.repo.SeedShippedRole(f.orgID, authz.RoleOwner))
+		f.Repo.SeedMemberRoles(f.Membership, f.Repo.SeedShippedRole(f.OrgID, authz.RoleOwner))
 
-		req := authed(t, http.MethodGet, "/v1/me/permissions", "", f.token, "")
+		req := Authed(t, http.MethodGet, "/v1/me/permissions", "", f.Token, "")
 		req.Header.Set("If-None-Match", etag)
 
-		rec := do(t, f.server.http.Handler, req)
+		rec := Do(t, f.Server.Handler(), req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200 — the stale tag must not match", rec.Code)
 		}
@@ -288,14 +289,14 @@ func TestTheSnapshotIsCacheableAndChangesWithPermissions(t *testing.T) {
 // TestTheSnapshotIsAvailableToAnAccountWithNothing is the lockout guard for the
 // one endpoint a client cannot start without.
 func TestTheSnapshotIsAvailableToAnAccountWithNothing(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	f.repo.SeedMemberRoles(f.membership)
+	f.Repo.SeedMemberRoles(f.Membership)
 
 	snapshot := f.snapshot(t)
 
-	if snapshot.User.ID != f.userID {
-		t.Errorf("user id = %v, want %v", snapshot.User.ID, f.userID)
+	if snapshot.User.ID != f.UserID {
+		t.Errorf("user id = %v, want %v", snapshot.User.ID, f.UserID)
 	}
 
 	if len(snapshot.System.Permissions) != 0 {
@@ -305,9 +306,9 @@ func TestTheSnapshotIsAvailableToAnAccountWithNothing(t *testing.T) {
 
 // TestSystemRolesAppearInTheSnapshot covers the other scope.
 func TestSystemRolesAppearInTheSnapshot(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	snapshot := f.snapshot(t)
 
@@ -325,12 +326,12 @@ func TestSystemRolesAppearInTheSnapshot(t *testing.T) {
 // for the header contract: the body says which language it is in, so a client
 // can tell whether its own cached labels still apply.
 func TestTheSnapshotIsWrittenInTheNegotiatedLanguage(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleViewer)
 
-	req := authed(t, http.MethodGet, "/v1/me/permissions", "", f.token, "")
+	req := Authed(t, http.MethodGet, "/v1/me/permissions", "", f.Token, "")
 	req.Header.Set("Accept-Language", "pl")
 
-	rec := do(t, f.server.http.Handler, req)
+	rec := Do(t, f.Server.Handler(), req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}

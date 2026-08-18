@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"net/http"
@@ -24,17 +24,17 @@ func leavePath(membershipID uuid.UUID) string {
 // or calling remove-member on herself, which needs members.remove — so the callers
 // most likely to want out were exactly the ones who could not.
 func TestAMemberWithNoPermissionsCanLeave(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	// 403 rather than 404: she is an active member, so the organization is not
-	// hidden from her — she simply may not do anything in it, which is the caller
+	// hidden from her — she simply may not Do anything in it, which is the caller
 	// this endpoint exists for.
-	if got := f.getOrg(t); got != http.StatusForbidden {
+	if got := f.GetOrg(t); got != http.StatusForbidden {
 		t.Fatalf("reading the organization with no roles = %d, want 403 — the "+
 			"fixture is not the permissionless member this test needs", got)
 	}
 
-	f.call(t, http.MethodDelete, leavePath(f.membership), "").
+	f.call(t, http.MethodDelete, leavePath(f.Membership), "").
 		expect(t, http.StatusNoContent)
 
 	var body struct {
@@ -48,8 +48,8 @@ func TestAMemberWithNoPermissionsCanLeave(t *testing.T) {
 	// Not "the list is empty": registering also joined the default organization, and
 	// leaving one place is not leaving everywhere.
 	for _, org := range body.Organizations {
-		if org.ID == f.orgID {
-			t.Errorf("%v is still in the caller's own list after a 204", f.orgID)
+		if org.ID == f.OrgID {
+			t.Errorf("%v is still in the caller's own list after a 204", f.OrgID)
 		}
 	}
 
@@ -62,11 +62,11 @@ func TestAMemberWithNoPermissionsCanLeave(t *testing.T) {
 // 204. The row is gone, and reporting success for a membership that does not exist
 // would make "am I out" unanswerable.
 func TestLeavingTwiceIsNotFound(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleViewer)
 
-	f.call(t, http.MethodDelete, leavePath(f.membership), "").
+	f.call(t, http.MethodDelete, leavePath(f.Membership), "").
 		expect(t, http.StatusNoContent)
-	f.call(t, http.MethodDelete, leavePath(f.membership), "").
+	f.call(t, http.MethodDelete, leavePath(f.Membership), "").
 		expect(t, http.StatusNotFound)
 }
 
@@ -76,9 +76,9 @@ func TestLeavingTwiceIsNotFound(t *testing.T) {
 // membership has to be in the caller's own list. Somebody else's id answers 404 —
 // not 403, which would confirm it exists — and the row survives.
 func TestLeavingSomebodyElsesMembershipIsNotFound(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	other := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive)
+	other := f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive)
 
 	f.call(t, http.MethodDelete, leavePath(other), "").
 		expect(t, http.StatusNotFound)
@@ -109,19 +109,19 @@ func TestLeavingSomebodyElsesMembershipIsNotFound(t *testing.T) {
 //
 // Somebody has to be able to administer an organization, and "I left" is not a
 // reason to make an exception. The refusal is a 409 with a code the client can act
-// on, because appointing another owner is something the caller can actually do.
+// on, because appointing another owner is something the caller can actually Do.
 func TestTheLastOwnerCannotLeave(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	var doc problemBody
-	f.call(t, http.MethodDelete, leavePath(f.membership), "").
+	var doc ProblemBody
+	f.call(t, http.MethodDelete, leavePath(f.Membership), "").
 		expect(t, http.StatusConflict).decode(t, &doc)
 
 	if doc.Code != "last_owner" {
 		t.Errorf("code = %q, want %q", doc.Code, "last_owner")
 	}
 
-	if got := f.getOrg(t); got != http.StatusOK {
+	if got := f.GetOrg(t); got != http.StatusOK {
 		t.Errorf("reading the organization after the refusal = %d, want 200; the "+
 			"membership must survive a refused departure", got)
 	}
@@ -130,12 +130,12 @@ func TestTheLastOwnerCannotLeave(t *testing.T) {
 // TestAnOwnerCanLeaveOnceThereIsAnother is the other half: the rule is about the
 // organization keeping an owner, not about owners being trapped.
 func TestAnOwnerCanLeaveOnceThereIsAnother(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	owner := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
+	owner := f.Repo.SeedShippedRole(f.OrgID, authz.RoleOwner)
+	f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
 
-	f.call(t, http.MethodDelete, leavePath(f.membership), "").
+	f.call(t, http.MethodDelete, leavePath(f.Membership), "").
 		expect(t, http.StatusNoContent)
 }
 
@@ -147,18 +147,18 @@ func TestAnOwnerCanLeaveOnceThereIsAnother(t *testing.T) {
 // caller is no longer in the organization whose log it is — which is itself worth
 // pinning: leaving takes the audit route away with everything else.
 func TestLeavingIsRecordedAsLeaving(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	second := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, second)
+	second := f.Repo.SeedShippedRole(f.OrgID, authz.RoleOwner)
+	f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, second)
 
-	f.call(t, http.MethodDelete, leavePath(f.membership), "").
+	f.call(t, http.MethodDelete, leavePath(f.Membership), "").
 		expect(t, http.StatusNoContent)
 
 	f.call(t, http.MethodGet, f.orgPath("/audit"), "").
 		expect(t, http.StatusNotFound)
 
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	var body struct {
 		Events []auditEventBody `json:"events"`
@@ -177,12 +177,12 @@ func TestLeavingIsRecordedAsLeaving(t *testing.T) {
 			newest.Action, ent.ActionMemberLeft)
 	}
 
-	if newest.Actor.ID != f.userID {
-		t.Errorf("actor = %v, want the caller %v", newest.Actor.ID, f.userID)
+	if newest.Actor.ID != f.UserID {
+		t.Errorf("actor = %v, want the caller %v", newest.Actor.ID, f.UserID)
 	}
 
-	if newest.Subject.ID != f.userID {
+	if newest.Subject.ID != f.UserID {
 		t.Errorf("subject = %v, want the caller %v; actor and subject being the "+
-			"same person is what a departure looks like", newest.Subject.ID, f.userID)
+			"same person is what a departure looks like", newest.Subject.ID, f.UserID)
 	}
 }

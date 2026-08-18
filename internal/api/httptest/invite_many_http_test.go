@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"net/http"
@@ -28,10 +28,10 @@ func (r inviteResults) statusOf(email string) string {
 }
 
 // TestABatchInvitesEveryoneAndMailsEachOne is the case that made this exist:
-// onboarding a team used to be one request per person, each identical apart from
+// onboarding a team used to be one Request per person, each identical apart from
 // the address, and the sixth one hit the rate limit.
 func TestABatchInvitesEveryoneAndMailsEachOne(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	var got inviteResults
 	f.call(t, http.MethodPost, f.orgPath("/invitations"),
@@ -52,8 +52,8 @@ func TestABatchInvitesEveryoneAndMailsEachOne(t *testing.T) {
 	// once, or mailed the same token twice, would let one invitee accept as another.
 	tokens := map[string]string{}
 
-	for _, sent := range f.mailer.invitations {
-		tokens[sent.token] = sent.email
+	for _, sent := range f.Mailer.Invitations {
+		tokens[sent.Token] = sent.Email
 	}
 
 	if len(tokens) != 3 {
@@ -67,18 +67,18 @@ func TestABatchInvitesEveryoneAndMailsEachOne(t *testing.T) {
 // An administrator pasting twelve colleagues, two of whom are already in, wants the
 // ten invitations sent. All-or-nothing would make them find the two by bisection.
 func TestOneAlreadyMemberDoesNotSinkTheBatch(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	var got inviteResults
 	f.call(t, http.MethodPost, f.orgPath("/invitations"),
-		`{"emails":["bo@example.com","`+testEmail+`"],"role_ids":[]}`).
+		`{"emails":["bo@example.com","`+TestEmail+`"],"role_ids":[]}`).
 		expect(t, http.StatusOK).decode(t, &got)
 
 	if status := got.statusOf("bo@example.com"); status != "invited" {
 		t.Errorf("bo = %q, want invited despite the other address failing", status)
 	}
 
-	if status := got.statusOf(testEmail); status != "already_member" {
+	if status := got.statusOf(TestEmail); status != "already_member" {
 		t.Errorf("the caller's own address = %q, want already_member", status)
 	}
 }
@@ -87,11 +87,11 @@ func TestOneAlreadyMemberDoesNotSinkTheBatch(t *testing.T) {
 // batch. It is checked once, before anything is written, because the role set is the
 // same for every address — fifty identical refusals is not a better answer.
 func TestABatchCannotGrantMoreThanTheCallerHolds(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleAdmin)
+	f := NewAuthzFixture(t, authz.RoleAdmin)
 
-	owner := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
+	owner := f.Repo.SeedShippedRole(f.OrgID, authz.RoleOwner)
 
-	var doc problemBody
+	var doc ProblemBody
 	f.call(t, http.MethodPost, f.orgPath("/invitations"),
 		`{"emails":["bo@example.com"],"role_ids":["`+owner.String()+`"]}`).
 		expect(t, http.StatusForbidden).decode(t, &doc)
@@ -101,19 +101,19 @@ func TestABatchCannotGrantMoreThanTheCallerHolds(t *testing.T) {
 	}
 
 	// Nothing was written, and nothing was mailed.
-	if len(f.mailer.invitations) != 0 {
-		t.Errorf("%d invitations went out after a refused batch", len(f.mailer.invitations))
+	if len(f.Mailer.Invitations) != 0 {
+		t.Errorf("%d invitations went out after a refused batch", len(f.Mailer.Invitations))
 	}
 }
 
 // TestABatchRefusesTheSameAddressTwice covers the check the schema cannot make.
 // uniqueItems compares the strings it was sent; only normalising knows that
 // Ada@example.com and ada@example.com are one address, and inviting one address
-// twice in one request would produce an invitation and then a refusal for it.
+// twice in one Request would produce an invitation and then a refusal for it.
 func TestABatchRefusesTheSameAddressTwice(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	var doc problemBody
+	var doc ProblemBody
 	f.call(t, http.MethodPost, f.orgPath("/invitations"),
 		`{"emails":["Bo@example.com","bo@example.com"],"role_ids":[]}`).
 		expect(t, http.StatusUnprocessableEntity).decode(t, &doc)
@@ -122,7 +122,7 @@ func TestABatchRefusesTheSameAddressTwice(t *testing.T) {
 		t.Errorf("code = %q, want invalid_invitation_batch", doc.Code)
 	}
 
-	if len(f.mailer.invitations) != 0 {
+	if len(f.Mailer.Invitations) != 0 {
 		t.Error("a refused batch still mailed somebody")
 	}
 }
@@ -130,7 +130,7 @@ func TestABatchRefusesTheSameAddressTwice(t *testing.T) {
 // TestTheBatchIsCapped pins the schema half: the cap is in the contract, so a
 // client learns it from the document rather than from a 422 in production.
 func TestTheBatchIsCapped(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	addresses := make([]string, 0, 51)
 	for i := range 51 {
@@ -141,7 +141,7 @@ func TestTheBatchIsCapped(t *testing.T) {
 		`{"emails":[`+strings.Join(addresses, ",")+`],"role_ids":[]}`).
 		expect(t, http.StatusUnprocessableEntity)
 
-	if len(f.mailer.invitations) != 0 {
+	if len(f.Mailer.Invitations) != 0 {
 		t.Error("an over-long batch still mailed somebody")
 	}
 }
@@ -150,7 +150,7 @@ func TestTheBatchIsCapped(t *testing.T) {
 // the same rows as inviting one at a time, so the token from the message still
 // works.
 func TestAnInvitedAddressBecomesAMemberByAccepting(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	const invitee = "bo@example.com"
 
@@ -158,16 +158,16 @@ func TestAnInvitedAddressBecomesAMemberByAccepting(t *testing.T) {
 		`{"emails":["`+invitee+`"],"role_ids":[]}`).
 		expect(t, http.StatusOK)
 
-	if len(f.mailer.invitations) != 1 {
-		t.Fatalf("%d messages, want 1", len(f.mailer.invitations))
+	if len(f.Mailer.Invitations) != 1 {
+		t.Fatalf("%d messages, want 1", len(f.Mailer.Invitations))
 	}
 
-	token := f.mailer.invitations[0].token
+	token := f.Mailer.Invitations[0].Token
 
 	registerAccount(t, f, invitee)
-	bo := signIn(t, f.server, invitee, testPassword)
+	bo := signIn(t, f.Server, invitee, TestPassword)
 
-	if rec := do(t, f.server.http.Handler, authed(t, http.MethodPost,
+	if rec := Do(t, f.Server.Handler(), Authed(t, http.MethodPost,
 		"/v1/me/invitations/accept", `{"token":"`+token+`"}`, bo, "")); rec.Code != http.StatusNoContent {
 		t.Fatalf("accept = %d; body %s", rec.Code, rec.Body.Bytes())
 	}

@@ -44,8 +44,8 @@ internal/store/repositories/user.go       ← implementuje, z asercją
                                             var _ user.Repository = (*User)(nil)
 ```
 
-Interfejs nadal należy do domeny. Typy na tym interfejsie to wygenerowane `ent.User`, `ent.Organization` i reszta —
-nie ma drugiej paczki struktur. Klient zapytań i import `entgo.io` zostają w `internal/store`.
+Interfejs nadal należy do domeny. Typy na tym interfejsie to wygenerowane `ent.User`, `ent.Organization` i reszta — nie
+ma drugiej paczki struktur. Klient zapytań i import `entgo.io` zostają w `internal/store`.
 
 Nowy moduł powtarza ten sam układ: `internal/domain/<rzecz>/repository.go` plus
 `internal/store/repositories/<rzecz>.go`. Krok po kroku:
@@ -86,8 +86,7 @@ sterownik  ──▶  błąd domenowy  ──▶  status HTTP
            repo             problem
 ```
 
-1. **Repozytorium** zamienia błąd sterownika na domenowy (`23505` → `user.ErrEmailTaken`). Tu kończy się
-   baza.
+1. **Repozytorium** zamienia błąd sterownika na domenowy (`23505` → `user.ErrEmailTaken`). Tu kończy się baza.
 2. **`internal/api/problem`** zamienia domenowy na status HTTP i kod. Nie wie, że istnieje baza danych.
 
 Cokolwiek niezmapowanego staje się nieprzejrzystym `500`, a prawdziwy błąd trafia do logu przy identyfikatorze żądania.

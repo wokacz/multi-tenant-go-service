@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"net/http"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/api"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
@@ -28,7 +29,7 @@ type auditEventBody struct {
 	IP      string `json:"ip"`
 }
 
-func (f *authzFixture) auditLog(t *testing.T) []auditEventBody {
+func (f *AuthzFixture) auditLog(t *testing.T) []auditEventBody {
 	t.Helper()
 
 	var body struct {
@@ -49,9 +50,9 @@ func (f *authzFixture) auditLog(t *testing.T) []auditEventBody {
 // is both the honest description and an id that resolves to a real row, so the
 // entry renders with a name rather than a bare uuid.
 func TestRegisteringIsAudited(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), ent.DefaultOrganizationSlug)
+	defaultOrg, err := f.Repo.OrganizationBySlug(t.Context(), ent.DefaultOrganizationSlug)
 	if err != nil {
 		t.Fatalf("default organization: %v", err)
 	}
@@ -133,7 +134,7 @@ var readOnlyProbes = []string{
 // belongs in the log.
 func TestEveryMutatingOperationIsAudited(t *testing.T) {
 	t.Run("every gated operation is classified as mutating or read-only", func(t *testing.T) {
-		for id, rule := range operationAccess {
+		for id, rule := range api.OperationAccess() {
 			if rule.Scope != authz.ScopeOrganization {
 				continue
 			}
@@ -156,17 +157,17 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 			// A fresh organization per operation: several of these delete the
 			// thing the next one would act on, and the log has to start empty
 			// for the assertion below to mean anything.
-			f := newAuthzFixture(t, authz.RoleOwner)
+			f := NewAuthzFixture(t, authz.RoleOwner)
 
 			// Two roles: one held by somebody, and a free one for delete-role —
 			// deleting an assigned role is refused, and the refusal would look
 			// like a missing audit entry.
-			held := f.repo.SeedRole(f.orgID, "held_role")
-			free := f.repo.SeedRole(f.orgID, "free_role")
+			held := f.Repo.SeedRole(f.OrgID, "held_role")
+			free := f.Repo.SeedRole(f.OrgID, "free_role")
 
-			// Somebody else to act on, so remove-member and the status change do
+			// Somebody else to act on, so remove-member and the status change Do
 			// not hit the last owner and get refused for an unrelated reason.
-			other := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()),
+			other := f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()),
 				ent.MembershipActive, held)
 
 			// A registered account that is not yet in the organization, for
@@ -174,7 +175,7 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 			outsider := registerOutsider(t, f)
 
 			// An outstanding invitation for the two operations that act on one.
-			invitation := f.repo.SeedInvitation(f.orgID, "invited@example.com",
+			invitation := f.Repo.SeedInvitation(f.OrgID, "invited@example.com",
 				"a-probe-token", time.Now().UTC().Add(orgs.InvitationTTL), held)
 
 			probes := auditProbes(f, held, free, other, invitation, outsider)
@@ -186,8 +187,8 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 
 			before := len(f.auditLog(t))
 
-			rec := do(t, f.server.http.Handler,
-				authed(t, p.method, p.path, p.body, f.token, ""))
+			rec := Do(t, f.Server.Handler(),
+				Authed(t, p.method, p.path, p.body, f.Token, ""))
 			if rec.Code >= http.StatusBadRequest {
 				t.Fatalf("%s %s = %d; body %s", p.method, p.path, rec.Code, rec.Body.Bytes())
 			}
@@ -196,7 +197,7 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 			// read from the installation-wide view instead.
 			var events []auditEventBody
 			if id == "delete-organization" {
-				f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+				f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 				var body struct {
 					Events []auditEventBody `json:"events"`
@@ -222,13 +223,13 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 
 			// Attribution is the whole point: an entry that does not say who is
 			// worse than no entry, because it looks like coverage.
-			if newest.Actor.ID != f.userID {
-				t.Errorf("actor = %v, want the caller %v", newest.Actor.ID, f.userID)
+			if newest.Actor.ID != f.UserID {
+				t.Errorf("actor = %v, want the caller %v", newest.Actor.ID, f.UserID)
 			}
 
-			if newest.Actor.Email != testEmail {
+			if newest.Actor.Email != TestEmail {
 				t.Errorf("actor email = %q, want %q — the reader should not need a "+
-					"second lookup to know who this was", newest.Actor.Email, testEmail)
+					"second lookup to know who this was", newest.Actor.Email, TestEmail)
 			}
 		})
 	}
@@ -236,13 +237,13 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 
 // registerOutsider signs up a second account through the API, so add-member has
 // somebody real to add who is not already a member.
-func registerOutsider(t *testing.T, f *authzFixture) string {
+func registerOutsider(t *testing.T, f *AuthzFixture) string {
 	t.Helper()
 
 	const email = "bob@example.com"
 
 	body := `{"name":"Bob","email":"` + email + `","password":"twelve-chars","password_confirm":"twelve-chars"}`
-	if rec := postJSON(t, f.server.http.Handler, "/v1/users", body); rec.Code != http.StatusNoContent {
+	if rec := PostJSON(t, f.Server.Handler(), "/v1/users", body); rec.Code != http.StatusNoContent {
 		t.Fatalf("register outsider = %d; body %s", rec.Code, rec.Body.Bytes())
 	}
 
@@ -254,7 +255,7 @@ func registerOutsider(t *testing.T, f *authzFixture) string {
 // heldRole is assigned to memberID; freeRole is not, so deleting it is not
 // refused for being in use.
 func auditProbes(
-	f *authzFixture,
+	f *AuthzFixture,
 	heldRole, freeRole, memberID, invitationID uuid.UUID,
 	outsider string,
 ) map[string]probe {
@@ -287,10 +288,10 @@ func auditProbes(
 // the membership before the row is deleted — otherwise "who removed them" has
 // nothing left to point at.
 func TestTheAuditLogNamesWhoItWasAbout(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	victim := uuid.Must(uuid.NewV7())
-	member := f.repo.SeedMember(f.orgID, victim, ent.MembershipActive)
+	member := f.Repo.SeedMember(f.OrgID, victim, ent.MembershipActive)
 
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+member.String()), "").
 		expect(t, http.StatusNoContent)
@@ -314,7 +315,7 @@ func TestTheAuditLogNamesWhoItWasAbout(t *testing.T) {
 // transaction. A log that records attempts as if they succeeded is worse than
 // one that records nothing.
 func TestARefusedChangeIsNotAudited(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	before := len(f.auditLog(t))
 
@@ -327,7 +328,7 @@ func TestARefusedChangeIsNotAudited(t *testing.T) {
 		expect(t, http.StatusUnprocessableEntity)
 
 	// Refused by the last-owner rule.
-	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").
+	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.Membership.String()), "").
 		expect(t, http.StatusConflict)
 
 	if got := len(f.auditLog(t)); got != before {
@@ -340,11 +341,11 @@ func TestARefusedChangeIsNotAudited(t *testing.T) {
 // which is the one read where a leak would hand over another customer's
 // administrative activity.
 func TestTheAuditLogIsScopedToTheOrganization(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	// Something happens in another organization.
-	foreign := f.repo.SeedOrganization("globex", "Globex")
-	foreignMember := f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive)
+	foreign := f.Repo.SeedOrganization("globex", "Globex")
+	foreignMember := f.Repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive)
 	_ = foreignMember
 
 	f.call(t, http.MethodPatch, f.orgPath(""), `{"name":"Renamed"}`).expect(t, http.StatusOK)
@@ -359,18 +360,18 @@ func TestTheAuditLogIsScopedToTheOrganization(t *testing.T) {
 // TestReadingTheAuditLogNeedsThePermission keeps the history behind its own
 // permission rather than behind "can administer".
 func TestReadingTheAuditLogNeedsThePermission(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	// An administrator over roles and members, but not over the log.
-	role := f.repo.SeedRole(f.orgID, "people_admin",
+	role := f.Repo.SeedRole(f.OrgID, "people_admin",
 		string(authz.PermMembersRead),
 		string(authz.PermRolesRead),
 	)
-	f.repo.SeedMemberRoles(f.membership, role)
+	f.Repo.SeedMemberRoles(f.Membership, role)
 
 	res := f.call(t, http.MethodGet, f.orgPath("/audit"), "").expect(t, http.StatusForbidden)
 
-	body := decodeProblem(t, res.body)
+	body := DecodeProblem(t, res.body)
 	if body.RequiredPermission != string(authz.PermAuditRead) {
 		t.Errorf("required_permission = %q, want %q", body.RequiredPermission, authz.PermAuditRead)
 	}

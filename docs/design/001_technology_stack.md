@@ -4,27 +4,27 @@ Serwis HTTP w Go, z Postgresem, bez frontendu. Kontrakt API jest generowany z ko
 
 ## Zależności bezpośrednie
 
-| Biblioteka                                   | Wersja           | Do czego                                         |
-|----------------------------------------------|------------------|--------------------------------------------------|
-| [huma](https://huma.rocks/)                  | v2.39.1          | operacje, walidacja wejścia, generowanie OpenAPI |
-| [chi](https://github.com/go-chi/chi)         | v5.3.1           | router i middleware                              |
-| [ent](https://entgo.io/) | v0.14.6 | schemat, klient, migracje; dostęp do bazy |
-| [pgx](https://github.com/jackc/pgx) | v5.10.0 | sterownik Postgresa pod `database/sql` |
-| `github.com/google/uuid`                     | v1.6.0           | identyfikatory UUIDv7                            |
-| `golang.org/x/crypto`                        | v0.55.0          | bcrypt                                           |
-| `golang.org/x/text`                          | v0.41.0          | negocjacja języka (`Accept-Language`)            |
+| Biblioteka                           | Wersja  | Do czego                                         |
+|--------------------------------------|---------|--------------------------------------------------|
+| [huma](https://huma.rocks/)          | v2.39.1 | operacje, walidacja wejścia, generowanie OpenAPI |
+| [chi](https://github.com/go-chi/chi) | v5.3.1  | router i middleware                              |
+| [ent](https://entgo.io/)             | v0.14.6 | schemat, klient, migracje; dostęp do bazy        |
+| [pgx](https://github.com/jackc/pgx)  | v5.10.0 | sterownik Postgresa pod `database/sql`           |
+| `github.com/google/uuid`             | v1.6.0  | identyfikatory UUIDv7                            |
+| `golang.org/x/crypto`                | v0.55.0 | bcrypt                                           |
+| `golang.org/x/text`                  | v0.41.0 | negocjacja języka (`Accept-Language`)            |
 
 Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obraz developerski pinuje minor tagiem
 `golang:1.26-alpine` — `FROM` nie czyta `go.mod`.
 
 ## Narzędzia
 
-| Narzędzie                                          | Do czego                                                               |
-|----------------------------------------------------|------------------------------------------------------------------------|
-| [Task](https://taskfile.dev/)                      | wszystkie polecenia projektu; `task check` to dokładnie to, co robi CI |
+| Narzędzie                                          | Do czego                                                                        |
+|----------------------------------------------------|---------------------------------------------------------------------------------|
+| [Task](https://taskfile.dev/)                      | wszystkie polecenia projektu; `task check` to dokładnie to, co robi CI          |
 | [Atlas](https://atlasgo.io/)                       | migracje wersjonowane; różnicę liczy ent (`tools/migrate`), Atlas renderuje SQL |
-| [golangci-lint](https://golangci-lint.run/) **v2** | lint                                                                   |
-| Docker Compose                                     | środowisko developerskie: Postgres 18, migracje, API                   |
+| [golangci-lint](https://golangci-lint.run/) **v2** | lint                                                                            |
+| Docker Compose                                     | środowisko developerskie: Postgres 18, migracje, API                            |
 
 > **Uwaga:** `.golangci.yml` używa schematu konfiguracji v2. Instalacja ze
 > ścieżki bez `/v2/` po cichu wciąga v1, który tej konfiguracji nie przeczyta
@@ -54,20 +54,21 @@ Repozytorium zawiera **dwa** moduły Go:
 - `tools/entgen/` — generator kodu ent, w osobnym module.
 
 `tools/entgen/` jest osobny, bo generator ent wciąga cobra, pflag i bibliotekę do szerokości znaków — a przy okazji
-`go mod tidy` w głównym module wybierał wersję jednej z tych zależności, która się nie kompiluje. Nic z tego nie
-ma prawa być w grafie zależności serwisu, który rozmawia wyłącznie z Postgresem.
+`go mod tidy` w głównym module wybierał wersję jednej z tych zależności, która się nie kompiluje. Nic z tego nie ma
+prawa być w grafie zależności serwisu, który rozmawia wyłącznie z Postgresem.
 
 `tools/openapi` i `tools/migrate` mieszkają w głównym module, bo muszą importować `internal/api` i `internal/store/ent`
 — to nie są binaria produkcyjne, tylko generatory wołane przez `task openapi` i `task migrate:diff`.
 
-Katalog `cmd/` zostaje dla procesów uruchamianych w deploymencie lub na hoście developerskim: `api`, `bootstrap`, `seed`.
+Katalog `cmd/` zostaje dla procesów uruchamianych w deploymencie lub na hoście developerskim: `api`, `bootstrap`,
+`seed`.
 
 Praktyczny skutek: `go mod tidy` bez `-C tools/entgen` pomija drugi moduł. `task tidy`
 robi oba i CI to sprawdza.
 
-Drugi skutek: obraz developerski **nie zawiera** generatora ent. Generowanie migracji (`task migrate:diff`) wymaga Atlasa,
-modułu `tools/entgen` i `tools/migrate` na hoście; stosowanie gotowych plików (`migrate apply`) wystarcza sam binarny
-Atlas, i to robi usługa `migrate` w Compose.
+Drugi skutek: obraz developerski **nie zawiera** generatora ent. Generowanie migracji (`task migrate:diff`) wymaga
+Atlasa, modułu `tools/entgen` i `tools/migrate` na hoście; stosowanie gotowych plików (`migrate apply`) wystarcza sam
+binarny Atlas, i to robi usługa `migrate` w Compose.
 
 ## Docker Compose
 

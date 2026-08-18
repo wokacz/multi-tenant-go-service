@@ -58,14 +58,14 @@ Nic więcej nie trzeba: lista języków wynika z plików w katalogu, a matcher
 
 ## Co jest tłumaczone, a co nie
 
-| Element                            | Skąd tekst                                                                                 |
-|------------------------------------|--------------------------------------------------------------------------------------------|
-| komunikat błędu (`detail`)         | katalog, klucz `error.<code>`                                                              |
-| nazwa i opis uprawnienia           | katalog, `permission.<klucz>.name` / `.description`                                        |
-| nazwa i opis roli systemowej       | katalog, `role.<klucz>.name` / `.description`                                              |
-| nazwa roli własnej                 | kolumna `roles.name` — **nietłumaczona**, w języku, w którym ją wpisano                     |
-| `code`, `required_permission`      | **nigdy** — to identyfikatory maszynowe                                                    |
-| `Summary` / `Description` operacji | angielski, w kodzie; trafiają do OpenAPI                                                   |
+| Element                            | Skąd tekst                                                              |
+|------------------------------------|-------------------------------------------------------------------------|
+| komunikat błędu (`detail`)         | katalog, klucz `error.<code>`                                           |
+| nazwa i opis uprawnienia           | katalog, `permission.<klucz>.name` / `.description`                     |
+| nazwa i opis roli systemowej       | katalog, `role.<klucz>.name` / `.description`                           |
+| nazwa roli własnej                 | kolumna `roles.name` — **nietłumaczona**, w języku, w którym ją wpisano |
+| `code`, `required_permission`      | **nigdy** — to identyfikatory maszynowe                                 |
+| `Summary` / `Description` operacji | angielski, w kodzie; trafiają do OpenAPI                                |
 
 Ostatni wiersz jest świadomy: kontrakt API i jego dokumentacja są po angielsku, tak jak kod. Tłumaczone są komunikaty
 kierowane do użytkownika końcowego.

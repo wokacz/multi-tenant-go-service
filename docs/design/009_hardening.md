@@ -112,18 +112,18 @@ wzorców — z tego samego powodu, dla którego nie ma wildcardów w uprawnienia
 tego nie zauważy. Wpis, którego przeglądarka nigdy nie dopasuje (ścieżka, sam host, wielkie litery), jest odrzucany przy
 starcie, bo najgorszy tryb awarii ustawienia bezpieczeństwa to takie, które *wygląda* na skonfigurowane.
 
-**`Access-Control-Allow-Credentials` nie jest ustawiane nigdy.** W całym serwisie nie ma ciasteczka: autoryzacja to token
-Bearer, który klient trzyma sam. Nie ma więc poświadczeń ambientnych, o których dołączenie trzeba by przeglądarkę
+**`Access-Control-Allow-Credentials` nie jest ustawiane nigdy.** W całym serwisie nie ma ciasteczka: autoryzacja to
+token Bearer, który klient trzyma sam. Nie ma więc poświadczeń ambientnych, o których dołączenie trzeba by przeglądarkę
 prosić — i nie ma pary „`*` plus credentials", która jest klasycznym błędem w tym miejscu.
 
-| Nagłówek                        | Wartość                                                                       |
-|---------------------------------|-------------------------------------------------------------------------------|
-| `Access-Control-Allow-Origin`   | dopasowany origin, nigdy `*`                                                  |
+| Nagłówek                        | Wartość                                                                               |
+|---------------------------------|---------------------------------------------------------------------------------------|
+| `Access-Control-Allow-Origin`   | dopasowany origin, nigdy `*`                                                          |
 | `Access-Control-Allow-Headers`  | `Authorization`, `Content-Type`, `Accept-Language`, `If-None-Match`, `X-Device-Token` |
-| `Access-Control-Expose-Headers` | `ETag`, `Retry-After`, `WWW-Authenticate`                                     |
-| `Access-Control-Allow-Methods`  | `GET, POST, PATCH, PUT, DELETE, OPTIONS`                                      |
-| `Access-Control-Max-Age`        | `600`                                                                         |
-| `Vary`                          | `Origin` — zawsze, gdy lista jest niepusta                                    |
+| `Access-Control-Expose-Headers` | `ETag`, `Retry-After`, `WWW-Authenticate`                                             |
+| `Access-Control-Allow-Methods`  | `GET, POST, PATCH, PUT, DELETE, OPTIONS`                                              |
+| `Access-Control-Max-Age`        | `600`                                                                                 |
+| `Vary`                          | `Origin` — zawsze, gdy lista jest niepusta                                            |
 
 Eksponowane są tylko nagłówki spoza listy bezpiecznej CORS-a, dlatego nie ma tam `Content-Language`. Każdy z trzech jest
 nośny dla klienta: `ETag` napędza żądanie warunkowe na migawce uprawnień, `Retry-After` mówi, ile czekać po `429`, a

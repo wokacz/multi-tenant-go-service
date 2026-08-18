@@ -46,12 +46,12 @@ sequenceDiagram
 Kompaktowy JWT podpisany HMAC-SHA256, bez biblioteki — parser ma ~50 linii w
 `internal/auth/token.go`.
 
-| Claim         | Znaczenie                                              |
-|---------------|--------------------------------------------------------|
-| `sub`         | identyfikator użytkownika                              |
-| `did`         | identyfikator **urządzenia**, dla którego token wydano |
-| `ver`         | **epoka sesji** w chwili wydania                       |
-| `exp` / `iat` | wygaśnięcie i moment wydania                           |
+| Claim         | Znaczenie                                                |
+|---------------|----------------------------------------------------------|
+| `sub`         | identyfikator użytkownika                                |
+| `did`         | identyfikator **urządzenia**, dla którego token wydano   |
+| `ver`         | **epoka sesji** w chwili wydania                         |
+| `exp` / `iat` | wygaśnięcie i moment wydania                             |
 | `iss` / `aud` | nazwa **tej instalacji**; oba sprawdzane przy parsowaniu |
 
 `iss` i `aud` niosą dziś ten sam napis (`AUTH_TOKEN_ISSUER`, domyślnie
@@ -90,31 +90,31 @@ od „wygasły" od „zły podpis" pozwoliłoby badać weryfikator własność p
 zwiększają go w tej samej instrukcji, w której zapisują zmianę — nie ma chwili, w której nowe hasło już obowiązuje, a
 tokeny wydane pod starym jeszcze działają. `DELETE /v1/me/sessions` podbija samą epokę i nic więcej.
 
-Inkrementacja jest **wyrażeniem SQL**, nie odczytem i zapisem: dwie równoległe zmiany, które odczytają 4, obie zapisałyby
-5, a token wydany pod 4 przeżyłby jedną z nich.
+Inkrementacja jest **wyrażeniem SQL**, nie odczytem i zapisem: dwie równoległe zmiany, które odczytają 4, obie
+zapisałyby 5, a token wydany pod 4 przeżyłby jedną z nich.
 
 Token wydany wcześniej ma starą epokę, więc przy kolejnym żądaniu odpada — mimo poprawnego podpisu i ważnego `exp`. Daje
 to unieważnianie **bez listy odwołań**, której trzeba by pilnować i czyścić.
 
 ## Co unieważnia co
 
-| Zdarzenie            | Skutek                                                  |
-|----------------------|---------------------------------------------------------|
-| Reset hasła            | padają **wszystkie** sesje konta (epoka +1)             |
-| Zmiana hasła w sesji   | to samo — łącznie z sesją, która o zmianę poprosiła     |
-| „Wyloguj wszędzie"     | to samo, bez ruszania hasła                             |
-| Zawieszenie konta      | padają wszystkie sesje, a nowe logowanie jest odrzucane |
-| Odwołanie urządzenia   | padają sesje **tego urządzenia**                        |
-| Wygaśnięcie            | pada pojedynczy token po `AUTH_TOKEN_TTL`               |
+| Zdarzenie              | Skutek                                                                 |
+|------------------------|------------------------------------------------------------------------|
+| Reset hasła            | padają **wszystkie** sesje konta (epoka +1)                            |
+| Zmiana hasła w sesji   | to samo — łącznie z sesją, która o zmianę poprosiła                    |
+| „Wyloguj wszędzie"     | to samo, bez ruszania hasła                                            |
+| Zawieszenie konta      | padają wszystkie sesje, a nowe logowanie jest odrzucane                |
+| Odwołanie urządzenia   | padają sesje **tego urządzenia**                                       |
+| Wygaśnięcie            | pada pojedynczy token po `AUTH_TOKEN_TTL`                              |
 | Zmiana adresu          | **nic** — patrz [niżej](#zmiana-adresu-wymaga-dowodu-z-nowej-skrzynki) |
-| Zmiana `name`/`locale` | **nic** — to nie są dane uwierzytelniające              |
+| Zmiana `name`/`locale` | **nic** — to nie są dane uwierzytelniające                             |
 
 ## Zmiana hasła i „wyloguj wszędzie"
 
-| Operacja           | Ścieżka                | Wymaga                    |
-|--------------------|------------------------|---------------------------|
-| zmiana hasła       | `POST /v1/me/password` | **aktualnego hasła**      |
-| wyloguj wszędzie   | `DELETE /v1/me/sessions` | tylko tokenu            |
+| Operacja         | Ścieżka                  | Wymaga               |
+|------------------|--------------------------|----------------------|
+| zmiana hasła     | `POST /v1/me/password`   | **aktualnego hasła** |
+| wyloguj wszędzie | `DELETE /v1/me/sessions` | tylko tokenu         |
 
 Do niedawna hasło można było zmienić **tylko przez reset**, czyli mając dostęp do skrzynki. Podbicie epoki też istniało
 wyłącznie jako efekt uboczny resetu albo zawieszenia — a chęć zakończenia sesji bez zmiany hasła, któremu się dalej ufa,
@@ -125,12 +125,12 @@ składnika: token, który wyciekł z przeglądarki, nie może wystarczyć do zmi
 konta**.
 
 **Sesja wołającego też pada.** To wynika z podbicia epoki i jest zamierzone, nie ograniczeniem. Kto zmienia hasło, albo
-sądzi, że ktoś je znał — wtedy powinny paść wszystkie sesje — albo nie, i wtedy ponowne zalogowanie kosztuje jeden ekran.
-Utrzymanie tej sesji wymagałoby **wydania tokenu w tym miejscu**, a token wydaje ten endpoint, który rozstrzyga, czy
-potrzebny jest drugi składnik.
+sądzi, że ktoś je znał — wtedy powinny paść wszystkie sesje — albo nie, i wtedy ponowne zalogowanie kosztuje jeden
+ekran. Utrzymanie tej sesji wymagałoby **wydania tokenu w tym miejscu**, a token wydaje ten endpoint, który rozstrzyga,
+czy potrzebny jest drugi składnik.
 
-**Nie ma reguły „nowe hasło musi różnić się od starego".** Kosztuje drugie porównanie bcrypt i nic nie chroni: kto wpisze
-to samo hasło, właśnie dowiódł, że je zna, a epoka i tak kończy pozostałe sesje — czyli to, po co przyszedł.
+**Nie ma reguły „nowe hasło musi różnić się od starego".** Kosztuje drugie porównanie bcrypt i nic nie chroni: kto
+wpisze to samo hasło, właśnie dowiódł, że je zna, a epoka i tak kończy pozostałe sesje — czyli to, po co przyszedł.
 
 **Urządzenia zostają.** `DELETE /v1/me/sessions` kończy sesje; prawo urządzenia do trzymania sesji odbiera
 `DELETE /v1/me/devices/{id}`. Pod tą ścieżką **nie ma czego listować** — sesje to tokeny, a `session_epoch` jest jedynym
@@ -207,15 +207,15 @@ przypadek.
 `POST /v1/me/email` → kod na **nowy** adres. `POST /v1/me/email/verify` → adres zostaje zastosowany.
 
 Konto nie rusza się, dopóki kod nie wróci. Adres jest tym, na co idzie reset hasła, więc zastosowanie go na samo żądanie
-zamieniłoby tę operację w sposób przejęcia konta pożyczonym tokenem. Wymagane jest też **aktualne hasło** — z tego samego
-powodu, dla którego wymaga go przełącznik drugiego składnika: token, który wyciekł z przeglądarki, nie może wystarczyć do
-przekierowania miejsca, z którego konto się odzyskuje.
+zamieniłoby tę operację w sposób przejęcia konta pożyczonym tokenem. Wymagane jest też **aktualne hasło** — z tego
+samego powodu, dla którego wymaga go przełącznik drugiego składnika: token, który wyciekł z przeglądarki, nie może
+wystarczyć do przekierowania miejsca, z którego konto się odzyskuje.
 
 **Czy nowy adres jest już zajęty — nie jest ujawniane przy żądaniu.** Uwierzytelniony wołający mógłby inaczej przejść
 listę adresów po jednym żądaniu, czyli odtworzyć oracle, który rejestracja zamyka. Odpowiedź jest, ale dopiero przy
-potwierdzeniu (`409 email_taken`) — a wtedy wołający przeczytał już kod z tej skrzynki, więc dowiedział się czegoś, co
-i tak było w jego zasięgu. To jedyne miejsce, w którym `ErrEmailTaken` wychodzi na zewnątrz; rejestracja przechwytuje go
-w handlerze i odpowiada `204`.
+potwierdzeniu (`409 email_taken`) — a wtedy wołający przeczytał już kod z tej skrzynki, więc dowiedział się czegoś, co i
+tak było w jego zasięgu. To jedyne miejsce, w którym `ErrEmailTaken` wychodzi na zewnątrz; rejestracja przechwytuje go w
+handlerze i odpowiada `204`.
 
 **Epoka sesji nie jest podbijana.** Hasło się nie zmieniło, więc istniejące sesje nie są mniej uprawnione niż chwilę
 wcześniej, a wylogowanie wszystkich urządzeń przy zmianie profilu jest zaskoczeniem bez zysku. Tę operację chroni hasło

@@ -68,7 +68,7 @@ services:
     healthcheck:
       # -U matters: pg_isready otherwise probes as the current OS user and
       # reports a healthy server as unreachable.
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -129,7 +129,7 @@ services:
     healthcheck:
       # 127.0.0.1, not localhost: the process binds IPv4 0.0.0.0, and Alpine
       # may resolve localhost to ::1 first.
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:8000/health" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -150,7 +150,7 @@ services:
   # regardless: an exporter with nowhere to send retries and logs a warning, which is
   # a better failure than an API that will not start without an observability stack.
   otel:
-    profiles: [otel]
+    profiles: [ otel ]
     image: grafana/otel-lgtm:latest
     restart: unless-stopped
     ports:
@@ -165,7 +165,7 @@ services:
       # Named, so restarting the stack does not throw away yesterday's traces.
       - otel-data:/data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health" ]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -178,7 +178,7 @@ services:
   # It publishes its own ports so it can run alongside the ordinary api service
   # instead of fighting it for 8000.
   api-debug:
-    profiles: [debug]
+    profiles: [ debug ]
     build:
       context: .
       dockerfile: .docker/Dockerfile

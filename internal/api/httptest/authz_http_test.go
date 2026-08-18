@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"encoding/json"
@@ -11,101 +11,21 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
-	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
-
-// authzFixture is one signed-in account plus the organization it belongs to.
-type authzFixture struct {
-	server     *Server
-	repo       *memory.Authz
-	mailer     *capturingMailer
-	token      string
-	userID     uuid.UUID
-	orgID      uuid.UUID
-	membership uuid.UUID
-}
-
-// newAuthzFixture registers Ada, signs her in, and puts her in an organization
-// holding the given shipped roles.
-func newAuthzFixture(t *testing.T, roles ...authz.RoleKey) *authzFixture {
-	t.Helper()
-
-	return newAuthzFixtureWith(t, telemetry.Disabled(), roles...)
-}
-
-// newAuthzFixtureWith is the same fixture with telemetry attached, for the tests that
-// read the counters back.
-func newAuthzFixtureWith(t *testing.T, tel *telemetry.Telemetry, roles ...authz.RoleKey) *authzFixture {
-	t.Helper()
-
-	mailer := &capturingMailer{}
-	server, repo := newTestAPIConfigTel(t, mailer, memory.NewUsers(), tel, nil)
-
-	registerAda(t, server)
-	session := signInAda(t, server, "", http.StatusCreated)
-
-	orgID := repo.SeedOrganization("acme", "Acme")
-
-	roleIDs := make([]uuid.UUID, 0, len(roles))
-	for _, key := range roles {
-		roleIDs = append(roleIDs, repo.SeedShippedRole(orgID, key))
-	}
-
-	return &authzFixture{
-		server:     server,
-		repo:       repo,
-		mailer:     mailer,
-		token:      session.Token,
-		userID:     session.User.ID,
-		orgID:      orgID,
-		membership: repo.SeedMember(orgID, session.User.ID, ent.MembershipActive, roleIDs...),
-	}
-}
-
-// getOrg fetches the fixture's own organization and returns just the status,
-// which is all the tests about revocation and suspension care about.
-func (f *authzFixture) getOrg(t *testing.T) int {
-	t.Helper()
-
-	return do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", f.token, "")).Code
-}
-
-// problemBody is the extended RFC 7807 document this API emits. The two extra
-// fields are what a client actually branches on: code is stable across
-// languages and releases, required_permission is the raw key it can look up in
-// the permission catalog.
-type problemBody struct {
-	Status             int    `json:"status"`
-	Detail             string `json:"detail"`
-	Code               string `json:"code"`
-	RequiredPermission string `json:"required_permission"`
-}
-
-func decodeProblem(t *testing.T, body []byte) problemBody {
-	t.Helper()
-
-	var out problemBody
-	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("decode problem: %v (body %s)", err, body)
-	}
-
-	return out
-}
 
 // TestAGatedOperationRefusesAMemberWithoutThePermission is the core of the
 // scheme: a member of the organization, signed in, with a role that does not
 // carry organization.read.
 func TestAGatedOperationRefusesAMemberWithoutThePermission(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	// A role holding something else entirely, so the membership is real but the
 	// permission is not.
-	role := f.repo.SeedRole(f.orgID, "auditors", string(authz.PermMembersRead))
-	f.repo.SeedMemberRoles(f.membership, role)
+	role := f.Repo.SeedRole(f.OrgID, "auditors", string(authz.PermMembersRead))
+	f.Repo.SeedMemberRoles(f.Membership, role)
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", f.Token, ""))
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body %s", rec.Code, rec.Body.Bytes())
@@ -115,7 +35,7 @@ func TestAGatedOperationRefusesAMemberWithoutThePermission(t *testing.T) {
 		t.Errorf("content type = %q, want application/problem+json", ct)
 	}
 
-	body := decodeProblem(t, rec.Body.Bytes())
+	body := DecodeProblem(t, rec.Body.Bytes())
 
 	// The raw key goes in the structured field so a client can look it up in the
 	// permission catalog; the prose gets the translated name, which is why the
@@ -131,10 +51,10 @@ func TestAGatedOperationRefusesAMemberWithoutThePermission(t *testing.T) {
 }
 
 func TestAGatedOperationAllowsAMemberWhoHoldsThePermission(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleViewer)
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", f.Token, ""))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body %s", rec.Code, rec.Body.Bytes())
@@ -148,8 +68,8 @@ func TestAGatedOperationAllowsAMemberWhoHoldsThePermission(t *testing.T) {
 		t.Fatalf("decode organization: %v", err)
 	}
 
-	if org.ID != f.orgID {
-		t.Errorf("id = %v, want %v", org.ID, f.orgID)
+	if org.ID != f.OrgID {
+		t.Errorf("id = %v, want %v", org.ID, f.OrgID)
 	}
 
 	if org.Slug != "acme" {
@@ -161,18 +81,18 @@ func TestAGatedOperationAllowsAMemberWhoHoldsThePermission(t *testing.T) {
 // here would confirm the organization exists to anyone willing to try
 // identifiers, which in a multi-tenant installation is a customer list.
 func TestAForeignOrganizationIs404NotForbidden(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	// A real organization Ada has nothing to do with, and one that never existed.
-	foreign := f.repo.SeedOrganization("globex", "Globex")
+	// A real organization Ada has nothing to Do with, and one that never existed.
+	foreign := f.Repo.SeedOrganization("globex", "Globex")
 
 	for name, id := range map[string]uuid.UUID{
 		"an organization the caller is not in": foreign,
 		"an organization that does not exist":  uuid.Must(uuid.NewV7()),
 	} {
 		t.Run(name, func(t *testing.T) {
-			rec := do(t, f.server.http.Handler,
-				authed(t, http.MethodGet, "/v1/orgs/"+id.String(), "", f.token, ""))
+			rec := Do(t, f.Server.Handler(),
+				Authed(t, http.MethodGet, "/v1/orgs/"+id.String(), "", f.Token, ""))
 
 			if rec.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want 404; body %s", rec.Code, rec.Body.Bytes())
@@ -180,7 +100,7 @@ func TestAForeignOrganizationIs404NotForbidden(t *testing.T) {
 
 			// The two answers must also be byte-identical, or the difference is
 			// still readable.
-			body := decodeProblem(t, rec.Body.Bytes())
+			body := DecodeProblem(t, rec.Body.Bytes())
 			if body.Detail != "not found" || body.Code != "not_found" {
 				t.Errorf("body = %+v, want the same opaque answer both cases produce", body)
 			}
@@ -196,15 +116,15 @@ func TestAForeignOrganizationIs404NotForbidden(t *testing.T) {
 // TestSuspendingAMemberTakesEffectOnTheNextRequest is why permissions are not
 // carried in the token. Nothing is re-issued and no session is touched.
 func TestSuspendingAMemberTakesEffectOnTheNextRequest(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	if rec := f.getOrg(t); rec != http.StatusOK {
+	if rec := f.GetOrg(t); rec != http.StatusOK {
 		t.Fatalf("status before suspension = %d, want 200", rec)
 	}
 
-	f.repo.SeedMemberStatus(f.membership, ent.MembershipSuspended)
+	f.Repo.SeedMemberStatus(f.Membership, ent.MembershipSuspended)
 
-	if rec := f.getOrg(t); rec != http.StatusNotFound {
+	if rec := f.GetOrg(t); rec != http.StatusNotFound {
 		t.Fatalf("status after suspension = %d, want 404", rec)
 	}
 }
@@ -213,15 +133,15 @@ func TestSuspendingAMemberTakesEffectOnTheNextRequest(t *testing.T) {
 // lighter action, and lands on 403 rather than 404 because the membership is
 // still there.
 func TestRevokingARoleTakesEffectOnTheNextRequest(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	if rec := f.getOrg(t); rec != http.StatusOK {
+	if rec := f.GetOrg(t); rec != http.StatusOK {
 		t.Fatalf("status before revoking = %d, want 200", rec)
 	}
 
-	f.repo.SeedMemberRoles(f.membership)
+	f.Repo.SeedMemberRoles(f.Membership)
 
-	if rec := f.getOrg(t); rec != http.StatusForbidden {
+	if rec := f.GetOrg(t); rec != http.StatusForbidden {
 		t.Fatalf("status after revoking = %d, want 403", rec)
 	}
 }
@@ -230,10 +150,10 @@ func TestRevokingARoleTakesEffectOnTheNextRequest(t *testing.T) {
 // 403 for a caller carrying no token would tell them their credentials were
 // accepted, and leaves generic HTTP tooling with nothing to retry against.
 func TestAGatedOperationWithoutASessionIs401(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	rec := do(t, f.server.http.Handler,
-		request(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), ""))
+	rec := Do(t, f.Server.Handler(),
+		Request(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), ""))
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401; body %s", rec.Code, rec.Body.Bytes())
@@ -248,10 +168,10 @@ func TestAGatedOperationWithoutASessionIs401(t *testing.T) {
 // middleware. It runs before huma validates the handler's input, so this is the
 // only thing standing between a junk path segment and the decision.
 func TestAMalformedOrganizationIDIsRejectedBeforeAnyLookup(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/not-a-uuid", "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/not-a-uuid", "", f.Token, ""))
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body %s", rec.Code, rec.Body.Bytes())
@@ -262,11 +182,11 @@ func TestAMalformedOrganizationIDIsRejectedBeforeAnyLookup(t *testing.T) {
 // to end: an account with no membership and no roles anywhere must still be
 // able to read its own profile, list its devices and sign itself out.
 func TestSelfServiceSurvivesHavingNoRolesAtAll(t *testing.T) {
-	mailer := &capturingMailer{}
-	s, _ := newTestAPIConfig(t, mailer, memory.NewUsers(), nil)
+	mailer := &CapturingMailer{}
+	s, _, _ := NewTestAPIConfig(t, mailer, memory.NewUsers(), nil)
 
-	registerAda(t, s)
-	session := signInAda(t, s, "", http.StatusCreated)
+	RegisterAda(t, s)
+	session := SignInAda(t, s, "", http.StatusCreated)
 
 	for _, path := range []string{
 		"/v1/me",
@@ -275,7 +195,7 @@ func TestSelfServiceSurvivesHavingNoRolesAtAll(t *testing.T) {
 		"/v1/me/organizations",
 	} {
 		t.Run(path, func(t *testing.T) {
-			rec := do(t, s.http.Handler, authed(t, http.MethodGet, path, "", session.Token, ""))
+			rec := Do(t, s.Handler(), Authed(t, http.MethodGet, path, "", session.Token, ""))
 			if rec.Code != http.StatusOK {
 				t.Errorf("status = %d, want 200; body %s", rec.Code, rec.Body.Bytes())
 			}
@@ -290,13 +210,13 @@ func TestSelfServiceSurvivesHavingNoRolesAtAll(t *testing.T) {
 // membership any more and has its own listing at GET /v1/me/invitations — being in
 // both would have meant two answers to "which organizations am I in".
 func TestMyOrganizationsShowsSuspensions(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleViewer)
 
-	suspended := f.repo.SeedOrganization("gamma", "Gamma")
-	f.repo.SeedMember(suspended, f.userID, ent.MembershipSuspended)
+	suspended := f.Repo.SeedOrganization("gamma", "Gamma")
+	f.Repo.SeedMember(suspended, f.UserID, ent.MembershipSuspended)
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/me/organizations", "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/me/organizations", "", f.Token, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -334,14 +254,14 @@ func TestMyOrganizationsShowsSuspensions(t *testing.T) {
 // TestAnOrganizationTheCallerCannotReadIsNotListed is the other side: the list
 // is scoped to memberships, so it cannot become a directory of every tenant.
 func TestAnOrganizationTheCallerCannotReadIsNotListed(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleViewer)
 
-	f.repo.SeedOrganization("globex", "Globex")
+	f.Repo.SeedOrganization("globex", "Globex")
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/me/organizations", "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/me/organizations", "", f.Token, ""))
 
 	if strings.Contains(rec.Body.String(), "globex") {
-		t.Errorf("the caller's organization list names one they do not belong to: %s", rec.Body.Bytes())
+		t.Errorf("the caller's organization list names one they Do not belong to: %s", rec.Body.Bytes())
 	}
 }

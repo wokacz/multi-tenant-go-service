@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"encoding/json"
@@ -18,14 +18,14 @@ import (
 )
 
 // orgPath builds a path under the fixture's organization.
-func (f *authzFixture) orgPath(suffix string) string {
-	return "/v1/orgs/" + f.orgID.String() + suffix
+func (f *AuthzFixture) orgPath(suffix string) string {
+	return "/v1/orgs/" + f.OrgID.String() + suffix
 }
 
-func (f *authzFixture) call(t *testing.T, method, path, body string) *httpResult {
+func (f *AuthzFixture) call(t *testing.T, method, path, body string) *httpResult {
 	t.Helper()
 
-	rec := do(t, f.server.http.Handler, authed(t, method, path, body, f.token, ""))
+	rec := Do(t, f.Server.Handler(), Authed(t, method, path, body, f.Token, ""))
 
 	return &httpResult{code: rec.Code, body: rec.Body.Bytes()}
 }
@@ -77,16 +77,16 @@ type memberBody struct {
 // permission: define a role holding organization.delete, assign it to yourself,
 // and the whole scheme has been talked out of its own rules through the front
 // door.
-// TestARoleCannotCarryAPlatformPermission separates "you do not have this" from
+// TestARoleCannotCarryAPlatformPermission separates "you Do not have this" from
 // "this could never live here".
 //
 // An owner holds every organization permission, so escalation is not the reason
-// the request fails — no role in an organization can carry an installation-wide
+// the Request fails — no role in an organization can carry an installation-wide
 // key. Reporting a 403 escalation would send the caller looking for a permission
 // to acquire, and the catalog endpoint hands them the key together with its
 // scope, so "unknown permission" would be false as well.
 func TestARoleCannotCarryAPlatformPermission(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	body := fmt.Sprintf(`{"key":"overreach","name":"Overreach","permissions":[%q]}`,
 		authz.PermPlatformUsersDelete)
@@ -94,7 +94,7 @@ func TestARoleCannotCarryAPlatformPermission(t *testing.T) {
 	res := f.call(t, http.MethodPost, f.orgPath("/roles"), body).
 		expect(t, http.StatusUnprocessableEntity)
 
-	var doc problemBody
+	var doc ProblemBody
 	res.decode(t, &doc)
 
 	if doc.Code != problem.CodeWrongScope {
@@ -103,7 +103,7 @@ func TestARoleCannotCarryAPlatformPermission(t *testing.T) {
 
 	// The same on the other edit path, which is the one that turns roles.update
 	// into a permission to acquire everything if it is not checked.
-	role := f.repo.SeedRole(f.orgID, "plain", string(authz.PermOrganizationRead))
+	role := f.Repo.SeedRole(f.OrgID, "plain", string(authz.PermOrganizationRead))
 	perms := fmt.Sprintf(`{"permissions":[%q]}`, authz.PermPlatformUsersDelete)
 
 	f.call(t, http.MethodPut, f.orgPath("/roles/"+role.String()+"/permissions"), perms).
@@ -111,17 +111,17 @@ func TestARoleCannotCarryAPlatformPermission(t *testing.T) {
 }
 
 func TestCreatingARoleCannotGrantWhatTheCallerLacks(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	// An administrator over roles who is not an owner, so they hold
 	// roles.create but not organization.delete.
-	limited := f.repo.SeedRole(f.orgID, "role_admin",
+	limited := f.Repo.SeedRole(f.OrgID, "role_admin",
 		string(authz.PermRolesRead),
 		string(authz.PermRolesCreate),
 		string(authz.PermRolesUpdate),
 		string(authz.PermRolesDelete),
 	)
-	f.repo.SeedMemberRoles(f.membership, limited)
+	f.Repo.SeedMemberRoles(f.Membership, limited)
 
 	body := fmt.Sprintf(`{"key":"sneaky","name":"Sneaky","permissions":[%q]}`,
 		authz.PermOrganizationDelete)
@@ -148,7 +148,7 @@ func TestCreatingARoleCannotGrantWhatTheCallerLacks(t *testing.T) {
 // TestCreatingARoleWithinTheCallersOwnPowersSucceeds is the other half: the rule
 // restricts, it does not simply forbid.
 func TestCreatingARoleWithinTheCallersOwnPowersSucceeds(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	body := fmt.Sprintf(`{"key":"auditor","name":"Auditor","permissions":[%q,%q]}`,
 		authz.PermMembersRead, authz.PermRolesRead)
@@ -175,16 +175,16 @@ func TestCreatingARoleWithinTheCallersOwnPowersSucceeds(t *testing.T) {
 // edit path. Creating a role within your powers and then widening it would
 // otherwise be a two-step escalation.
 func TestWideningARoleCannotGrantWhatTheCallerLacks(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	limited := f.repo.SeedRole(f.orgID, "role_admin",
+	limited := f.Repo.SeedRole(f.OrgID, "role_admin",
 		string(authz.PermRolesRead),
 		string(authz.PermRolesCreate),
 		string(authz.PermRolesUpdate),
 	)
-	f.repo.SeedMemberRoles(f.membership, limited)
+	f.Repo.SeedMemberRoles(f.Membership, limited)
 
-	target := f.repo.SeedRole(f.orgID, "helper", string(authz.PermRolesRead))
+	target := f.Repo.SeedRole(f.OrgID, "helper", string(authz.PermRolesRead))
 
 	body := fmt.Sprintf(`{"permissions":[%q]}`, authz.PermOrganizationDelete)
 
@@ -207,25 +207,25 @@ func TestWideningARoleCannotGrantWhatTheCallerLacks(t *testing.T) {
 // role id — a caller who may not grant organization.delete may not grant it by
 // naming a role that happens to contain it either.
 func TestAssigningARoleCannotGrantWhatTheCallerLacks(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	limited := f.repo.SeedRole(f.orgID, "people_admin",
+	limited := f.Repo.SeedRole(f.OrgID, "people_admin",
 		string(authz.PermMembersRead),
 		string(authz.PermMembersRolesAssign),
 		string(authz.PermRolesRead),
 	)
-	f.repo.SeedMemberRoles(f.membership, limited)
+	f.Repo.SeedMemberRoles(f.Membership, limited)
 
 	// A powerful role that already exists in the organization.
-	owner := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
+	owner := f.Repo.SeedShippedRole(f.OrgID, authz.RoleOwner)
 
 	body := fmt.Sprintf(`{"role_ids":[%q]}`, owner)
 
-	f.call(t, http.MethodPut, f.orgPath("/members/"+f.membership.String()+"/roles"), body).
+	f.call(t, http.MethodPut, f.orgPath("/members/"+f.Membership.String()+"/roles"), body).
 		expect(t, http.StatusForbidden)
 
 	// And the caller did not acquire it.
-	if code := f.getOrg(t); code == http.StatusOK {
+	if code := f.GetOrg(t); code == http.StatusOK {
 		t.Error("the caller gained organization.read by assigning themselves the owner role")
 	}
 }
@@ -234,12 +234,12 @@ func TestAssigningARoleCannotGrantWhatTheCallerLacks(t *testing.T) {
 // unadministrable. Recovering from that needs database access, which is not a
 // support path anyone should have to use.
 func TestTheLastOwnerCannotBeDemoted(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	body := fmt.Sprintf(`{"role_ids":[%q]}`, viewer)
 
-	res := f.call(t, http.MethodPut, f.orgPath("/members/"+f.membership.String()+"/roles"), body).
+	res := f.call(t, http.MethodPut, f.orgPath("/members/"+f.Membership.String()+"/roles"), body).
 		expect(t, http.StatusConflict)
 
 	if !strings.Contains(string(res.body), "without an owner") {
@@ -247,23 +247,23 @@ func TestTheLastOwnerCannotBeDemoted(t *testing.T) {
 	}
 
 	// Still an owner.
-	if code := f.getOrg(t); code != http.StatusOK {
+	if code := f.GetOrg(t); code != http.StatusOK {
 		t.Errorf("status after the refused demotion = %d, want 200", code)
 	}
 }
 
 func TestTheLastOwnerCannotBeRemovedOrSuspended(t *testing.T) {
 	t.Run("removed", func(t *testing.T) {
-		f := newAuthzFixture(t, authz.RoleOwner)
+		f := NewAuthzFixture(t, authz.RoleOwner)
 
-		f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").
+		f.call(t, http.MethodDelete, f.orgPath("/members/"+f.Membership.String()), "").
 			expect(t, http.StatusConflict)
 	})
 
 	t.Run("suspended", func(t *testing.T) {
-		f := newAuthzFixture(t, authz.RoleOwner)
+		f := NewAuthzFixture(t, authz.RoleOwner)
 
-		f.call(t, http.MethodPatch, f.orgPath("/members/"+f.membership.String()),
+		f.call(t, http.MethodPatch, f.orgPath("/members/"+f.Membership.String()),
 			`{"status":"suspended"}`).expect(t, http.StatusConflict)
 	})
 }
@@ -271,9 +271,9 @@ func TestTheLastOwnerCannotBeRemovedOrSuspended(t *testing.T) {
 // TestASecondOwnerMakesDemotionPossible proves the rule counts rather than
 // simply forbidding.
 func TestASecondOwnerMakesDemotionPossible(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	ownerRole := f.repo.SeedRole(f.orgID, "co_owner", permissionKeys(authz.RoleOwner)...)
+	ownerRole := f.Repo.SeedRole(f.OrgID, "co_owner", permissionKeys(authz.RoleOwner)...)
 	_ = ownerRole
 
 	// A real second owner, holding the same shipped role the fixture does.
@@ -294,12 +294,12 @@ func TestASecondOwnerMakesDemotionPossible(t *testing.T) {
 		t.Fatal("the fixture has no owner role")
 	}
 
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, ownerID)
+	f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, ownerID)
 
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	body := fmt.Sprintf(`{"role_ids":[%q]}`, viewer)
 
-	f.call(t, http.MethodPut, f.orgPath("/members/"+f.membership.String()+"/roles"), body).
+	f.call(t, http.MethodPut, f.orgPath("/members/"+f.Membership.String()+"/roles"), body).
 		expect(t, http.StatusOK)
 }
 
@@ -312,17 +312,17 @@ func TestASecondOwnerMakesDemotionPossible(t *testing.T) {
 // roles being assigned, and viewer is well inside an admin's own powers. The
 // result was an inversion: the lesser role neutralising the greater one.
 func TestAnAdministratorCannotReachAboveThemselves(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleAdmin)
+	f := NewAuthzFixture(t, authz.RoleAdmin)
 
-	owner := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
-	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
+	owner := f.Repo.SeedShippedRole(f.OrgID, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
+	target := f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
 
 	// A second owner, so the last-owner rule cannot refuse these on its own.
 	// Without it the organization is protected here by accident, and the hole this
 	// test is about — an administrator cutting an owner out of an organization that
 	// has more than one — stays invisible.
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
+	f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
 
 	member := f.orgPath("/members/" + target.String())
 
@@ -339,7 +339,7 @@ func TestAnAdministratorCannotReachAboveThemselves(t *testing.T) {
 		t.Run(probe.name, func(t *testing.T) {
 			res := f.call(t, probe.method, probe.path, probe.body).expect(t, http.StatusForbidden)
 
-			var doc problemBody
+			var doc ProblemBody
 			res.decode(t, &doc)
 
 			if doc.Code != problem.CodeInsufficientRank {
@@ -352,10 +352,10 @@ func TestAnAdministratorCannotReachAboveThemselves(t *testing.T) {
 // TestAnOwnerCanStillActOnAnAdministrator proves the rank rule has a direction.
 // A blanket ban on touching other people would be easy and useless.
 func TestAnOwnerCanStillActOnAnAdministrator(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	admin := f.repo.SeedShippedRole(f.orgID, authz.RoleAdmin)
-	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, admin)
+	admin := f.Repo.SeedShippedRole(f.OrgID, authz.RoleAdmin)
+	target := f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, admin)
 
 	f.call(t, http.MethodPatch, f.orgPath("/members/"+target.String()),
 		`{"status":"suspended"}`).expect(t, http.StatusOK)
@@ -371,14 +371,14 @@ func TestAnOwnerCanStillActOnAnAdministrator(t *testing.T) {
 // carries exactly the permissions their grant does, so the comparison passes —
 // this pins that it stays that way.
 func TestTheRankRuleDoesNotBlockLeaving(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleAdmin)
+	f := NewAuthzFixture(t, authz.RoleAdmin)
 
 	// A second, more powerful member, so nothing else about the organization makes
 	// this refusable: the caller is not the last owner and holds no owner role.
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive,
-		f.repo.SeedShippedRole(f.orgID, authz.RoleOwner))
+	f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive,
+		f.Repo.SeedShippedRole(f.OrgID, authz.RoleOwner))
 
-	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").
+	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.Membership.String()), "").
 		expect(t, http.StatusNoContent)
 }
 
@@ -392,23 +392,23 @@ func TestTheRankRuleDoesNotBlockLeaving(t *testing.T) {
 // refusal did not. The row was therefore impossible to remove however many live
 // owners existed, and promoting another owner moved both numbers together.
 func TestAnOwnerWhoseAccountIsDeletedCanBeRemoved(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	owner, err := f.repo.RoleByKey(t.Context(), f.orgID, string(authz.RoleOwner))
+	owner, err := f.Repo.RoleByKey(t.Context(), f.OrgID, string(authz.RoleOwner))
 	if err != nil {
 		t.Fatalf("owner role: %v", err)
 	}
 
 	ghostAccount := uuid.Must(uuid.NewV7())
-	ghost := f.repo.SeedMember(f.orgID, ghostAccount, ent.MembershipActive, owner.ID)
-	f.repo.SeedSoftDeletedUser(ghostAccount)
+	ghost := f.Repo.SeedMember(f.OrgID, ghostAccount, ent.MembershipActive, owner.ID)
+	f.Repo.SeedSoftDeletedUser(ghostAccount)
 
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+ghost.String()), "").
 		expect(t, http.StatusNoContent)
 
 	// The rule itself is not switched off: Ada is the only live owner, so she
 	// still cannot be removed.
-	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").
+	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.Membership.String()), "").
 		expect(t, http.StatusConflict)
 }
 
@@ -416,12 +416,12 @@ func TestAnOwnerWhoseAccountIsDeletedCanBeRemoved(t *testing.T) {
 // same rule on the side the fake can see. The store test covers the Postgres
 // queries, where the condition sat in a LEFT JOIN and filtered nothing.
 func TestAMembershipWhoseAccountIsDeletedIsNotListed(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	ghostAccount := uuid.Must(uuid.NewV7())
-	f.repo.SeedMember(f.orgID, ghostAccount, ent.MembershipActive, viewer)
-	f.repo.SeedSoftDeletedUser(ghostAccount)
+	f.Repo.SeedMember(f.OrgID, ghostAccount, ent.MembershipActive, viewer)
+	f.Repo.SeedSoftDeletedUser(ghostAccount)
 
 	var list struct {
 		Members []memberDetail `json:"members"`
@@ -439,7 +439,7 @@ func TestAMembershipWhoseAccountIsDeletedIsNotListed(t *testing.T) {
 // TestShippedRolesCannotBeEdited keeps every organization's copy of "admin"
 // meaning the same thing.
 func TestShippedRolesCannotBeEdited(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	var roles struct {
 		Roles []roleBody `json:"roles"`
@@ -476,10 +476,10 @@ func TestShippedRolesCannotBeEdited(t *testing.T) {
 // TestARoleInUseCannotBeDeleted refuses the change that would take permissions
 // away from people the caller never looked at.
 func TestARoleInUseCannotBeDeleted(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	role := f.repo.SeedRole(f.orgID, "auditor", string(authz.PermMembersRead))
-	holder := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, role)
+	role := f.Repo.SeedRole(f.OrgID, "auditor", string(authz.PermMembersRead))
+	holder := f.Repo.SeedMember(f.OrgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, role)
 
 	res := f.call(t, http.MethodDelete, f.orgPath("/roles/"+role.String()), "").
 		expect(t, http.StatusConflict)
@@ -489,7 +489,7 @@ func TestARoleInUseCannotBeDeleted(t *testing.T) {
 	}
 
 	// Unassign, and it goes.
-	f.repo.SeedMemberRoles(holder)
+	f.Repo.SeedMemberRoles(holder)
 
 	f.call(t, http.MethodDelete, f.orgPath("/roles/"+role.String()), "").
 		expect(t, http.StatusNoContent)
@@ -499,10 +499,10 @@ func TestARoleInUseCannotBeDeleted(t *testing.T) {
 // decision, exercised end to end. The caller is a full owner here; what stops
 // them is that the id is not this organization's.
 func TestARoleFromAnotherOrganizationCannotBeUsed(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	foreign := f.repo.SeedOrganization("globex", "Globex")
-	foreignRole := f.repo.SeedShippedRole(foreign, authz.RoleViewer)
+	foreign := f.Repo.SeedOrganization("globex", "Globex")
+	foreignRole := f.Repo.SeedShippedRole(foreign, authz.RoleViewer)
 
 	t.Run("reading it is 404", func(t *testing.T) {
 		f.call(t, http.MethodGet, f.orgPath("/roles/"+foreignRole.String()), "").
@@ -512,7 +512,7 @@ func TestARoleFromAnotherOrganizationCannotBeUsed(t *testing.T) {
 	t.Run("assigning it is 404", func(t *testing.T) {
 		body := fmt.Sprintf(`{"role_ids":[%q]}`, foreignRole)
 
-		f.call(t, http.MethodPut, f.orgPath("/members/"+f.membership.String()+"/roles"), body).
+		f.call(t, http.MethodPut, f.orgPath("/members/"+f.Membership.String()+"/roles"), body).
 			expect(t, http.StatusNotFound)
 	})
 }
@@ -520,10 +520,10 @@ func TestARoleFromAnotherOrganizationCannotBeUsed(t *testing.T) {
 // TestAMembershipFromAnotherOrganizationCannotBeTouched is the same guarantee
 // for people rather than roles.
 func TestAMembershipFromAnotherOrganizationCannotBeTouched(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	foreign := f.repo.SeedOrganization("globex", "Globex")
-	foreignMember := f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive)
+	foreign := f.Repo.SeedOrganization("globex", "Globex")
+	foreignMember := f.Repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive)
 
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+foreignMember.String()), "").
 		expect(t, http.StatusNotFound)
@@ -537,9 +537,9 @@ func TestAMembershipFromAnotherOrganizationCannotBeTouched(t *testing.T) {
 // same 201 with status invited and no user_id, so an administrator cannot
 // ask "is this person registered here" of the whole installation.
 func TestInvitingAMemberDoesNotRevealWhetherTheAddressIsRegistered(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	outsider := registerOutsider(t, f)
 
 	unknown := inviteBody(t, f, "nobody@example.com", viewer)
@@ -561,7 +561,7 @@ func TestInvitingAMemberDoesNotRevealWhetherTheAddressIsRegistered(t *testing.T)
 	}
 }
 
-func inviteBody(t *testing.T, f *authzFixture, email string, roleID uuid.UUID) invitationDetail {
+func inviteBody(t *testing.T, f *AuthzFixture, email string, roleID uuid.UUID) invitationDetail {
 	t.Helper()
 
 	body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, email, roleID)
@@ -590,34 +590,34 @@ type memberDetail struct {
 }
 
 func TestInvitingAnAddressAlreadyInTheOrganizationIsConflict(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
-	body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, testEmail, viewer)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
+	body := fmt.Sprintf(`{"email":%q,"role_ids":[%q]}`, TestEmail, viewer)
 
 	f.call(t, http.MethodPost, f.orgPath("/members"), body).expect(t, http.StatusConflict)
 }
 
 func TestInvitingAMemberSendsMail(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 
 	inviteBody(t, f, "new@example.com", viewer)
 
-	if f.mailer.inviteTo != "new@example.com" {
-		t.Errorf("invitation mail to = %q, want the invited address", f.mailer.inviteTo)
+	if f.Mailer.InviteTo != "new@example.com" {
+		t.Errorf("invitation mail to = %q, want the invited address", f.Mailer.InviteTo)
 	}
 
-	if f.mailer.inviteOrg != "Acme" {
-		t.Errorf("invitation mail org = %q, want Acme", f.mailer.inviteOrg)
+	if f.Mailer.InviteOrg != "Acme" {
+		t.Errorf("invitation mail org = %q, want Acme", f.Mailer.InviteOrg)
 	}
 }
 
 func TestAFailedInvitationMailStillCreatesTheMembership(t *testing.T) {
-	s, repo := newTestAPIConfig(t, failingMailer{}, memory.NewUsers(), nil)
+	s, repo, _ := NewTestAPIConfig(t, FailingMailer{}, memory.NewUsers(), nil)
 
-	registerAda(t, s)
-	session := signInAda(t, s, "", http.StatusCreated)
+	RegisterAda(t, s)
+	session := SignInAda(t, s, "", http.StatusCreated)
 
 	orgID := repo.SeedOrganization("acme", "Acme")
 	owner := repo.SeedShippedRole(orgID, authz.RoleOwner)
@@ -625,8 +625,8 @@ func TestAFailedInvitationMailStillCreatesTheMembership(t *testing.T) {
 	viewer := repo.SeedShippedRole(orgID, authz.RoleViewer)
 
 	body := fmt.Sprintf(`{"email":"nobody@example.com","role_ids":[%q]}`, viewer)
-	rec := do(t, s.http.Handler,
-		authed(t, http.MethodPost, "/v1/orgs/"+orgID.String()+"/members", body, session.Token, ""))
+	rec := Do(t, s.Handler(),
+		Authed(t, http.MethodPost, "/v1/orgs/"+orgID.String()+"/members", body, session.Token, ""))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("invite with mail down = %d, want 201; body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -640,8 +640,8 @@ func TestAFailedInvitationMailStillCreatesTheMembership(t *testing.T) {
 // PATCH — an invitation has no membership id and does not appear among the members
 // — so the rule is structural rather than remembered.
 func TestAnInvitationIsNotAMembership(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	invited := inviteBody(t, f, "nobody@example.com", viewer)
 
 	var list struct {
@@ -659,7 +659,7 @@ func TestAnInvitationIsNotAMembership(t *testing.T) {
 
 // TestListingMembersShowsRoles is the read path the settings screen is built on.
 func TestListingMembersShowsRoles(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	var list struct {
 		Members []memberBody `json:"members"`
@@ -672,8 +672,8 @@ func TestListingMembersShowsRoles(t *testing.T) {
 	}
 
 	member := list.Members[0]
-	if member.Email != testEmail {
-		t.Errorf("email = %q, want %q", member.Email, testEmail)
+	if member.Email != TestEmail {
+		t.Errorf("email = %q, want %q", member.Email, TestEmail)
 	}
 
 	if len(member.Roles) != 1 || member.Roles[0].Key != string(authz.RoleOwner) {
@@ -684,7 +684,7 @@ func TestListingMembersShowsRoles(t *testing.T) {
 // TestThePermissionCatalogIsServedFromTheCode pins where the catalog lives. A
 // database-backed list could disagree with what the handlers actually enforce.
 func TestThePermissionCatalogIsServedFromTheCode(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	var body struct {
 		Permissions []struct {

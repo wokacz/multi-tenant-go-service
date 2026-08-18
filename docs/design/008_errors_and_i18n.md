@@ -64,14 +64,14 @@ zawartości.
 | `authz.ErrForbidden`                                                                       | 403    | `forbidden`                                     |
 | `authz.ErrPrivilegeEscalation`                                                             | 403    | `privilege_escalation`                          |
 | `orgs.ErrRoleProtected`                                                                    | 403    | `role_protected`                                |
-| `authz.ErrInsufficientRank`                                                                 | 403    | `insufficient_rank`                             |
-| `orgs.ErrCannotRevokeOwnLastSystemRole`                                                      | 409    | `last_system_role`                              |
-| `orgs.ErrInvalidSystemRole`                                                                 | 422    | `invalid_system_role`                           |
-| `user.ErrInvalidEmailCode`                                                                  | 401    | `invalid_email_code`                            |
-| `user.ErrEmailTaken`                                                                        | 409    | `email_taken` (tylko przy zmianie adresu)       |
-| `user.ErrSameEmail`, `ErrEmailInvalid`                                                      | 422    | `same_email`, `invalid_email`                   |
-| `user.ErrLocaleUnsupported`                                                                 | 422    | `unsupported_locale`                            |
-| `authz.ErrUnknownPermission`, `ErrWrongScope`                                               | 422    | `unknown_permission`, `wrong_scope`             |
+| `authz.ErrInsufficientRank`                                                                | 403    | `insufficient_rank`                             |
+| `orgs.ErrCannotRevokeOwnLastSystemRole`                                                    | 409    | `last_system_role`                              |
+| `orgs.ErrInvalidSystemRole`                                                                | 422    | `invalid_system_role`                           |
+| `user.ErrInvalidEmailCode`                                                                 | 401    | `invalid_email_code`                            |
+| `user.ErrEmailTaken`                                                                       | 409    | `email_taken` (tylko przy zmianie adresu)       |
+| `user.ErrSameEmail`, `ErrEmailInvalid`                                                     | 422    | `same_email`, `invalid_email`                   |
+| `user.ErrLocaleUnsupported`                                                                | 422    | `unsupported_locale`                            |
+| `authz.ErrUnknownPermission`, `ErrWrongScope`                                              | 422    | `unknown_permission`, `wrong_scope`             |
 | `orgs.ErrLastOwner`, `ErrRoleInUse`, `ErrRoleKeyTaken`, `ErrAlreadyMember`, `ErrSlugTaken` | 409    | odpowiedni kod                                  |
 | `ent.ErrProtected`                                                                         | 409    | `record_protected`                              |
 | błędy walidacji domenowej                                                                  | 422    | odpowiedni kod                                  |
@@ -82,9 +82,9 @@ zawartości.
 Ostatni wiersz jest najważniejszy. Niezmapowany błąd trafia do logu przy identyfikatorze żądania, a klient dostaje
 nieprzejrzyste `500` — surowe błędy niosą nazwy tabel, fragmenty zapytań, a czasem poświadczenia.
 
-Zauważ, czego na tej liście nie ma: **sterownika bazy**. Repozytoria tłumaczą błędy sterownika na domenowe, więc `problem` mapuje
-wyłącznie słownictwo domeny. Błąd sterownika, który tu dotarł, oznacza, że jakieś repozytorium zapomniało go
-przetłumaczyć — i słusznie staje się nieprzejrzystym `500`.
+Zauważ, czego na tej liście nie ma: **sterownika bazy**. Repozytoria tłumaczą błędy sterownika na domenowe, więc
+`problem` mapuje wyłącznie słownictwo domeny. Błąd sterownika, który tu dotarł, oznacza, że jakieś repozytorium
+zapomniało go przetłumaczyć — i słusznie staje się nieprzejrzystym `500`.
 
 Dodanie mapowania: [instrukcja nowego endpointu](../guides/002_add_endpoint.md#5-błędy).
 
@@ -92,11 +92,11 @@ Dodanie mapowania: [instrukcja nowego endpointu](../guides/002_add_endpoint.md#5
 
 Model hybrydowy:
 
-| Co                      | Gdzie                                                         | Dlaczego                                        |
-|-------------------------|---------------------------------------------------------------|-------------------------------------------------|
-| komunikaty błędów       | katalog w kodzie (`internal/i18n/locales/*.json`, `go:embed`) | zmieniają się razem z kodem i przechodzą review |
-| nazwy i opisy uprawnień | katalog w kodzie                                              | uprawnienie *jest* kodem                        |
-| nazwy ról systemowych   | katalog w kodzie, `role.<klucz>.name`                         | powstają z katalogu                             |
+| Co                      | Gdzie                                                         | Dlaczego                                           |
+|-------------------------|---------------------------------------------------------------|----------------------------------------------------|
+| komunikaty błędów       | katalog w kodzie (`internal/i18n/locales/*.json`, `go:embed`) | zmieniają się razem z kodem i przechodzą review    |
+| nazwy i opisy uprawnień | katalog w kodzie                                              | uprawnienie *jest* kodem                           |
+| nazwy ról systemowych   | katalog w kodzie, `role.<klucz>.name`                         | powstają z katalogu                                |
 | nazwy ról własnych      | kolumna `roles.name`, **nietłumaczone**                       | nazwa wpisana przez klienta jest już w jego języku |
 
 Nazwy ról shipowanych są renderowane z katalogu **przy odczycie**, po `Key`. Kolumna `roles.name` niesie dla nich
@@ -125,12 +125,13 @@ zawsze odpowiada, bo odpowiedź trzeba w czymś napisać.
 
 **Trzecia funkcja: `Catalog.Resolve`** — dla języka **wybranego świadomie**, przez `PATCH /v1/me`. Jak `Match` zgłasza
 brak zamiast schodzić do fallbacku: zapamiętanie angielskiego dla kogoś, kto poprosił o niemiecki, dałoby mu na stałe
-język, o który nigdy nie prosił, więc taka prośba kończy się `422 unsupported_locale`. `Resolve` **normalizuje** też tag —
+język, o który nigdy nie prosił, więc taka prośba kończy się `422 unsupported_locale`. `Resolve` **normalizuje** też
+tag —
 `pl-PL` zapisuje się jako `pl`, żeby w kolumnie była jedna pisownia na język, a nie tyle, ile przeglądarek.
 
-Puste `locale` w `PATCH /v1/me` to wartość znacząca: „nie mam preferencji, negocjuj per żądanie". Dlatego pola żądania są
-wskaźnikami — bez tego nie da się odróżnić „nie wspominam o tym polu" od „ustaw je na puste", a raz wybranego języka nie
-dałoby się oddać przeglądarce.
+Puste `locale` w `PATCH /v1/me` to wartość znacząca: „nie mam preferencji, negocjuj per żądanie". Dlatego pola żądania
+są wskaźnikami — bez tego nie da się odróżnić „nie wspominam o tym polu" od „ustaw je na puste", a raz wybranego języka
+nie dałoby się oddać przeglądarce.
 
 Katalog żyje **przy krawędzi**, nie w `internal/domain`: rejestracja rozstrzyga język z nagłówka w handlerze i zmiana
 profilu robi to samo. Domena dostaje już rozstrzygnięty tag, a `user.ErrLocaleUnsupported` jest tylko słownikiem, w

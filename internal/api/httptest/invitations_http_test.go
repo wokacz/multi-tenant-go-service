@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/api"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
@@ -18,20 +19,20 @@ import (
 
 // acceptToken posts a token to the accept endpoint and returns the raw result, so
 // each test can say what it expects.
-func acceptToken(t *testing.T, s *Server, token, bearer string) *httpResult {
+func acceptToken(t *testing.T, s *api.Server, token, bearer string) *httpResult {
 	t.Helper()
 
 	body := fmt.Sprintf(`{"token":%q}`, token)
-	rec := do(t, s.http.Handler, authed(t, http.MethodPost, "/v1/me/invitations/accept", body, bearer, ""))
+	rec := Do(t, s.Handler(), Authed(t, http.MethodPost, "/v1/me/invitations/accept", body, bearer, ""))
 
 	return &httpResult{code: rec.Code, body: rec.Body.Bytes()}
 }
 
-func declineToken(t *testing.T, s *Server, token, bearer string) *httpResult {
+func declineToken(t *testing.T, s *api.Server, token, bearer string) *httpResult {
 	t.Helper()
 
 	body := fmt.Sprintf(`{"token":%q}`, token)
-	rec := do(t, s.http.Handler, authed(t, http.MethodPost, "/v1/me/invitations/decline", body, bearer, ""))
+	rec := Do(t, s.Handler(), Authed(t, http.MethodPost, "/v1/me/invitations/decline", body, bearer, ""))
 
 	return &httpResult{code: rec.Code, body: rec.Body.Bytes()}
 }
@@ -39,34 +40,34 @@ func declineToken(t *testing.T, s *Server, token, bearer string) *httpResult {
 // TestAcceptingAnInvitationJoinsTheOrganization is the invitee's half of the flow.
 //
 // The token is what proves they received the offer, and the roles come from the
-// invitation rather than from the request — somebody accepting must not get to
+// invitation rather than from the Request — somebody accepting must not get to
 // choose what they are accepting.
 func TestAcceptingAnInvitationJoinsTheOrganization(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	outsider := registerOutsider(t, f)
 
 	inviteBody(t, f, outsider, viewer)
 
 	// The token exists only in the message.
-	token := f.mailer.inviteToken
+	token := f.Mailer.InviteToken
 	if token == "" {
 		t.Fatal("no token was mailed")
 	}
 
-	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+	bobToken := signIn(t, f.Server, outsider, "twelve-chars")
 
 	// Before accepting, the organization is not theirs.
-	before := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", bobToken, ""))
+	before := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", bobToken, ""))
 	if before.Code != http.StatusNotFound {
 		t.Fatalf("get org before accepting = %d, want 404", before.Code)
 	}
 
-	acceptToken(t, f.server, token, bobToken).expect(t, http.StatusNoContent)
+	acceptToken(t, f.Server, token, bobToken).expect(t, http.StatusNoContent)
 
-	after := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", bobToken, ""))
+	after := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", bobToken, ""))
 	if after.Code != http.StatusOK {
 		t.Fatalf("get org after accepting = %d, want 200; body %s", after.Code, after.Body.Bytes())
 	}
@@ -77,7 +78,7 @@ func TestAcceptingAnInvitationJoinsTheOrganization(t *testing.T) {
 		t.Errorf("roles = %v, want [viewer] — the roles come from the invitation", entry.Roles)
 	}
 
-	acceptToken(t, f.server, token, bobToken).expect(t, http.StatusNotFound)
+	acceptToken(t, f.Server, token, bobToken).expect(t, http.StatusNotFound)
 }
 
 // TestAnInvitationCannotBeAcceptedByAnotherAccount: the token proves the
@@ -87,15 +88,15 @@ func TestAcceptingAnInvitationJoinsTheOrganization(t *testing.T) {
 // so the invitation's existence is not a secret from them, and a bare "not found"
 // would leave them with nothing to tell whoever invited them.
 func TestAnInvitationCannotBeAcceptedByAnotherAccount(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 
 	// Issued to an address nobody holds, then presented by Ada.
 	inviteBody(t, f, "somebody.else@example.com", viewer)
 
-	res := acceptToken(t, f.server, f.mailer.inviteToken, f.token).expect(t, http.StatusConflict)
+	res := acceptToken(t, f.Server, f.Mailer.InviteToken, f.Token).expect(t, http.StatusConflict)
 
-	var doc problemBody
+	var doc ProblemBody
 	res.decode(t, &doc)
 
 	if doc.Code != "invitation_address_mismatch" {
@@ -108,18 +109,18 @@ func TestAnInvitationCannotBeAcceptedByAnotherAccount(t *testing.T) {
 // The holder of the token can act on an expiry — ask for another invitation — and a
 // 404 would send them looking for a mistake they did not make.
 func TestAnExpiredInvitationIsGone(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	outsider := registerOutsider(t, f)
 
 	const token = "an-expired-invitation-token"
-	f.repo.SeedInvitation(f.orgID, outsider, token, time.Now().UTC().Add(-time.Hour), viewer)
+	f.Repo.SeedInvitation(f.OrgID, outsider, token, time.Now().UTC().Add(-time.Hour), viewer)
 
-	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+	bobToken := signIn(t, f.Server, outsider, "twelve-chars")
 
-	res := acceptToken(t, f.server, token, bobToken).expect(t, http.StatusGone)
+	res := acceptToken(t, f.Server, token, bobToken).expect(t, http.StatusGone)
 
-	var doc problemBody
+	var doc ProblemBody
 	res.decode(t, &doc)
 
 	if doc.Code != "invitation_expired" {
@@ -127,24 +128,24 @@ func TestAnExpiredInvitationIsGone(t *testing.T) {
 	}
 
 	// A token that was never issued is a plain 404: there is nothing to act on.
-	acceptToken(t, f.server, "no-such-token-at-all", bobToken).expect(t, http.StatusNotFound)
+	acceptToken(t, f.Server, "no-such-token-at-all", bobToken).expect(t, http.StatusNotFound)
 }
 
 func TestDecliningAnInvitationWithdrawsIt(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	outsider := registerOutsider(t, f)
 
 	inviteBody(t, f, outsider, viewer)
-	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+	bobToken := signIn(t, f.Server, outsider, "twelve-chars")
 
-	declineToken(t, f.server, f.mailer.inviteToken, bobToken).expect(t, http.StatusNoContent)
+	declineToken(t, f.Server, f.Mailer.InviteToken, bobToken).expect(t, http.StatusNoContent)
 
 	// Gone for good: the same token cannot then be accepted.
-	acceptToken(t, f.server, f.mailer.inviteToken, bobToken).expect(t, http.StatusNotFound)
+	acceptToken(t, f.Server, f.Mailer.InviteToken, bobToken).expect(t, http.StatusNotFound)
 
-	org := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", bobToken, ""))
+	org := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", bobToken, ""))
 	if org.Code != http.StatusNotFound {
 		t.Fatalf("get org after declining = %d, want 404", org.Code)
 	}
@@ -157,20 +158,20 @@ func TestDecliningAnInvitationWithdrawsIt(t *testing.T) {
 // the message can see one is open and ask again — but reading it must not be enough
 // to take it up, or storing a hash instead of the token would have bought nothing.
 func TestMyInvitationsCarriesNoToken(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 	outsider := registerOutsider(t, f)
 
 	inviteBody(t, f, outsider, viewer)
-	bobToken := signIn(t, f.server, outsider, "twelve-chars")
+	bobToken := signIn(t, f.Server, outsider, "twelve-chars")
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/me/invitations", "", bobToken, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/me/invitations", "", bobToken, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list = %d, want 200; body %s", rec.Code, rec.Body.Bytes())
 	}
 
-	if strings.Contains(rec.Body.String(), f.mailer.inviteToken) {
+	if strings.Contains(rec.Body.String(), f.Mailer.InviteToken) {
 		t.Error("the listing contains the token")
 	}
 
@@ -204,27 +205,27 @@ func TestMyInvitationsCarriesNoToken(t *testing.T) {
 // mailbox and there is nothing to inherit: the offer is reachable only through the
 // token that was mailed.
 func TestRegisteringDoesNotAcceptAnInvitation(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 
 	const pending = "pending@example.com"
 	inviteBody(t, f, pending, viewer)
 
 	registerAccount(t, f, pending)
-	token := signIn(t, f.server, pending, "twelve-chars")
+	token := signIn(t, f.Server, pending, "twelve-chars")
 
-	org := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", token, ""))
+	org := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", token, ""))
 	if org.Code != http.StatusNotFound {
 		t.Fatalf("get org after registering = %d, want 404 — registering is not an accept; body %s",
 			org.Code, org.Body.Bytes())
 	}
 
 	// And it costs the invitee nothing: the token still works.
-	acceptToken(t, f.server, f.mailer.inviteToken, token).expect(t, http.StatusNoContent)
+	acceptToken(t, f.Server, f.Mailer.InviteToken, token).expect(t, http.StatusNoContent)
 
-	org = do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", token, ""))
+	org = Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", token, ""))
 	if org.Code != http.StatusOK {
 		t.Fatalf("get org after accepting = %d, want 200; body %s", org.Code, org.Body.Bytes())
 	}
@@ -239,14 +240,14 @@ func TestRegisteringDoesNotAcceptAnInvitation(t *testing.T) {
 // actually offered. Registration therefore leaves the default organization alone
 // while an invitation to it is open.
 func TestAnInvitationToTheDefaultOrganizationSurvivesRegistration(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), ent.DefaultOrganizationSlug)
+	defaultOrg, err := f.Repo.OrganizationBySlug(t.Context(), ent.DefaultOrganizationSlug)
 	if err != nil {
 		t.Fatalf("default organization: %v", err)
 	}
 
-	admin, err := f.repo.RoleByKey(t.Context(), defaultOrg.ID, string(authz.RoleAdmin))
+	admin, err := f.Repo.RoleByKey(t.Context(), defaultOrg.ID, string(authz.RoleAdmin))
 	if err != nil {
 		t.Fatalf("admin role: %v", err)
 	}
@@ -259,10 +260,10 @@ func TestAnInvitationToTheDefaultOrganizationSurvivesRegistration(t *testing.T) 
 		expect(t, http.StatusCreated)
 
 	registerAccount(t, f, pending)
-	token := signIn(t, f.server, pending, "twelve-chars")
+	token := signIn(t, f.Server, pending, "twelve-chars")
 
 	// No membership yet, so the offer is still takeable.
-	acceptToken(t, f.server, f.mailer.inviteToken, token).expect(t, http.StatusNoContent)
+	acceptToken(t, f.Server, f.Mailer.InviteToken, token).expect(t, http.StatusNoContent)
 
 	entry := membershipIn(t, f, token, ent.DefaultOrganizationSlug)
 	if entry.Status != string(ent.MembershipActive) {
@@ -280,59 +281,59 @@ func TestAnInvitationToTheDefaultOrganizationSurvivesRegistration(t *testing.T) 
 // reading the message in a forwarded mailbox has to be told which address that is,
 // or the refusal is unexplainable.
 func TestTheInvitationMailNamesTheAddress(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
-	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
+	f := NewAuthzFixture(t, authz.RoleOwner)
+	viewer := f.Repo.SeedShippedRole(f.OrgID, authz.RoleViewer)
 
 	const invitee = "pat@example.com"
 	inviteBody(t, f, invitee, viewer)
 
-	if f.mailer.inviteTo != invitee {
-		t.Errorf("mail went to %q, want %q", f.mailer.inviteTo, invitee)
+	if f.Mailer.InviteTo != invitee {
+		t.Errorf("mail went to %q, want %q", f.Mailer.InviteTo, invitee)
 	}
 
-	if f.mailer.inviteExpires.IsZero() {
+	if f.Mailer.InviteExpires.IsZero() {
 		t.Error("the mail carries no expiry, so the invitee cannot tell how long they have")
 	}
 
-	if f.mailer.inviteExpires.Before(time.Now().UTC()) {
-		t.Errorf("expiry %v is already past", f.mailer.inviteExpires)
+	if f.Mailer.InviteExpires.Before(time.Now().UTC()) {
+		t.Errorf("expiry %v is already past", f.Mailer.InviteExpires)
 	}
 
 	// The default is long enough to survive a holiday and short enough that a
 	// forwarded mailbox does not stay dangerous for ever.
-	if got := time.Until(f.mailer.inviteExpires); got > orgs.InvitationTTL+time.Minute {
+	if got := time.Until(f.Mailer.InviteExpires); got > orgs.InvitationTTL+time.Minute {
 		t.Errorf("expiry is %v away, want no more than %v", got, orgs.InvitationTTL)
 	}
 }
 
-func registerAccount(t *testing.T, f *authzFixture, email string) {
+func registerAccount(t *testing.T, f *AuthzFixture, email string) {
 	t.Helper()
 
 	body := fmt.Sprintf(
 		`{"name":"Pat","email":%q,"password":"twelve-chars","password_confirm":"twelve-chars"}`, email)
-	if rec := postJSON(t, f.server.http.Handler, "/v1/users", body); rec.Code != http.StatusNoContent {
+	if rec := PostJSON(t, f.Server.Handler(), "/v1/users", body); rec.Code != http.StatusNoContent {
 		t.Fatalf("register %s = %d; body %s", email, rec.Code, rec.Body.Bytes())
 	}
 }
 
 // promoteInDefaultOrganization gives the fixture's account the owner role in the
 // default organization, which registration only put it in as a plain member.
-func promoteInDefaultOrganization(t *testing.T, f *authzFixture, defaultOrgID uuid.UUID) {
+func promoteInDefaultOrganization(t *testing.T, f *AuthzFixture, defaultOrgID uuid.UUID) {
 	t.Helper()
 
-	owner, err := f.repo.RoleByKey(t.Context(), defaultOrgID, string(authz.RoleOwner))
+	owner, err := f.Repo.RoleByKey(t.Context(), defaultOrgID, string(authz.RoleOwner))
 	if err != nil {
 		t.Fatalf("owner role: %v", err)
 	}
 
-	memberships, err := f.repo.MembershipsForUser(t.Context(), f.userID)
+	memberships, err := f.Repo.MembershipsForUser(t.Context(), f.UserID)
 	if err != nil {
 		t.Fatalf("memberships: %v", err)
 	}
 
 	for i := range memberships {
 		if memberships[i].Organization.ID == defaultOrgID {
-			f.repo.SeedMemberRoles(memberships[i].ID, owner.ID)
+			f.Repo.SeedMemberRoles(memberships[i].ID, owner.ID)
 
 			return
 		}
@@ -352,11 +353,11 @@ type myOrganization struct {
 	Roles  []string `json:"roles"`
 }
 
-func membershipIn(t *testing.T, f *authzFixture, token, slug string) myOrganization {
+func membershipIn(t *testing.T, f *AuthzFixture, token, slug string) myOrganization {
 	t.Helper()
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/me/organizations", "", token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/me/organizations", "", token, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list my organizations = %d; body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -379,16 +380,16 @@ func membershipIn(t *testing.T, f *authzFixture, token, slug string) myOrganizat
 	return myOrganization{}
 }
 
-func signIn(t *testing.T, s *Server, email, password string) string {
+func signIn(t *testing.T, s *api.Server, email, password string) string {
 	t.Helper()
 
 	body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
-	rec := do(t, s.http.Handler, withDeviceToken(request(t, http.MethodPost, "/v1/sessions", body)))
+	rec := Do(t, s.Handler(), WithDeviceToken(Request(t, http.MethodPost, "/v1/sessions", body)))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("sign in %s = %d; body %s", email, rec.Code, rec.Body.Bytes())
 	}
 
-	var session sessionBody
+	var session SessionBody
 	if err := json.Unmarshal(rec.Body.Bytes(), &session); err != nil {
 		t.Fatalf("decode session: %v", err)
 	}
@@ -418,12 +419,12 @@ func TestWithdrawingAnInvitationNeedsTheInvitePermission(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			f := newAuthzFixture(t)
+			f := NewAuthzFixture(t)
 
-			role := f.repo.SeedRole(f.orgID, "probe_role", string(tc.permission))
-			f.repo.SeedMemberRoles(f.membership, role)
+			role := f.Repo.SeedRole(f.OrgID, "probe_role", string(tc.permission))
+			f.Repo.SeedMemberRoles(f.Membership, role)
 
-			invitation := f.repo.SeedInvitation(f.orgID, "bo@example.com", "a-withdrawn-token",
+			invitation := f.Repo.SeedInvitation(f.OrgID, "bo@example.com", "a-withdrawn-token",
 				time.Now().UTC().Add(orgs.InvitationTTL))
 
 			f.call(t, http.MethodDelete,

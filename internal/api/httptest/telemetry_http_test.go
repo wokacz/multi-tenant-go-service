@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"context"
@@ -48,9 +48,9 @@ func collected(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
 	return out
 }
 
-// newMeteredFixture is newAuthzFixture with a real meter behind it, reading into a
+// newMeteredFixture is NewAuthzFixture with a real meter behind it, reading into a
 // manual reader instead of an exporter.
-func newMeteredFixture(t *testing.T) (*authzFixture, *sdkmetric.ManualReader) {
+func newMeteredFixture(t *testing.T) (*AuthzFixture, *sdkmetric.ManualReader) {
 	t.Helper()
 
 	reader := sdkmetric.NewManualReader()
@@ -64,7 +64,7 @@ func newMeteredFixture(t *testing.T) (*authzFixture, *sdkmetric.ManualReader) {
 	tel := telemetry.Disabled()
 	tel.Metrics = metrics
 
-	f := newAuthzFixtureWith(t, tel)
+	f := NewAuthzFixtureWith(t, tel)
 
 	return f, reader
 }
@@ -78,9 +78,9 @@ func newMeteredFixture(t *testing.T) (*authzFixture, *sdkmetric.ManualReader) {
 func TestAFailedSignInIsCounted(t *testing.T) {
 	f, reader := newMeteredFixture(t)
 
-	body := `{"email":"` + testEmail + `","password":"not-the-password"}`
-	if code := do(t, f.server.http.Handler,
-		request(t, http.MethodPost, "/v1/sessions", body)).Code; code != http.StatusUnauthorized {
+	body := `{"email":"` + TestEmail + `","password":"not-the-password"}`
+	if code := Do(t, f.Server.Handler(),
+		Request(t, http.MethodPost, "/v1/sessions", body)).Code; code != http.StatusUnauthorized {
 		t.Fatalf("sign-in = %d, want 401", code)
 	}
 
@@ -102,7 +102,7 @@ func TestAGrantedSignInIsCounted(t *testing.T) {
 
 	before := collected(t, reader)[key]
 
-	signInAda(t, f.server, "", http.StatusCreated)
+	SignInAda(t, f.Server, "", http.StatusCreated)
 
 	if got := collected(t, reader)[key] - before; got != 1 {
 		t.Errorf("granted went up by %d, want 1", got)
@@ -115,7 +115,7 @@ func TestADenialIsCountedByPermission(t *testing.T) {
 	f, reader := newMeteredFixture(t)
 
 	// A member with no roles: reading the organization needs organization.read.
-	if got := f.getOrg(t); got != http.StatusForbidden {
+	if got := f.GetOrg(t); got != http.StatusForbidden {
 		t.Fatalf("reading the organization = %d, want 403", got)
 	}
 
@@ -142,7 +142,7 @@ func TestRateLimitingIsCountedByRouteNotPath(t *testing.T) {
 
 	const perMinute = 1
 
-	s, _ := newTestAPIConfigTel(t, &capturingMailer{}, memory.NewUsers(), tel, func(cfg *config.Config) {
+	s, _, _ := NewTestAPIConfigTel(t, &CapturingMailer{}, memory.NewUsers(), tel, func(cfg *config.Config) {
 		cfg.InvitePerMinute = perMinute
 	})
 
@@ -150,7 +150,7 @@ func TestRateLimitingIsCountedByRouteNotPath(t *testing.T) {
 	body := `{"email":"bo@example.com","role_ids":[]}`
 
 	for range perMinute + 1 {
-		do(t, s.http.Handler, withDeviceToken(request(t, http.MethodPost, path, body)))
+		Do(t, s.Handler(), WithDeviceToken(Request(t, http.MethodPost, path, body)))
 	}
 
 	want := "http.rate_limited{route=/v1/orgs/{orgID}/members}"

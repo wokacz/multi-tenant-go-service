@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"net/http"
@@ -13,7 +13,7 @@ type userBody struct {
 	Locale string `json:"locale"`
 }
 
-func (f *authzFixture) me(t *testing.T) userBody {
+func (f *AuthzFixture) me(t *testing.T) userBody {
 	t.Helper()
 
 	var body userBody
@@ -26,7 +26,7 @@ func (f *authzFixture) me(t *testing.T) userBody {
 // credential. The address is recovery material and POST /v1/me/email asks for the
 // password before it will move; a display name is not, so this does not.
 func TestChangingTheOwnNameNeedsNoPassword(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	var updated userBody
 	f.call(t, http.MethodPatch, "/v1/me", `{"name":"Ada Lovelace"}`).
@@ -42,12 +42,12 @@ func TestChangingTheOwnNameNeedsNoPassword(t *testing.T) {
 	}
 }
 
-// TestAnAbsentFieldIsLeftAlone is why the request uses pointers.
+// TestAnAbsentFieldIsLeftAlone is why the Request uses pointers.
 //
-// A struct of plain strings cannot tell "do not touch the name" from "set the name
+// A struct of plain strings cannot tell "Do not touch the name" from "set the name
 // to empty", and the second reading would wipe a field the client never mentioned.
 func TestAnAbsentFieldIsLeftAlone(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	f.call(t, http.MethodPatch, "/v1/me", `{"name":"Ada Lovelace"}`).
 		expect(t, http.StatusOK)
@@ -57,7 +57,7 @@ func TestAnAbsentFieldIsLeftAlone(t *testing.T) {
 	after := f.me(t)
 
 	if after.Name != "Ada Lovelace" {
-		t.Errorf("name = %q after a request that only mentioned the locale", after.Name)
+		t.Errorf("name = %q after a Request that only mentioned the locale", after.Name)
 	}
 
 	if after.Locale != "pl" {
@@ -69,9 +69,9 @@ func TestAnAbsentFieldIsLeftAlone(t *testing.T) {
 // minLength stops "", and only the service stops "   " — which would otherwise be
 // stored and render as a nameless account everywhere.
 func TestAWhitespaceNameIsRefused(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	var doc problemBody
+	var doc ProblemBody
 	f.call(t, http.MethodPatch, "/v1/me", `{"name":"   "}`).
 		expect(t, http.StatusUnprocessableEntity).decode(t, &doc)
 
@@ -83,17 +83,17 @@ func TestAWhitespaceNameIsRefused(t *testing.T) {
 // TestSettingTheLanguageChangesTheNextResponse is the point of storing a locale at
 // all: the account's own choice outranks Accept-Language from then on.
 func TestSettingTheLanguageChangesTheNextResponse(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	f.call(t, http.MethodPatch, "/v1/me", `{"locale":"pl"}`).expect(t, http.StatusOK)
 
-	// An English header, and a request that fails so there is a translated detail
+	// An English header, and a Request that fails so there is a translated detail
 	// to read. The stored preference has to win.
-	req := authed(t, http.MethodGet, "/v1/orgs/018f0000-0000-7000-8000-000000000000",
-		"", f.token, "")
+	req := Authed(t, http.MethodGet, "/v1/orgs/018f0000-0000-7000-8000-000000000000",
+		"", f.Token, "")
 	req.Header.Set("Accept-Language", "en")
 
-	rec := do(t, f.server.http.Handler, req)
+	rec := Do(t, f.Server.Handler(), req)
 	if got := rec.Header().Get("Content-Language"); got != "pl" {
 		t.Errorf("Content-Language = %q, want pl — the stored choice outranks the header", got)
 	}
@@ -103,7 +103,7 @@ func TestSettingTheLanguageChangesTheNextResponse(t *testing.T) {
 // empty string had to stay tellable from an absent field: without it, a language
 // once chosen could never be handed back to the browser.
 func TestClearingTheLanguageGoesBackToTheHeader(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	f.call(t, http.MethodPatch, "/v1/me", `{"locale":"pl"}`).expect(t, http.StatusOK)
 	f.call(t, http.MethodPatch, "/v1/me", `{"locale":""}`).expect(t, http.StatusOK)
@@ -112,11 +112,11 @@ func TestClearingTheLanguageGoesBackToTheHeader(t *testing.T) {
 		t.Fatalf("locale = %q, want it cleared", got)
 	}
 
-	req := authed(t, http.MethodGet, "/v1/orgs/018f0000-0000-7000-8000-000000000000",
-		"", f.token, "")
+	req := Authed(t, http.MethodGet, "/v1/orgs/018f0000-0000-7000-8000-000000000000",
+		"", f.Token, "")
 	req.Header.Set("Accept-Language", "en")
 
-	rec := do(t, f.server.http.Handler, req)
+	rec := Do(t, f.Server.Handler(), req)
 	if got := rec.Header().Get("Content-Language"); got != "en" {
 		t.Errorf("Content-Language = %q, want en — nothing is stored, so the header "+
 			"decides again", got)
@@ -127,7 +127,7 @@ func TestClearingTheLanguageGoesBackToTheHeader(t *testing.T) {
 // the column. A browser sending pl-PL, pl-pl and pl means one preference, not
 // three, and Negotiate would resolve all of them to pl anyway.
 func TestARegionalTagIsStoredAsTheCatalogSpellsIt(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	var updated userBody
 	f.call(t, http.MethodPatch, "/v1/me", `{"locale":"pl-PL"}`).
@@ -143,11 +143,11 @@ func TestARegionalTagIsStoredAsTheCatalogSpellsIt(t *testing.T) {
 // because something has to be written; remembering a preference must not, or the
 // caller is silently given a language they did not ask for, permanently.
 func TestAnUnshippedLanguageIsRefused(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
 	for _, tag := range []string{"de", "klingon", "!!!"} {
 		t.Run(tag, func(t *testing.T) {
-			var doc problemBody
+			var doc ProblemBody
 			f.call(t, http.MethodPatch, "/v1/me", `{"locale":"`+tag+`"}`).
 				expect(t, http.StatusUnprocessableEntity).decode(t, &doc)
 

@@ -17,7 +17,7 @@ const testOrigin = "https://app.example.com"
 func corsServer(t *testing.T) *Server {
 	t.Helper()
 
-	server, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+	server, _, _ := newTestAPIConfig(t, harnessMailer{}, memory.NewUsers(), func(cfg *config.Config) {
 		cfg.CORSAllowedOrigins = []string{testOrigin}
 	})
 
@@ -45,7 +45,7 @@ func TestCORSIsAbsentUntilConfigured(t *testing.T) {
 	req := request(t, http.MethodGet, "/health", "")
 	req.Header.Set("Origin", testOrigin)
 
-	rec := do(t, server.http.Handler, req)
+	rec := do(t, server.Handler(), req)
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
 		t.Errorf("Access-Control-Allow-Origin = %q, want it absent", got)
 	}
@@ -56,7 +56,7 @@ func TestCORSIsAbsentUntilConfigured(t *testing.T) {
 
 	// The preflight is not short-circuited either, so it falls through to the
 	// router, which has no OPTIONS route.
-	pre := do(t, server.http.Handler, preflight(t, http.MethodGet, "/health", testOrigin))
+	pre := do(t, server.Handler(), preflight(t, http.MethodGet, "/health", testOrigin))
 	if pre.Code != http.StatusMethodNotAllowed {
 		t.Errorf("preflight without configuration = %d, want 405", pre.Code)
 	}
@@ -68,7 +68,7 @@ func TestCORSAnswersAConfiguredOrigin(t *testing.T) {
 	req := request(t, http.MethodGet, "/health", "")
 	req.Header.Set("Origin", testOrigin)
 
-	rec := do(t, server.http.Handler, req)
+	rec := do(t, server.Handler(), req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -103,7 +103,7 @@ func TestCORSLeavesAnUnknownOriginWithoutTheHeader(t *testing.T) {
 	req := request(t, http.MethodGet, "/health", "")
 	req.Header.Set("Origin", "https://evil.example.com")
 
-	rec := do(t, server.http.Handler, req)
+	rec := do(t, server.Handler(), req)
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200 — the request is answered, just not granted", rec.Code)
 	}
@@ -122,7 +122,7 @@ func TestCORSPreflightIsAnsweredWithoutRouting(t *testing.T) {
 
 	// A path that no operation registers: reaching the router at all would be a
 	// 404, so a 204 proves the preflight never got there.
-	rec := do(t, server.http.Handler, preflight(t, http.MethodPost, "/v1/orgs/x/members", testOrigin))
+	rec := do(t, server.Handler(), preflight(t, http.MethodPost, "/v1/orgs/x/members", testOrigin))
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("preflight = %d, want 204; body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -143,7 +143,7 @@ func TestCORSPreflightIsAnsweredWithoutRouting(t *testing.T) {
 	}
 
 	// An unknown origin is still answered, and still gets no grant.
-	bad := do(t, server.http.Handler, preflight(t, http.MethodPost, "/v1/sessions", "https://evil.example.com"))
+	bad := do(t, server.Handler(), preflight(t, http.MethodPost, "/v1/sessions", "https://evil.example.com"))
 	if bad.Code != http.StatusNoContent {
 		t.Errorf("preflight from an unknown origin = %d, want 204", bad.Code)
 	}
@@ -160,13 +160,13 @@ func TestCORSPreflightIsAnsweredWithoutRouting(t *testing.T) {
 // cors short-circuits before the limiter runs — so this pins the property rather
 // than one of the mechanisms.
 func TestCORSPreflightCostsNoRateLimitToken(t *testing.T) {
-	server, _ := newTestAPIConfig(t, &capturingMailer{}, memory.NewUsers(), func(cfg *config.Config) {
+	server, _, _ := newTestAPIConfig(t, harnessMailer{}, memory.NewUsers(), func(cfg *config.Config) {
 		cfg.CORSAllowedOrigins = []string{testOrigin}
 		cfg.LoginPerMinute = 1
 	})
 
 	for range 3 {
-		rec := do(t, server.http.Handler, preflight(t, http.MethodPost, "/v1/sessions", testOrigin))
+		rec := do(t, server.Handler(), preflight(t, http.MethodPost, "/v1/sessions", testOrigin))
 		if rec.Code != http.StatusNoContent {
 			t.Fatalf("preflight = %d, want 204", rec.Code)
 		}
@@ -174,7 +174,7 @@ func TestCORSPreflightCostsNoRateLimitToken(t *testing.T) {
 
 	// The one token in the budget is still there: this fails on the credentials,
 	// not on the limit.
-	rec := do(t, server.http.Handler, withDeviceToken(
+	rec := do(t, server.Handler(), withDeviceToken(
 		request(t, http.MethodPost, "/v1/sessions", `{"email":"nobody@example.com","password":"twelve-chars"}`)))
 	if rec.Code == http.StatusTooManyRequests {
 		t.Error("the sign-in budget was spent by preflights")
@@ -220,7 +220,7 @@ func TestCORSNeverWildcardsOrAllowsCredentials(t *testing.T) {
 		}(),
 		preflight(t, http.MethodGet, "/health", testOrigin),
 	} {
-		rec := do(t, server.http.Handler, req)
+		rec := do(t, server.Handler(), req)
 
 		if got := rec.Header().Get("Access-Control-Allow-Origin"); got == "*" {
 			t.Errorf("%s Access-Control-Allow-Origin = *, want the one origin echoed back", req.Method)

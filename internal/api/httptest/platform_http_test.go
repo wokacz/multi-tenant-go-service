@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/api"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 )
 
@@ -63,31 +64,31 @@ func TestSystemScopeIsEnforcedEndToEnd(t *testing.T) {
 		"with the platform role":    true,
 	} {
 		t.Run(name, func(t *testing.T) {
-			for id, rule := range operationAccess {
+			for id, rule := range api.OperationAccess() {
 				if rule.Scope != authz.ScopeSystem {
 					continue
 				}
 
 				t.Run(id, func(t *testing.T) {
 					// Fresh state per operation: several of these delete things.
-					f := newAuthzFixture(t)
+					f := NewAuthzFixture(t)
 					if granted {
-						f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+						f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 					}
 
 					// A second account and organization to act on, so the
 					// destructive probes never target the caller — the self
 					// protections would refuse those for a different reason.
 					victim := uuid.Must(uuid.NewV7())
-					target := f.repo.SeedOrganization("target", "Target")
+					target := f.Repo.SeedOrganization("target", "Target")
 
 					p, ok := platformProbes(target, victim)[id]
 					if !ok {
 						t.Fatalf("%s is system-scoped but has no probe", id)
 					}
 
-					rec := do(t, f.server.http.Handler,
-						authed(t, p.method, p.path, p.body, f.token, ""))
+					rec := Do(t, f.Server.Handler(),
+						Authed(t, p.method, p.path, p.body, f.Token, ""))
 
 					refused := rec.Code == http.StatusForbidden
 
@@ -98,7 +99,7 @@ func TestSystemScopeIsEnforcedEndToEnd(t *testing.T) {
 					}
 
 					if !granted {
-						body := decodeProblem(t, rec.Body.Bytes())
+						body := DecodeProblem(t, rec.Body.Bytes())
 						if body.RequiredPermission != string(rule.Permission) {
 							t.Errorf("required_permission = %q, want %q",
 								body.RequiredPermission, rule.Permission)
@@ -114,10 +115,10 @@ func TestSystemScopeIsEnforcedEndToEnd(t *testing.T) {
 // design rests on. An owner of every organization they belong to still holds
 // nothing at installation level.
 func TestSystemScopeIgnoresOrganizationRoles(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/platform/organizations", "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/platform/organizations", "", f.Token, ""))
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403 — being an owner is not being a platform admin", rec.Code)
@@ -128,27 +129,27 @@ func TestSystemScopeIgnoresOrganizationRoles(t *testing.T) {
 // pointing the other way, and it is a deliberate product decision rather than an
 // oversight: support access to a tenant's data is its own feature.
 func TestAPlatformAdminHasNoStandingInsideAnOrganization(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
-	f.repo.SeedMemberRoles(f.membership)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
+	f.Repo.SeedMemberRoles(f.Membership)
 
-	foreign := f.repo.SeedOrganization("globex", "Globex")
+	foreign := f.Repo.SeedOrganization("globex", "Globex")
 
-	if code := f.getOrg(t); code != http.StatusForbidden {
+	if code := f.GetOrg(t); code != http.StatusForbidden {
 		t.Errorf("own organization = %d, want 403", code)
 	}
 
-	rec := do(t, f.server.http.Handler,
-		authed(t, http.MethodGet, "/v1/orgs/"+foreign.String(), "", f.token, ""))
+	rec := Do(t, f.Server.Handler(),
+		Authed(t, http.MethodGet, "/v1/orgs/"+foreign.String(), "", f.Token, ""))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("foreign organization = %d, want 404", rec.Code)
 	}
 }
 
 func TestPlatformAdminCanListAndCreateOrganizations(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t, authz.RoleViewer)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	var created struct {
 		ID          uuid.UUID `json:"id"`
@@ -190,18 +191,18 @@ func TestPlatformAdminCanListAndCreateOrganizations(t *testing.T) {
 
 // TestSuspendingAnAccountTakesEffectOnItsExistingToken is the guarantee that
 // makes suspension worth having. Nothing is re-issued and the victim's token is
-// not touched; the next request simply fails.
+// not touched; the next Request simply fails.
 func TestSuspendingAnAccountTakesEffectOnItsExistingToken(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t, authz.RoleViewer)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	// The victim is the same account here, which is fine for the token check —
 	// but suspending yourself is refused, so it goes through the repository.
-	if code := f.getOrg(t); code != http.StatusOK {
+	if code := f.GetOrg(t); code != http.StatusOK {
 		t.Fatalf("status before suspension = %d, want 200", code)
 	}
 
-	f.call(t, http.MethodPatch, "/v1/platform/users/"+f.userID.String(),
+	f.call(t, http.MethodPatch, "/v1/platform/users/"+f.UserID.String(),
 		`{"suspended":true}`).expect(t, http.StatusConflict)
 }
 
@@ -215,13 +216,13 @@ func TestAnAdministratorCannotLockThemselvesOut(t *testing.T) {
 		"deleting themselves":   {http.MethodDelete, "", "cannot_delete_self"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			f := newAuthzFixture(t)
-			f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+			f := NewAuthzFixture(t)
+			f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
-			res := f.call(t, p.method, "/v1/platform/users/"+f.userID.String(), p.body).
+			res := f.call(t, p.method, "/v1/platform/users/"+f.UserID.String(), p.body).
 				expect(t, http.StatusConflict)
 
-			var body problemBody
+			var body ProblemBody
 			if err := json.Unmarshal(res.body, &body); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
@@ -236,8 +237,8 @@ func TestAnAdministratorCannotLockThemselvesOut(t *testing.T) {
 // TestRestoringASuspendedAccountIsAllowed proves the flag is reversible, which
 // is the difference between suspension and deletion.
 func TestRestoringASuspendedAccountIsAllowed(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t, authz.RoleViewer)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	var users struct {
 		Users []struct {
@@ -262,10 +263,10 @@ func TestRestoringASuspendedAccountIsAllowed(t *testing.T) {
 // TestTheDefaultOrganizationSurvivesAPlatformAdmin is the last line of defence
 // against an installation deleting its own only organization.
 func TestTheDefaultOrganizationSurvivesAPlatformAdmin(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
-	protected := f.repo.SeedProtectedOrganization("default", "Default")
+	protected := f.Repo.SeedProtectedOrganization("default", "Default")
 
 	f.call(t, http.MethodDelete, "/v1/platform/organizations/"+protected.String(), "").
 		expect(t, http.StatusConflict)
@@ -279,29 +280,29 @@ func TestTheDefaultOrganizationSurvivesAPlatformAdmin(t *testing.T) {
 // path that mints a *new* token, so a suspension that only blocked the old one
 // was no suspension at all: the account simply logged in again.
 func TestASuspendedAccountCannotGetAFreshToken(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t, authz.RoleViewer)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	// Suspend through the repository rather than the endpoint: suspending
 	// yourself is refused, and the point here is the sign-in path.
-	if err := f.server.deps.Users.Suspend(t.Context(), f.userID, true); err != nil {
+	if err := f.Accounts.Suspend(t.Context(), f.UserID, true); err != nil {
 		t.Fatalf("Suspend() = %v", err)
 	}
 
 	t.Run("the existing token stops working", func(t *testing.T) {
-		rec := do(t, f.server.http.Handler, authed(t, http.MethodGet, "/v1/me", "", f.token, ""))
+		rec := Do(t, f.Server.Handler(), Authed(t, http.MethodGet, "/v1/me", "", f.Token, ""))
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("status = %d, want 401", rec.Code)
 		}
 	})
 
 	t.Run("and signing in again does not mint a new one", func(t *testing.T) {
-		rec := postJSON(t, f.server.http.Handler, "/v1/sessions", testSignInAda)
+		rec := PostJSON(t, f.Server.Handler(), "/v1/sessions", TestSignInAda)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("status = %d, want 403; body %s", rec.Code, rec.Body.Bytes())
 		}
 
-		body := decodeProblem(t, rec.Body.Bytes())
+		body := DecodeProblem(t, rec.Body.Bytes())
 		if body.Code != "account_suspended" {
 			t.Errorf("code = %q, want account_suspended", body.Code)
 		}
@@ -313,11 +314,11 @@ func TestASuspendedAccountCannotGetAFreshToken(t *testing.T) {
 	})
 
 	t.Run("restoring the account lets it sign in again", func(t *testing.T) {
-		if err := f.server.deps.Users.Suspend(t.Context(), f.userID, false); err != nil {
+		if err := f.Accounts.Suspend(t.Context(), f.UserID, false); err != nil {
 			t.Fatalf("Suspend(false) = %v", err)
 		}
 
-		if rec := postJSON(t, f.server.http.Handler, "/v1/sessions", testSignInAda); rec.Code != http.StatusCreated {
+		if rec := PostJSON(t, f.Server.Handler(), "/v1/sessions", TestSignInAda); rec.Code != http.StatusCreated {
 			t.Errorf("status = %d, want 201; body %s", rec.Code, rec.Body.Bytes())
 		}
 	})
@@ -330,8 +331,8 @@ func TestASuspendedAccountCannotGetAFreshToken(t *testing.T) {
 // administrator had to already know which organization to look at, which is not a
 // thing anybody knows about somebody else's tenant.
 func TestAnOwnerlessOrganizationCanBeFoundAndFixed(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleViewer)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t, authz.RoleViewer)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	var created struct {
 		ID     uuid.UUID `json:"id"`
@@ -377,7 +378,7 @@ func TestAnOwnerlessOrganizationCanBeFoundAndFixed(t *testing.T) {
 
 	// Fix it, through the endpoint that already existed.
 	f.call(t, http.MethodPost, "/v1/platform/organizations/"+created.ID.String()+"/owners",
-		`{"user_id":"`+f.userID.String()+`"}`).
+		`{"user_id":"`+f.UserID.String()+`"}`).
 		expect(t, http.StatusNoContent)
 
 	var after struct {

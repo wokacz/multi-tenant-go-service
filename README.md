@@ -34,7 +34,8 @@
 
 ---
 
-Szablon serwisu HTTP: chi na routerze, huma na operacjach i OpenAPI, ent nad pgx do Postgresa, Atlas do migracji. Granice między warstwami — huma tylko w `internal/api`, ent tylko w `internal/store` — pilnuje test, nie recenzja.
+Szablon serwisu HTTP: chi na routerze, huma na operacjach i OpenAPI, ent nad pgx do Postgresa, Atlas do migracji.
+Granice między warstwami — huma tylko w `internal/api`, ent tylko w `internal/store` — pilnuje test, nie recenzja.
 
 Szczegóły, decyzje i instrukcje: [`docs/`](docs/README.md).
 
@@ -78,17 +79,19 @@ cd app
 
 ## Dokumentacja
 
-| | |
-|---|---|
-| [Architektura](docs/design/002_architecture.md) | warstwy, kierunek zależności, granice pilnowane testem |
-| [Kontrakt API](docs/design/003_api_contract.md) | wersjonowanie, generowane OpenAPI, DTO |
-| [Autoryzacja](docs/design/007_authorization.md) | role, uprawnienia, organizacje, audyt |
-| [Środowisko](docs/guides/001_development_environment.md) | pierwsze uruchomienie, obie ścieżki, konfiguracja |
-| [Nowy endpoint](docs/guides/002_add_endpoint.md) | lista kontrolna najczęstszej zmiany |
+|                                                          |                                                        |
+|----------------------------------------------------------|--------------------------------------------------------|
+| [Architektura](docs/design/002_architecture.md)          | warstwy, kierunek zależności, granice pilnowane testem |
+| [Kontrakt API](docs/design/003_api_contract.md)          | wersjonowanie, generowane OpenAPI, DTO                 |
+| [Autoryzacja](docs/design/007_authorization.md)          | role, uprawnienia, organizacje, audyt                  |
+| [Środowisko](docs/guides/001_development_environment.md) | pierwsze uruchomienie, obie ścieżki, konfiguracja      |
+| [Nowy endpoint](docs/guides/002_add_endpoint.md)         | lista kontrolna najczęstszej zmiany                    |
 
 Pełny spis: [`docs/README.md`](docs/README.md).
 
-Sam kontrakt HTTP to [`api/openapi.yaml`](api/openapi.yaml) — generowany z handlerów i **commitowany**, więc zmiana widać w diffie, a nie jako skutek uboczny. W developmencie jest też na `/docs` (Swagger UI), `/openapi.json` i `/openapi.yaml`. Produkcja nie serwuje żadnego z nich.
+Sam kontrakt HTTP to [`api/openapi.yaml`](api/openapi.yaml) — generowany z handlerów i **commitowany**, więc zmiana
+widać w diffie, a nie jako skutek uboczny. W developmencie jest też na `/docs` (Swagger UI), `/openapi.json` i
+`/openapi.yaml`. Produkcja nie serwuje żadnego z nich.
 
 ## Uruchomienie
 
@@ -125,7 +128,8 @@ Szybszy cykl edycja–kompilacja.
 </tr>
 </table>
 
-**Nie uruchamiaj obu naraz na porcie 8000.** Kontener wygląda na zdrowy (healthcheck sprawdza go od środka), a żądania z hosta trafiają do procesu, który zajął port pierwszy.
+**Nie uruchamiaj obu naraz na porcie 8000.** Kontener wygląda na zdrowy (healthcheck sprawdza go od środka), a żądania z
+hosta trafiają do procesu, który zajął port pierwszy.
 
 ```bash
 curl -s http://127.0.0.1:8000/health
@@ -134,13 +138,13 @@ open http://127.0.0.1:8000/docs
 
 ### Wymagania
 
-| Narzędzie | Po co |
-|---|---|
-| [Docker](https://www.docker.com/) | stos Compose albo sam Postgres |
-| [Go](https://go.dev/) 1.26+ | kompilator (host, `task check`) |
-| [Task](https://taskfile.dev/) | wszystkie polecenia projektu |
-| [Atlas](https://atlasgo.io/) | migracje (host, `task migrate:diff`) |
-| [golangci-lint](https://golangci-lint.run/) **v2** | lint (`task check`) |
+| Narzędzie                                          | Po co                                |
+|----------------------------------------------------|--------------------------------------|
+| [Docker](https://www.docker.com/)                  | stos Compose albo sam Postgres       |
+| [Go](https://go.dev/) 1.26+                        | kompilator (host, `task check`)      |
+| [Task](https://taskfile.dev/)                      | wszystkie polecenia projektu         |
+| [Atlas](https://atlasgo.io/)                       | migracje (host, `task migrate:diff`) |
+| [golangci-lint](https://golangci-lint.run/) **v2** | lint (`task check`)                  |
 
 ```bash
 brew install go
@@ -149,7 +153,8 @@ brew install ariga/tap/atlas
 brew install golangci-lint
 ```
 
-> **Pułapka.** `.golangci.yml` używa schematu v2. `go install` **musi** iść ze ścieżki `/v2/` — stara po cichu wciąga v1, który tej konfiguracji nie przeczyta:
+> **Pułapka.** `.golangci.yml` używa schematu v2. `go install` **musi** iść ze ścieżki `/v2/` — stara po cichu wciąga
+> v1, który tej konfiguracji nie przeczyta:
 >
 > ```bash
 > go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
@@ -165,7 +170,8 @@ task bootstrap -- -email you@example.com
 task compose:bootstrap -- -email you@example.com
 ```
 
-Dlaczego to krok wdrożeniowy, a nie „pierwszy zarejestrowany wygrywa”: [autoryzacja](docs/design/007_authorization.md#bootstrap).
+Dlaczego to krok wdrożeniowy, a nie „pierwszy zarejestrowany
+wygrywa”: [autoryzacja](docs/design/007_authorization.md#bootstrap).
 
 ## Polecenia
 
@@ -181,7 +187,8 @@ task migrate         # migracje (Atlas na hoście)
 task compose:migrate # migracje (obraz Atlasa)
 ```
 
-Testy domyślnie **nie potrzebują bazy**. Testy repozytoriów pomijają się, dopóki nie ustawisz `POSTGRES_TEST=1`. CI odpala je na kontenerze usługowym — SQL jest sprawdzany przy każdym pushu.
+Testy domyślnie **nie potrzebują bazy**. Testy repozytoriów pomijają się, dopóki nie ustawisz `POSTGRES_TEST=1`. CI
+odpala je na kontenerze usługowym — SQL jest sprawdzany przy każdym pushu.
 
 ---
 

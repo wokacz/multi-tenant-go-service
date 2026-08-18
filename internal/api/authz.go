@@ -266,3 +266,21 @@ func (s *Server) forbidden(ctx huma.Context, required authz.Permission) {
 	_ = huma.WriteErr(s.api, ctx, http.StatusForbidden, problem.CodeForbiddenNeeds,
 		problem.Requires(string(required)))
 }
+
+// AccessRule is what an operation needs before it may run. It is exported so
+// httptest guard tests can walk the catalog without living in this package.
+type AccessRule struct {
+	Permission authz.Permission
+	Scope      authz.Scope
+}
+
+// OperationAccess returns the gated-operation catalog. httptest guard tests use
+// it to assert snapshots, audits and platform scope stay aligned with enforcement.
+func OperationAccess() map[string]AccessRule {
+	out := make(map[string]AccessRule, len(operationAccess))
+	for id, rule := range operationAccess {
+		out[id] = AccessRule(rule)
+	}
+
+	return out
+}

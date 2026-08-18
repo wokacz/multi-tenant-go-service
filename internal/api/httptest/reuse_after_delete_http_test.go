@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"net/http"
@@ -15,14 +15,14 @@ import (
 // exist — which meant the person trying was told it had worked and then could never
 // sign in. No error anywhere said why.
 func TestAnAddressWorksAgainAfterTheAccountIsDeleted(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	const address = "pat@example.com"
 
 	registerAccount(t, f, address)
 
-	if got := signInStatus(t, f.server, address, "twelve-chars"); got != http.StatusCreated {
+	if got := signInStatus(t, f.Server, address, "twelve-chars"); got != http.StatusCreated {
 		t.Fatalf("sign in after registering = %d, want 201", got)
 	}
 
@@ -31,7 +31,7 @@ func TestAnAddressWorksAgainAfterTheAccountIsDeleted(t *testing.T) {
 		expect(t, http.StatusNoContent)
 
 	// The deleted account cannot sign in, which is the point of deleting it.
-	if got := signInStatus(t, f.server, address, "twelve-chars"); got != http.StatusUnauthorized {
+	if got := signInStatus(t, f.Server, address, "twelve-chars"); got != http.StatusUnauthorized {
 		t.Errorf("sign in with a deleted account = %d, want 401", got)
 	}
 
@@ -39,7 +39,7 @@ func TestAnAddressWorksAgainAfterTheAccountIsDeleted(t *testing.T) {
 	// rather than a silent 204 and a dead end.
 	registerAccount(t, f, address)
 
-	if got := signInStatus(t, f.server, address, "twelve-chars"); got != http.StatusCreated {
+	if got := signInStatus(t, f.Server, address, "twelve-chars"); got != http.StatusCreated {
 		t.Errorf("sign in after re-registering = %d, want 201 — the address was still held", got)
 	}
 }
@@ -47,8 +47,8 @@ func TestAnAddressWorksAgainAfterTheAccountIsDeleted(t *testing.T) {
 // TestASlugWorksAgainAfterTheOrganizationIsDeleted is the same rule for
 // organizations, where the symptom was a 409 nobody could act on.
 func TestASlugWorksAgainAfterTheOrganizationIsDeleted(t *testing.T) {
-	f := newAuthzFixture(t)
-	f.repo.SeedSystemRole(f.userID, string(authz.RolePlatformAdmin))
+	f := NewAuthzFixture(t)
+	f.Repo.SeedSystemRole(f.UserID, string(authz.RolePlatformAdmin))
 
 	const body = `{"slug":"globex","name":"Globex"}`
 

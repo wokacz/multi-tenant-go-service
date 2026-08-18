@@ -32,8 +32,8 @@ These are enforced by tests, not by review, because every violation looks harmle
    `internal/`, not under `internal/api/`).
 2. **The consumer owns the repository interface.** It is declared in
    `internal/domain/<thing>/repository.go` and implemented in
-   `internal/store/repositories/<thing>.go`. The structs on that interface are
-   the generated `ent` types. There is no second models package.
+   `internal/store/repositories/<thing>.go`. The structs on that interface are the generated `ent` types. There is no
+   second models package.
 3. **Models never reach JSON.** DTOs live in `internal/api/v1` and never leave it.
 4. **Every operation is classified in exactly one** of `publicOperations`,
    `selfServiceOperations`, `operationAccess`.
@@ -52,6 +52,7 @@ cmd/bootstrap/          grants the first owner (deployment step)
 cmd/seed/               development seed data
 internal/
   api/                  the only place huma appears
+    httptest/           in-process HTTP integration tests and shared fixtures
     authz.go            operationAccess, selfServiceOperations, requirePermission
     middleware.go       publicOperations, requireBearer, rate limiting
     problem/            domain error → RFC 7807, error codes, i18n of messages
@@ -100,13 +101,13 @@ POSTGRES_TEST=1 go test ./internal/store/repositories -v
 
 Run `task check`. If you touched any of these, run the extra step too:
 
-| Touched                             | Also required                                                  |
-|-------------------------------------|----------------------------------------------------------------|
-| a handler, DTO, or `huma.Operation` | `task openapi` and commit `api/openapi.yaml`                   |
-| a schema in `internal/store/ent/schema` | `task ent:generate`, then `task migrate:diff NAME=…`       |
-| a repository interface              | update the fake in `internal/store/repositories/memory`        |
-| a permission                        | translations in **every** `internal/i18n/locales/*.json`       |
-| `go.mod`                            | `task tidy` — a bare `go mod tidy` misses the `tools/entgen` module |
+| Touched                                 | Also required                                                       |
+|-----------------------------------------|---------------------------------------------------------------------|
+| a handler, DTO, or `huma.Operation`     | `task openapi` and commit `api/openapi.yaml`                        |
+| a schema in `internal/store/ent/schema` | `task ent:generate`, then `task migrate:diff NAME=…`                |
+| a repository interface                  | update the fake in `internal/store/repositories/memory`             |
+| a permission                            | translations in **every** `internal/i18n/locales/*.json`            |
+| `go.mod`                                | `task tidy` — a bare `go mod tidy` misses the `tools/entgen` module |
 
 `task check` fails on an uncommitted `api/openapi.yaml` regeneration and on a model changed without its migration. Both
 failures name the fix.
@@ -116,25 +117,25 @@ failures name the fix.
 These fail the build on an incomplete change. Read the failure message — each one states what is missing and why it
 matters.
 
-| Test                                               | File                                  | Demands                                                      |
-|----------------------------------------------------|---------------------------------------|--------------------------------------------------------------|
-| `TestHumaStaysInsideTheAPIPackage`                 | `internal/architecture_test.go`       | no huma import outside `internal/api`                        |
-| `TestGormDoesNotAppear`                            | `internal/architecture_test.go`       | the previous ORM is not imported anywhere under `internal/`  |
-| `TestEntStaysInsideTheStore`                       | `internal/architecture_test.go`       | no entgo.io import outside `internal/store`                  |
-| `TestEveryOperationIsClassified`                   | `internal/api/middleware_test.go`     | `publicOperations` and the spec's `Security` agree both ways |
-| `TestEveryOperationHasExactlyOneAuthorizationRule` | `internal/api/authz_test.go`          | every operation in exactly one of the three sets             |
-| `TestOrgScopedRulesLiveOnOrgScopedPaths`           | `internal/api/authz_test.go`          | `ScopeOrganization` ⟺ `{orgID}` in the path                  |
-| `TestGatedOperationsDeclareTheirRefusals`          | `internal/api/authz_test.go`          | 403 (and 404 when org-scoped) in `Errors`                    |
-| `TestSelfServiceOperationsCannotBeGated`           | `internal/api/authz_test.go`          | `/v1/me/*` never behind a permission                         |
-| `TestHandlersDoNotReadTheOrgIDParameter`           | `internal/api/authz_test.go`          | no handler reads `in.OrgID`                                  |
-| `TestScopedRepositoryMethodsTakeAnOrganization`    | `internal/api/authz_test.go`          | `orgID` is the second parameter of every scoped method       |
-| `TestEveryPermissionGuardsAnOperation`             | `internal/api/authz_test.go`          | no permission in the catalog without an operation            |
-| `TestOwnerCoversEveryOrganizationPermission`       | `internal/domain/authz/authz_test.go` | no permission that no role grants                            |
-| `TestTheSnapshotAgreesWithEnforcement`             | `internal/api/snapshot_http_test.go`  | a probe for every org-scoped operation                       |
-| `TestSystemScopeIsEnforcedEndToEnd`                | `internal/api/platform_http_test.go`  | a probe for every system-scoped operation                    |
-| `TestEveryMutatingOperationIsAudited`              | `internal/api/audit_http_test.go`     | every gated operation classified as mutating or read-only    |
-| `TestEveryLocaleDefinesTheSameKeys`                | `internal/i18n/i18n_test.go`          | identical key sets across locales                            |
-| `TestRateLimitAppliesToEveryCostlyRoute`           | `internal/api/middleware_test.go`     | costly routes are rate limited                               |
+| Test                                               | File                                          | Demands                                                      |
+|----------------------------------------------------|-----------------------------------------------|--------------------------------------------------------------|
+| `TestHumaStaysInsideTheAPIPackage`                 | `internal/architecture_test.go`               | no huma import outside `internal/api`                        |
+| `TestGormDoesNotAppear`                            | `internal/architecture_test.go`               | the previous ORM is not imported anywhere under `internal/`  |
+| `TestEntStaysInsideTheStore`                       | `internal/architecture_test.go`               | no entgo.io import outside `internal/store`                  |
+| `TestEveryOperationIsClassified`                   | `internal/api/middleware_test.go`             | `publicOperations` and the spec's `Security` agree both ways |
+| `TestEveryOperationHasExactlyOneAuthorizationRule` | `internal/api/authz_test.go`                  | every operation in exactly one of the three sets             |
+| `TestOrgScopedRulesLiveOnOrgScopedPaths`           | `internal/api/authz_test.go`                  | `ScopeOrganization` ⟺ `{orgID}` in the path                  |
+| `TestGatedOperationsDeclareTheirRefusals`          | `internal/api/authz_test.go`                  | 403 (and 404 when org-scoped) in `Errors`                    |
+| `TestSelfServiceOperationsCannotBeGated`           | `internal/api/authz_test.go`                  | `/v1/me/*` never behind a permission                         |
+| `TestHandlersDoNotReadTheOrgIDParameter`           | `internal/api/authz_test.go`                  | no handler reads `in.OrgID`                                  |
+| `TestScopedRepositoryMethodsTakeAnOrganization`    | `internal/api/authz_test.go`                  | `orgID` is the second parameter of every scoped method       |
+| `TestEveryPermissionGuardsAnOperation`             | `internal/api/authz_test.go`                  | no permission in the catalog without an operation            |
+| `TestOwnerCoversEveryOrganizationPermission`       | `internal/domain/authz/authz_test.go`         | no permission that no role grants                            |
+| `TestTheSnapshotAgreesWithEnforcement`             | `internal/api/httptest/snapshot_http_test.go` | a probe for every org-scoped operation                       |
+| `TestSystemScopeIsEnforcedEndToEnd`                | `internal/api/httptest/platform_http_test.go` | a probe for every system-scoped operation                    |
+| `TestEveryMutatingOperationIsAudited`              | `internal/api/httptest/audit_http_test.go`    | every gated operation classified as mutating or read-only    |
+| `TestEveryLocaleDefinesTheSameKeys`                | `internal/i18n/i18n_test.go`                  | identical key sets across locales                            |
+| `TestRateLimitAppliesToEveryCostlyRoute`           | `internal/api/middleware_test.go`             | costly routes are rate limited                               |
 
 Adding an operation typically trips 4–6 of these. That is the design working:
 the checklist in [guides/002](docs/guides/002_add_endpoint.md) exists so you satisfy them in one pass instead of
@@ -156,29 +157,29 @@ iterating on failures.
 
 ## Do not hand-edit
 
-| File                      | Instead                                          |
-|---------------------------|--------------------------------------------------|
-| `api/openapi.yaml`        | `task openapi`                                   |
-| `migrations/*.sql`        | `task migrate:diff NAME=…`                       |
-| `migrations/atlas.sum`    | regenerated by Atlas; a hand edit invalidates it |
-| `go.sum`, `tools/entgen/go.sum` | `task tidy`                          |
+| File                            | Instead                                          |
+|---------------------------------|--------------------------------------------------|
+| `api/openapi.yaml`              | `task openapi`                                   |
+| `migrations/*.sql`              | `task migrate:diff NAME=…`                       |
+| `migrations/atlas.sum`          | regenerated by Atlas; a hand edit invalidates it |
+| `go.sum`, `tools/entgen/go.sum` | `task tidy`                                      |
 
 Do not add a dependency without saying why in your response. The direct dependency list is short on purpose — see
 [design/001](docs/design/001_technology_stack.md) for what is deliberately absent.
 
 ## Traps
 
-| Trap                                                   | Consequence                                                                                         |
-|--------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| `go mod tidy` without `-C tools/entgen`                | second module drifts; CI fails                                                                      |
-| golangci-lint installed without the `/v2/` module path | silently installs v1, which cannot read `.golangci.yml`                                             |
-| schema changed without `task ent:generate`             | `ent:check` fails; the committed client is stale                                                    |
-| `AddX(1)` plus a second statement for the cap          | concurrent attempts lose increments; keep the counter and the cap in one `UPDATE`                   |
-| delete by id without loading the row first             | `IsProtected` / `IsSystem` are never seen; load, then `RefuseIfProtected` / `RefuseDelete`          |
-| read-modify-write on a counter                         | concurrent requests lose increments; use one conditional `UPDATE`                                   |
-| query that bypasses the ent client                     | the soft-delete interceptor does not apply; filter `deleted_at` yourself                            |
-| unique index on a nullable column                      | in Postgres two `NULL`s do not collide                                                              |
-| new route with a path variable                         | the rate limiter matches literal paths; see `isMembersPath`                                         |
+| Trap                                                   | Consequence                                                                                |
+|--------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| `go mod tidy` without `-C tools/entgen`                | second module drifts; CI fails                                                             |
+| golangci-lint installed without the `/v2/` module path | silently installs v1, which cannot read `.golangci.yml`                                    |
+| schema changed without `task ent:generate`             | `ent:check` fails; the committed client is stale                                           |
+| `AddX(1)` plus a second statement for the cap          | concurrent attempts lose increments; keep the counter and the cap in one `UPDATE`          |
+| delete by id without loading the row first             | `IsProtected` / `IsSystem` are never seen; load, then `RefuseIfProtected` / `RefuseDelete` |
+| read-modify-write on a counter                         | concurrent requests lose increments; use one conditional `UPDATE`                          |
+| query that bypasses the ent client                     | the soft-delete interceptor does not apply; filter `deleted_at` yourself                   |
+| unique index on a nullable column                      | in Postgres two `NULL`s do not collide                                                     |
+| new route with a path variable                         | the rate limiter matches literal paths; see `isMembersPath`                                |
 
 ## Where to look
 

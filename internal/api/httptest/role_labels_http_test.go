@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"net/http"
@@ -15,14 +15,14 @@ import (
 // once when the organization was created, from the English string in the Go
 // definition. A Polish client listing its roles was told "Owner".
 func TestAShippedRoleIsNamedInTheCallersLanguage(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	for _, language := range []string{"en", "pl"} {
 		t.Run(language, func(t *testing.T) {
-			req := authed(t, http.MethodGet, f.orgPath("/roles"), "", f.token, "")
+			req := Authed(t, http.MethodGet, f.orgPath("/roles"), "", f.Token, "")
 			req.Header.Set("Accept-Language", language)
 
-			rec := do(t, f.server.http.Handler, req)
+			rec := Do(t, f.Server.Handler(), req)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d; body %s", rec.Code, rec.Body.Bytes())
 			}
@@ -67,7 +67,7 @@ func TestAShippedRoleIsNamedInTheCallersLanguage(t *testing.T) {
 // in. Translating it would mean a second copy in the database — which is what
 // role_translations was for, and nothing ever wrote to it or read from it.
 func TestACustomRoleKeepsTheNameItWasGiven(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
 	var created roleBody
 	f.call(t, http.MethodPost, f.orgPath("/roles"),
@@ -78,10 +78,10 @@ func TestACustomRoleKeepsTheNameItWasGiven(t *testing.T) {
 		t.Fatalf("name = %q on creation", created.Name)
 	}
 
-	req := authed(t, http.MethodGet, f.orgPath("/roles"), "", f.token, "")
+	req := Authed(t, http.MethodGet, f.orgPath("/roles"), "", f.Token, "")
 	req.Header.Set("Accept-Language", "en")
 
-	rec := do(t, f.server.http.Handler, req)
+	rec := Do(t, f.Server.Handler(), req)
 
 	var body struct {
 		Roles []roleBody `json:"roles"`
@@ -99,12 +99,12 @@ func TestACustomRoleKeepsTheNameItWasGiven(t *testing.T) {
 // reaches a client. It is a separate response type, built by a separate function,
 // which is exactly how one of them gets fixed and the other does not.
 func TestAMembersRolesAreNamedInTheCallersLanguage(t *testing.T) {
-	f := newAuthzFixture(t, authz.RoleOwner)
+	f := NewAuthzFixture(t, authz.RoleOwner)
 
-	req := authed(t, http.MethodGet, f.orgPath("/members"), "", f.token, "")
+	req := Authed(t, http.MethodGet, f.orgPath("/members"), "", f.Token, "")
 	req.Header.Set("Accept-Language", "pl")
 
-	rec := do(t, f.server.http.Handler, req)
+	rec := Do(t, f.Server.Handler(), req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d; body %s", rec.Code, rec.Body.Bytes())
 	}

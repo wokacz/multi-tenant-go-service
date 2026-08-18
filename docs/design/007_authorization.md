@@ -141,8 +141,8 @@ z zakresem** — klient, który o niego prosi, przeczytał go od nas, więc „n
 
 ## Reguła rangi
 
-`EnsureCanGrant` pilnuje **nadawania**. Druga połowa dotyczy **odbierania** i bez niej schemat był egzekwowany tylko
-w jedną stronę.
+`EnsureCanGrant` pilnuje **nadawania**. Druga połowa dotyczy **odbierania** i bez niej schemat był egzekwowany tylko w
+jedną stronę.
 
 `members.remove`, `members.suspend` i `members.roles.assign` należą do roli `admin`, a członkostwo właściciela jest dla
 każdego z nich zwykłym wierszem. Administrator mógł więc usunąć właściciela nad sobą, zawiesić go (czyli zamienić na
@@ -157,8 +157,8 @@ ranga (co cel *ma*), potem anty-eskalacja (co cel *dostanie*).
 Szczegóły warte zapamiętania:
 
 - **Działanie na sobie zawsze przechodzi.** Dziś przeszłoby i tak, bo grant jest wyprowadzany z ról wołającego w tej
-  organizacji, więc jego własne członkostwo ma dokładnie ten sam zbiór. Wyjątek jest zapisany jawnie, żeby „usuń mnie
-  z organizacji" nie zaczęło kiedyś zawodzić, gdy oba zbiory będą liczone z różnych miejsc.
+  organizacji, więc jego własne członkostwo ma dokładnie ten sam zbiór. Wyjątek jest zapisany jawnie, żeby „usuń mnie z
+  organizacji" nie zaczęło kiedyś zawodzić, gdy oba zbiory będą liczone z różnych miejsc.
 - **Status celu nie ma znaczenia.** `MemberPermissions` sumuje uprawnienia ról członkostwa niezależnie od statusu.
   Zawieszony właściciel nie ma stać się usuwalny dla administratora tylko dlatego, że ktoś zawiesił go pierwszy.
 - **Nieaktualny klucz jest pomijany, nie liczony.** `Sanitize` i tak go odrzuca przy ewaluacji, więc nie nadaje celowi
@@ -173,23 +173,23 @@ Szczegóły warte zapamiętania:
 
 ## Statusy odmowy
 
-| Sytuacja                                              | Status | `code`                 |
-|-------------------------------------------------------|--------|------------------------|
-| brak/niepoprawny token                                | 401    | `unauthorized`         |
-| członek bez uprawnienia                               | 403    | `forbidden_requires`   |
-| organizacja nie istnieje **lub** nie jesteś członkiem | 404    | `not_found`            |
-| członkostwo zawieszone                                | 404    | `not_found`            |
-| zasób z cudzej organizacji                            | 404    | `not_found`            |
-| nadanie uprawnienia, którego się nie ma               | 403    | `privilege_escalation` |
-| uprawnienie z drugiego zakresu w roli                  | 422    | `wrong_scope`          |
-| zmiana dotyczy kogoś wyżej w hierarchii               | 403    | `insufficient_rank`    |
-| zaproszenie wygasło                                   | 410    | `invitation_expired`   |
+| Sytuacja                                              | Status | `code`                        |
+|-------------------------------------------------------|--------|-------------------------------|
+| brak/niepoprawny token                                | 401    | `unauthorized`                |
+| członek bez uprawnienia                               | 403    | `forbidden_requires`          |
+| organizacja nie istnieje **lub** nie jesteś członkiem | 404    | `not_found`                   |
+| członkostwo zawieszone                                | 404    | `not_found`                   |
+| zasób z cudzej organizacji                            | 404    | `not_found`                   |
+| nadanie uprawnienia, którego się nie ma               | 403    | `privilege_escalation`        |
+| uprawnienie z drugiego zakresu w roli                 | 422    | `wrong_scope`                 |
+| zmiana dotyczy kogoś wyżej w hierarchii               | 403    | `insufficient_rank`           |
+| zaproszenie wygasło                                   | 410    | `invitation_expired`          |
 | zaproszenie na inny adres                             | 409    | `invitation_address_mismatch` |
-| odebranie sobie ostatniej roli instalacji             | 409    | `last_system_role`     |
-| klucz nie jest rolą instalacji                        | 422    | `invalid_system_role`  |
-| edycja roli systemowej                                | 403    | `role_protected`       |
-| ostatni właściciel                                    | 409    | `last_owner`           |
-| rola wciąż przypisana                                 | 409    | `role_in_use`          |
+| odebranie sobie ostatniej roli instalacji             | 409    | `last_system_role`            |
+| klucz nie jest rolą instalacji                        | 422    | `invalid_system_role`         |
+| edycja roli systemowej                                | 403    | `role_protected`              |
+| ostatni właściciel                                    | 409    | `last_owner`                  |
+| rola wciąż przypisana                                 | 409    | `role_in_use`                 |
 
 Rozróżnienie 403/404 jest celowe i spójne z tym, co kod robi przy rejestracji (zduplikowany e-mail → 204). **403 mówi
 „jesteś tu, ale nie wolno ci"; 404 nie zdradza, że coś istnieje.** W aplikacji wielonajemcowej różnica statusów zamienia
@@ -274,8 +274,8 @@ Organizacja `default` powstaje leniwie, przy pierwszej rejestracji, wraz ze swoi
 (`member.joined`) wskazuje jako aktora to właśnie konto — patrz [Audyt](#audyt).
 
 Samo polecenie bootstrap nie ma sesji ani aktora, więc **nie zostawia wpisu w dzienniku**. Jest to świadome: reguła „bez
-aktora nie ma wiersza" obowiązuje, a wpis przypisujący promowanie osobie, która przy tym nie była, byłby fałszem.
-Śladem jest tu wykonanie polecenia na maszynie, nie dziennik aplikacji.
+aktora nie ma wiersza" obowiązuje, a wpis przypisujący promowanie osobie, która przy tym nie była, byłby fałszem. Śladem
+jest tu wykonanie polecenia na maszynie, nie dziennik aplikacji.
 
 **Instalacja jednoorganizacyjna** nie wymaga niczego: wszyscy lądują w `default`, a model wielonajemcowy jest wtedy
 niewidoczny — ale nie trzeba go dokładać później, gdy się okaże potrzebny.
@@ -287,19 +287,19 @@ Bootstrap przerywa koło, ale nie może być jedyną drogą. Rola `platform_admi
 **żadnego** śladu: nie było endpointu, `GrantSystemRole` nie wołało `record`, a dwie stałe akcji dla tego zdarzenia były
 martwym kodem, podczas gdy [Audyt](#audyt) obiecywał, że każda zmiana uprawnień jest zapisywana.
 
-| Operacja   | Ścieżka                                                   | Uprawnienie                     |
-|------------|-----------------------------------------------------------|---------------------------------|
-| lista      | `GET /v1/platform/system-roles`                           | `platform.system_roles.read`    |
-| nadanie    | `POST /v1/platform/system-roles`                          | `platform.system_roles.assign`  |
-| odebranie  | `DELETE /v1/platform/system-roles/{userID}/{roleKey}`     | `platform.system_roles.remove`  |
+| Operacja  | Ścieżka                                               | Uprawnienie                    |
+|-----------|-------------------------------------------------------|--------------------------------|
+| lista     | `GET /v1/platform/system-roles`                       | `platform.system_roles.read`   |
+| nadanie   | `POST /v1/platform/system-roles`                      | `platform.system_roles.assign` |
+| odebranie | `DELETE /v1/platform/system-roles/{userID}/{roleKey}` | `platform.system_roles.remove` |
 
 Trzy uprawnienia, nie jedno: czytanie „kto administruje instalacją" to inna decyzja niż dopisanie się do tej listy.
 
 Rzeczy, które trzeba znać:
 
-- **Nadanie i odebranie są idempotentne, ale nie zapisują zdarzenia bez zmiany.** Wpis o nadaniu, które się nie
-  odbyło, byłby drugą odpowiedzią na pytanie „kiedy to dostali". Bootstrap może zostać uruchomiony ponownie, więc
-  idempotencja nie jest wygodą.
+- **Nadanie i odebranie są idempotentne, ale nie zapisują zdarzenia bez zmiany.** Wpis o nadaniu, które się nie odbyło,
+  byłby drugą odpowiedzią na pytanie „kiedy to dostali". Bootstrap może zostać uruchomiony ponownie, więc idempotencja
+  nie jest wygodą.
 - **Nie ma tu anty-eskalacji, i to nie jest przeoczenie.** Zakresy są rozdzielone: wołający przeszedł autoryzację na
   poziomie systemu, a jedyna istniejąca rola systemowa obejmuje wszystkie uprawnienia platformowe — reguła „możesz nadać
   tylko to, co masz" porównywałaby zbiór ze sobą. Druga rola systemowa o węższym zbiorze to zmieni i wtedy właśnie tam
@@ -314,17 +314,18 @@ Rzeczy, które trzeba znać:
 
 ## Zaproszenia
 
-Zaproszenie ma **własną tabelę** i **własny sekret**. Wcześniej było wierszem `memberships` ze `status='invited'`, pustym
+Zaproszenie ma **własną tabelę** i **własny sekret**. Wcześniej było wierszem `memberships` ze `status='invited'`,
+pustym
 `user_id` i adresem na wierszu — czyli tożsamością zaproszenia był **adres**, a adres nie jest sekretem. Kto pierwszy
 zarejestrował zaproszony adres, dziedziczył ofertę razem z rolami w organizacji, do której nigdy nie należał. Token
 przenosi dowód z „twierdzę, że to mój adres" na „umiem przeczytać tę skrzynkę".
 
-| Kolumna      | Po co                                                              |
-|--------------|--------------------------------------------------------------------|
-| `email`      | dokąd wysłano; unikalna w organizacji, wciąż porównywana przy przyjęciu |
-| `token_hash` | jedyna kopia tokenu po tej stronie                                 |
-| `expires_at` | oferta bez wygaśnięcia to poświadczenie leżące bezterminowo w skrzynce |
-| `accepted_at`| wydane; wiersz zostaje, żeby historia „komu co oferowano" przeżyła członkostwo |
+| Kolumna       | Po co                                                                          |
+|---------------|--------------------------------------------------------------------------------|
+| `email`       | dokąd wysłano; unikalna w organizacji, wciąż porównywana przy przyjęciu        |
+| `token_hash`  | jedyna kopia tokenu po tej stronie                                             |
+| `expires_at`  | oferta bez wygaśnięcia to poświadczenie leżące bezterminowo w skrzynce         |
+| `accepted_at` | wydane; wiersz zostaje, żeby historia „komu co oferowano" przeżyła członkostwo |
 
 `invitation_roles` odbija `membership_roles`: role muszą przejść od oferty do członkostwa **bez ponownego wyboru** —
 przyjmujący nie może decydować, co przyjmuje.
@@ -335,13 +336,13 @@ nullowalny `user_id`. Każde członkostwo ma teraz konto, więc join do `users` 
 różne. Zniknęła też maszyneria savepointów w `AddMember`, która istniała wyłącznie po to, żeby provisioning nie odbijał
 się od zaproszenia na ten sam adres.
 
-**Hash to zwykłe `SHA-256`, bez pepperu**, i to celowa różnica wobec kodów sześciocyfrowych. Tamte mają mało entropii
-i potrzebują sekretu, żeby zgadywanie offline było drogie. Tu są 32 losowe bajty — nie ma czego zgadywać, a klucz byłby
+**Hash to zwykłe `SHA-256`, bez pepperu**, i to celowa różnica wobec kodów sześciocyfrowych. Tamte mają mało entropii i
+potrzebują sekretu, żeby zgadywanie offline było drogie. Tu są 32 losowe bajty — nie ma czego zgadywać, a klucz byłby
 tylko kolejnym sekretem do zgubienia. Odciski urządzeń są hashowane tak samo i z tego samego powodu.
 
 `POST /v1/orgs/{orgID}/members` **nie szuka adresu w tabeli kont**. Znany i nieznany adres dają ten sam `201` i ten sam
-kształt odpowiedzi. Szukanie byłoby oraklem rejestracji: fakt, że ktoś ma konto, jest faktem **międzyorganizacyjnym**,
-a administrator organizacji nie jest do niego uprawniony. `ErrAlreadyMember` obsługuje jednocześnie „już jest członkiem"
+kształt odpowiedzi. Szukanie byłoby oraklem rejestracji: fakt, że ktoś ma konto, jest faktem **międzyorganizacyjnym**, a
+administrator organizacji nie jest do niego uprawniony. `ErrAlreadyMember` obsługuje jednocześnie „już jest członkiem"
 i „już ma zaproszenie" — wołający reaguje na jedno i drugie tak samo.
 
 **Odpowiedź nie zawiera tokenu.** Administrator, który mógłby go odczytać, mógłby przyjąć zaproszenie za zaproszonego —
@@ -349,17 +350,17 @@ czyli dokładnie to, co token miał zlikwidować. Token istnieje w tym procesie 
 
 ### Cykl życia po stronie organizacji
 
-| Operacja  | Ścieżka                                                       | Uprawnienie      |
-|-----------|---------------------------------------------------------------|------------------|
-| zaproszenie | `POST /v1/orgs/{orgID}/members`                             | `members.invite` |
-| zaproszenie zbiorcze | `POST /v1/orgs/{orgID}/invitations`                | `members.invite` |
-| lista     | `GET /v1/orgs/{orgID}/invitations`                            | `members.read`   |
-| ponowne wysłanie | `POST /v1/orgs/{orgID}/invitations/{id}/reissue`        | `members.invite` |
-| wycofanie | `DELETE /v1/orgs/{orgID}/invitations/{id}`                    | `members.invite` |
+| Operacja             | Ścieżka                                          | Uprawnienie      |
+|----------------------|--------------------------------------------------|------------------|
+| zaproszenie          | `POST /v1/orgs/{orgID}/members`                  | `members.invite` |
+| zaproszenie zbiorcze | `POST /v1/orgs/{orgID}/invitations`              | `members.invite` |
+| lista                | `GET /v1/orgs/{orgID}/invitations`               | `members.read`   |
+| ponowne wysłanie     | `POST /v1/orgs/{orgID}/invitations/{id}/reissue` | `members.invite` |
+| wycofanie            | `DELETE /v1/orgs/{orgID}/invitations/{id}`       | `members.invite` |
 
 Te trzy istnieją, bo zaproszenie **wypadło z listy członków**. Dopóki było wierszem `memberships`, administrator widział
-je i wycofywał przez `remove-member`; usunięcie go stamtąd bez dania niczego w zamian zostawiłoby ofertę, której nikt nie
-widzi i nie może odwołać.
+je i wycofywał przez `remove-member`; usunięcie go stamtąd bez dania niczego w zamian zostawiłoby ofertę, której nikt
+nie widzi i nie może odwołać.
 
 ### Zaproszenie zbiorcze
 
@@ -418,11 +419,11 @@ zakończył" jest dokładnie tym pytaniem, na które wpis odpowiada.
 
 ### Przyjęcie: dwa warunki, dwa różne pytania
 
-| Operacja   | Ścieżka                             | Kategoria     |
-|------------|-------------------------------------|---------------|
-| lista      | `GET /v1/me/invitations`            | samoobsługowa |
-| przyjęcie  | `POST /v1/me/invitations/accept`    | samoobsługowa |
-| odrzucenie | `POST /v1/me/invitations/decline`   | samoobsługowa |
+| Operacja   | Ścieżka                           | Kategoria     |
+|------------|-----------------------------------|---------------|
+| lista      | `GET /v1/me/invitations`          | samoobsługowa |
+| przyjęcie  | `POST /v1/me/invitations/accept`  | samoobsługowa |
+| odrzucenie | `POST /v1/me/invitations/decline` | samoobsługowa |
 
 Token jedzie w **ciele**, nie w ścieżce: token w URL-u ląduje w logach dostępu, w historii przeglądarki i w nagłówku
 `Referer` tego, co strona załaduje dalej. Kody resetu hasła są przyjmowane w ciele z tego samego powodu.
@@ -431,29 +432,28 @@ Token jedzie w **ciele**, nie w ścieżce: token w URL-u ląduje w logach dostę
 2. **Adres konta musi się zgadzać** z adresem oferty — węższa reguła wybrana w D4. Trzyma ofertę skierowaną na osobę,
    dla której była, a nie na tego, komu wiadomość przekazano.
 
-Adres jest czytany z **konta**, nie z żądania. Z ciała pozwoliłby wskazać cudzy adres, z tokenu usunąłby drugi warunek
-w całości.
+Adres jest czytany z **konta**, nie z żądania. Z ciała pozwoliłby wskazać cudzy adres, z tokenu usunąłby drugi warunek w
+całości.
 
 Statusy odmowy są rozróżnione, bo wołający **trzyma token** — istnienie zaproszenia nie jest przed nim tajemnicą, a goły
 `404` nie dałby mu nic, co mógłby powiedzieć osobie zapraszającej:
 
-| Sytuacja                | Status | `code`                        |
-|-------------------------|--------|-------------------------------|
-| token nieznany          | 404    | `not_found`                   |
-| oferta wygasła          | 410    | `invitation_expired`          |
+| Sytuacja       | Status | `code`               |
+|----------------|--------|----------------------|
+| token nieznany | 404    | `not_found`          |
+| oferta wygasła | 410    | `invitation_expired` |
 
 ## Wyjście z organizacji
 
-| Operacja           | Ścieżka                                     | Kategoria                |
-|--------------------|---------------------------------------------|--------------------------|
-| opuszczenie własne | `DELETE /v1/me/memberships/{membershipID}`  | samoobsługowa            |
-| usunięcie kogoś    | `DELETE /v1/orgs/{orgID}/members/{memberID}`| `members.remove`         |
+| Operacja           | Ścieżka                                      | Kategoria        |
+|--------------------|----------------------------------------------|------------------|
+| opuszczenie własne | `DELETE /v1/me/memberships/{membershipID}`   | samoobsługowa    |
+| usunięcie kogoś    | `DELETE /v1/orgs/{orgID}/members/{memberID}` | `members.remove` |
 
 Dwie operacje, bo różni je **co je autoryzuje** — dokładnie jak przy wycofaniu i odrzuceniu zaproszenia. Do niedawna
 istniała tylko druga, więc jedyne wyjścia to była prośba do administratora albo `remove-member` na sobie samym, co
-wymaga `members.remove`: wołający najbardziej zainteresowani wyjściem — ci bez żadnych uprawnień — byli jedynymi,
-którzy nie mogli. Uprawnienie za tą operacją znaczyłoby, że organizacja może skonfigurować rolę, która nie potrafi
-odejść.
+wymaga `members.remove`: wołający najbardziej zainteresowani wyjściem — ci bez żadnych uprawnień — byli jedynymi, którzy
+nie mogli. Uprawnienie za tą operacją znaczyłoby, że organizacja może skonfigurować rolę, która nie potrafi odejść.
 
 **Ścieżka nazywa członkostwo, nie organizację.** `{orgID}` w ścieżce znaczy „middleware rozstrzygnął tu uprawnienie" i
 ma znaczyć tylko to; `TestHandlersDoNotReadTheOrgIDParameter` pilnuje, że handler nigdy nie czyta tego parametru z
@@ -493,8 +493,8 @@ którymi nikt nie może administrować. Dwie drogi do zera:
 właściciela, mają tę samą definicję: aktywne członkostwo z rolą `owner` i **żywym kontem**. Dwie odpowiedzi na pytanie
 „czy ta organizacja ma właściciela" w końcu by się rozjechały, a rozjazd wyglądałby tak, że lista pokazuje właściciela
 dla organizacji, którą reguła uważa za pozbawioną właścicieli. Przypina to
-`TestTheOwnerCountAgreesWithTheOwnerRule` — czyta liczbę z listy i **z samego guarda**, i sprawdziłem, że nie przechodzi,
-gdy z podzapytania wypadnie warunek o usuniętym koncie.
+`TestTheOwnerCountAgreesWithTheOwnerRule` — czyta liczbę z listy i **z samego guarda**, i sprawdziłem, że nie
+przechodzi, gdy z podzapytania wypadnie warunek o usuniętym koncie.
 
 Pole `owners` jest tylko na odpowiedzi platformowej. Ilu właścicieli mają inne tenanty instalacji, nie jest sprawą
 członka.
@@ -504,9 +504,9 @@ członka.
 Reguła ostatniego właściciela sprawdza i mutuje **w jednej transakcji**, z `SELECT … FOR UPDATE` na wierszu organizacji.
 Dwa nakładające się zdegradowania nie mogą oba zobaczyć `owners > 1` i oba przejść.
 
-Sama reguła jest jednak **kodem domenowym**, nie SQL-em. Mieszkała w zapytaniu i w ręcznie pisanej kopii w fake'u —
-i tak właśnie doszło do rozjechania się obu: jedna liczyła członkostwo z usuniętym kontem jako właściciela, druga nie,
-a wiersz stawał się nieusuwalny. Dziś jest jedno sformułowanie, w Go:
+Sama reguła jest jednak **kodem domenowym**, nie SQL-em. Mieszkała w zapytaniu i w ręcznie pisanej kopii w fake'u — i
+tak właśnie doszło do rozjechania się obu: jedna liczyła członkostwo z usuniętym kontem jako właściciela, druga nie, a
+wiersz stawał się nieusuwalny. Dziś jest jedno sformułowanie, w Go:
 
 ```go
 orgs.RefuseLastOwnerLoss(losing bool) OwnerGuard
@@ -516,10 +516,10 @@ orgs.RefuseRoleInUse() RoleGuard
 Repozytorium przyjmuje **strażnika** i woła go wewnątrz transakcji, po zablokowaniu wiersza organizacji, przekazując
 policzone fakty (`OwnerState{Owners, SubjectHoldsOwner}` albo liczbę posiadaczy roli). Rozkład jest taki:
 
-| Co | Gdzie |
-|-------------------------------------|-------------------------|
-| decyzja („czy odmówić")            | domena (`orgs`)         |
-| transakcja, blokada, zliczenie      | repozytorium            |
+| Co                             | Gdzie           |
+|--------------------------------|-----------------|
+| decyzja („czy odmówić")        | domena (`orgs`) |
+| transakcja, blokada, zliczenie | repozytorium    |
 
 Świadomie **nie** wprowadzono osobnego interfejsu `orgs.Tx` z metodami mutującymi. Przeniósłby do domeny także zapisy,
 czyli zduplikował kilkanaście metod repozytorium w drugim interfejsie, który fake musiałby odtworzyć — dużo ryzyka przy
@@ -533,8 +533,8 @@ Trzy szczegóły, które trzymają to razem:
   jest właśnie tym, co porządkuje je względem równoległego przypisywania roli. Dwie różne blokady brane w dwóch
   kolejnościach to przepis na zakleszczenie.
 - **`RefuseLastOwnerLoss` jest eksportowane**, bo testy warstwy składowania muszą sprawdzać **prawdziwą** regułę na
-  prawdziwym SQL-u. Test z własną kopią porównania mógłby przechodzić, gdy reguła serwisu mówi co innego — czyli dokładnie
-  ta awaria, której cała ta zmiana ma zapobiegać.
+  prawdziwym SQL-u. Test z własną kopią porównania mógłby przechodzić, gdy reguła serwisu mówi co innego — czyli
+  dokładnie ta awaria, której cała ta zmiana ma zapobiegać.
 
 `OwnerCount` jako metoda repozytorium **została usunięta**. Liczba istnieje teraz tylko wewnątrz transakcji; osobna
 metoda do liczenia z puli byłaby drugą odpowiedzią na to samo pytanie, a dwie odpowiedzi w końcu się rozjeżdżają.

@@ -1,4 +1,4 @@
-package api
+package httptest
 
 import (
 	"encoding/json"
@@ -17,23 +17,23 @@ import (
 // moved together, every translation would be a breaking change for anyone who
 // had branched on the message text.
 func TestTheCodeIsStableAcrossLanguages(t *testing.T) {
-	f := newAuthzFixture(t)
+	f := NewAuthzFixture(t)
 
-	role := f.repo.SeedRole(f.orgID, "auditors", string(authz.PermMembersRead))
-	f.repo.SeedMemberRoles(f.membership, role)
+	role := f.Repo.SeedRole(f.OrgID, "auditors", string(authz.PermMembersRead))
+	f.Repo.SeedMemberRoles(f.Membership, role)
 
 	details := map[string]string{}
 
 	for _, language := range []string{"en", "pl"} {
-		req := authed(t, http.MethodGet, "/v1/orgs/"+f.orgID.String(), "", f.token, "")
+		req := Authed(t, http.MethodGet, "/v1/orgs/"+f.OrgID.String(), "", f.Token, "")
 		req.Header.Set("Accept-Language", language)
 
-		rec := do(t, f.server.http.Handler, req)
+		rec := Do(t, f.Server.Handler(), req)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("status = %d, want 403; body %s", rec.Code, rec.Body.Bytes())
 		}
 
-		body := decodeProblem(t, rec.Body.Bytes())
+		body := DecodeProblem(t, rec.Body.Bytes())
 
 		if body.Code != "forbidden_requires" {
 			t.Errorf("%s: code = %q, want it unchanged by the language", language, body.Code)
@@ -56,19 +56,19 @@ func TestTheCodeIsStableAcrossLanguages(t *testing.T) {
 	}
 }
 
-// TestAnUnknownLanguageFallsBackRatherThanFailing keeps a request with an exotic
+// TestAnUnknownLanguageFallsBackRatherThanFailing keeps a Request with an exotic
 // Accept-Language from becoming an error of its own.
 func TestAnUnknownLanguageFallsBackRatherThanFailing(t *testing.T) {
-	s, _ := newTestServer(t)
+	s, _ := NewTestServer(t)
 
 	for _, header := range []string{"de", "!!!", "de;q=0.9, fr;q=0.8", ""} {
 		t.Run("Accept-Language: "+header, func(t *testing.T) {
-			req := request(t, http.MethodGet, "/v1/me", "")
+			req := Request(t, http.MethodGet, "/v1/me", "")
 			if header != "" {
 				req.Header.Set("Accept-Language", header)
 			}
 
-			rec := do(t, s.http.Handler, req)
+			rec := Do(t, s.Handler(), req)
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want 401", rec.Code)
 			}
@@ -77,7 +77,7 @@ func TestAnUnknownLanguageFallsBackRatherThanFailing(t *testing.T) {
 				t.Errorf("Content-Language = %q, want %q", got, i18n.Fallback)
 			}
 
-			body := decodeProblem(t, rec.Body.Bytes())
+			body := DecodeProblem(t, rec.Body.Bytes())
 			if body.Code != "unauthorized" {
 				t.Errorf("code = %q, want unauthorized", body.Code)
 			}
@@ -89,11 +89,11 @@ func TestAnUnknownLanguageFallsBackRatherThanFailing(t *testing.T) {
 // and the process. Without it a shared cache serves one language's body to a
 // client that asked for another.
 func TestVaryIsSetOnEveryResponse(t *testing.T) {
-	s, _ := newTestServer(t)
+	s, _ := NewTestServer(t)
 
 	for _, path := range []string{"/health", "/v1/me", "/v1/nothing-here"} {
 		t.Run(path, func(t *testing.T) {
-			rec := do(t, s.http.Handler, request(t, http.MethodGet, path, ""))
+			rec := Do(t, s.Handler(), Request(t, http.MethodGet, path, ""))
 
 			if !strings.Contains(rec.Header().Get("Vary"), "Accept-Language") {
 				t.Errorf("Vary = %q, want it to name Accept-Language", rec.Header().Get("Vary"))
@@ -106,17 +106,17 @@ func TestVaryIsSetOnEveryResponse(t *testing.T) {
 // huma is involved. A Polish API answering 404 in English is the kind of gap
 // that is invisible in development.
 func TestTheRoutersOwnErrorsAreTranslatedToo(t *testing.T) {
-	s, _ := newTestServer(t)
+	s, _ := NewTestServer(t)
 
-	req := request(t, http.MethodGet, "/v1/nothing-here", "")
+	req := Request(t, http.MethodGet, "/v1/nothing-here", "")
 	req.Header.Set("Accept-Language", "pl")
 
-	rec := do(t, s.http.Handler, req)
+	rec := Do(t, s.Handler(), req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
-	body := decodeProblem(t, rec.Body.Bytes())
+	body := DecodeProblem(t, rec.Body.Bytes())
 
 	if body.Code != "no_operation" {
 		t.Errorf("code = %q, want no_operation", body.Code)
@@ -132,26 +132,26 @@ func TestTheRoutersOwnErrorsAreTranslatedToo(t *testing.T) {
 // who signed up in Polish should not get English errors because they opened the
 // product on a machine that was installed in English.
 func TestTheAccountsLanguageOutranksTheHeader(t *testing.T) {
-	mailer := &capturingMailer{}
-	s, _ := newTestAPIConfig(t, mailer, memory.NewUsers(), nil)
+	mailer := &CapturingMailer{}
+	s, _, _ := NewTestAPIConfig(t, mailer, memory.NewUsers(), nil)
 
 	// Register with Accept-Language: pl, which is what the account remembers.
-	req := request(t, http.MethodPost, "/v1/users", testRegisterAda)
+	req := Request(t, http.MethodPost, "/v1/users", TestRegisterAda)
 	req.Header.Set("Accept-Language", "pl")
 
-	if rec := do(t, s.http.Handler, req); rec.Code != http.StatusNoContent {
+	if rec := Do(t, s.Handler(), req); rec.Code != http.StatusNoContent {
 		t.Fatalf("register status = %d, want 204; body %s", rec.Code, rec.Body.Bytes())
 	}
 
-	session := signInAda(t, s, "", http.StatusCreated)
+	session := SignInAda(t, s, "", http.StatusCreated)
 
 	// Now ask for something that does not exist, with an English header. The
 	// stored preference must win.
-	authedReq := authed(t, http.MethodGet, "/v1/orgs/018f0000-0000-7000-8000-000000000000",
+	authedReq := Authed(t, http.MethodGet, "/v1/orgs/018f0000-0000-7000-8000-000000000000",
 		"", session.Token, "")
 	authedReq.Header.Set("Accept-Language", "en")
 
-	rec := do(t, s.http.Handler, authedReq)
+	rec := Do(t, s.Handler(), authedReq)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body %s", rec.Code, rec.Body.Bytes())
 	}
@@ -160,7 +160,7 @@ func TestTheAccountsLanguageOutranksTheHeader(t *testing.T) {
 		t.Errorf("Content-Language = %q, want pl — the account's own choice", got)
 	}
 
-	body := decodeProblem(t, rec.Body.Bytes())
+	body := DecodeProblem(t, rec.Body.Bytes())
 	if body.Detail != i18n.Default().T("pl", "error.not_found") {
 		t.Errorf("detail = %q, want the Polish message", body.Detail)
 	}
@@ -169,19 +169,19 @@ func TestTheAccountsLanguageOutranksTheHeader(t *testing.T) {
 // TestRegistrationRemembersTheLanguage is the other half: the preference has to
 // get stored in the first place, and it is captured rather than asked for.
 func TestRegistrationRemembersTheLanguage(t *testing.T) {
-	mailer := &capturingMailer{}
-	s, _ := newTestAPIConfig(t, mailer, memory.NewUsers(), nil)
+	mailer := &CapturingMailer{}
+	s, _, _ := NewTestAPIConfig(t, mailer, memory.NewUsers(), nil)
 
-	req := request(t, http.MethodPost, "/v1/users", testRegisterAda)
+	req := Request(t, http.MethodPost, "/v1/users", TestRegisterAda)
 	req.Header.Set("Accept-Language", "pl-PL")
 
-	if rec := do(t, s.http.Handler, req); rec.Code != http.StatusNoContent {
+	if rec := Do(t, s.Handler(), req); rec.Code != http.StatusNoContent {
 		t.Fatalf("register status = %d, want 204", rec.Code)
 	}
 
-	session := signInAda(t, s, "", http.StatusCreated)
+	session := SignInAda(t, s, "", http.StatusCreated)
 
-	rec := do(t, s.http.Handler, authed(t, http.MethodGet, "/v1/me", "", session.Token, ""))
+	rec := Do(t, s.Handler(), Authed(t, http.MethodGet, "/v1/me", "", session.Token, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -203,14 +203,14 @@ func TestRegistrationRemembersTheLanguage(t *testing.T) {
 // TestValidationFailuresCarryACodeToo covers the path huma writes itself, which
 // never passes through problem.Error.
 func TestValidationFailuresCarryACodeToo(t *testing.T) {
-	s, _ := newTestServer(t)
+	s, _ := NewTestServer(t)
 
-	rec := postJSON(t, s.http.Handler, "/v1/users", `{"name":"Ada"}`)
+	rec := PostJSON(t, s.Handler(), "/v1/users", `{"name":"Ada"}`)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body %s", rec.Code, rec.Body.Bytes())
 	}
 
-	body := decodeProblem(t, rec.Body.Bytes())
+	body := DecodeProblem(t, rec.Body.Bytes())
 	if body.Code != "validation_failed" {
 		t.Errorf("code = %q, want validation_failed", body.Code)
 	}

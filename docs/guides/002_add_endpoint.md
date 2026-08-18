@@ -172,8 +172,8 @@ t.Errorf("required_permission = %q, want %q", body.RequiredPermission, authz.Per
 ```
 
 Jeśli operacja **zmienia** stan, dopisz ją do tabel w
-`internal/api/audit_http_test.go` oraz `snapshot_http_test.go` — oba testy przewracają build, gdy chroniona operacja nie
-ma tam wpisu.
+`internal/api/httptest/audit_http_test.go` oraz `snapshot_http_test.go` — oba testy przewracają build, gdy chroniona
+operacja nie ma tam wpisu.
 
 Więcej: [instrukcja testów](007_write_tests.md).
 

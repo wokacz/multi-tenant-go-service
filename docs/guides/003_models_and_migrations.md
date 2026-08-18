@@ -74,8 +74,8 @@ Dwie rzeczy, które ent robi inaczej, niż wygląda:
 
 ## Reguły: hooki i walidatory
 
-Walidacja pola idzie w pole (`NotEmpty()`, `MaxLen`, `Validate(func)`), a reguła obejmująca cały wiersz — w hook.
-To odpowiednik dawnych `BeforeSave`: sprawdzenia, które muszą zachodzić niezależnie od tego, kto zapisuje.
+Walidacja pola idzie w pole (`NotEmpty()`, `MaxLen`, `Validate(func)`), a reguła obejmująca cały wiersz — w hook. To
+odpowiednik dawnych `BeforeSave`: sprawdzenia, które muszą zachodzić niezależnie od tego, kto zapisuje.
 
 Miękkie usuwanie jest mixinem z **interceptorem** (filtruje odczyty) i **hookiem** (zamienia DELETE na UPDATE), plus
 `SkipSoftDelete(ctx)` dla ścieżek, które muszą zobaczyć wiersz usunięty — `RemoveMember` działa na członkostwie, którego
@@ -110,8 +110,8 @@ działają na prawdziwym schemacie po `atlas migrate apply`.
 ## Zgniatanie historii, dopóki nic nie jest wdrożone
 
 Katalog zawiera **jedną** migrację — `..._baseline.sql` — i tak ma zostać, dopóki repozytorium nie ma wdrożonej bazy.
-Osiem plików opisujących drogę do jednego schematu to osiem plików do przeczytania, żeby poznać jeden schemat, a kolejność
-kroków, których żadna baza nie wykonała, nie jest historią, tylko szumem.
+Osiem plików opisujących drogę do jednego schematu to osiem plików do przeczytania, żeby poznać jeden schemat, a
+kolejność kroków, których żadna baza nie wykonała, nie jest historią, tylko szumem.
 
 ```bash
 rm -f migrations/*.sql migrations/atlas.sum

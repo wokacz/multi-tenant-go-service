@@ -30,13 +30,14 @@ podłączanie się do żywej bazy, jest tym, co czyni wynik niezależnym od tego
 
 Krok po kroku: [instrukcja modeli i migracji](../guides/003_models_and_migrations.md).
 
-Katalog trzyma **jedną** migrację bazową, dopóki nic nie jest wdrożone — i dlaczego to przestaje być darmowe
-po pierwszym wdrożeniu: [instrukcja 003](../guides/003_models_and_migrations.md#zgniatanie-historii-dopóki-nic-nie-jest-wdrożone).
+Katalog trzyma **jedną** migrację bazową, dopóki nic nie jest wdrożone — i dlaczego to przestaje być darmowe po
+pierwszym
+wdrożeniu: [instrukcja 003](../guides/003_models_and_migrations.md#zgniatanie-historii-dopóki-nic-nie-jest-wdrożone).
 
 ## Mixiny
 
-Id, czasy i (gdzie trzeba) `deleted_at` / `is_protected` pochodzą z mixinów w `internal/store/ent/schema`.
-Wygenerowane typy w `internal/store/ent` są jedynymi modelami; repozytorium oddaje je wprost.
+Id, czasy i (gdzie trzeba) `deleted_at` / `is_protected` pochodzą z mixinów w `internal/store/ent/schema`. Wygenerowane
+typy w `internal/store/ent` są jedynymi modelami; repozytorium oddaje je wprost.
 
 Domyślne `id` to **UUIDv7**, nie v4. v7 jest uporządkowane w czasie, więc kolejne wstawienia lądują obok siebie w
 indeksie klucza głównego zamiast rozsypywać się po całym B-drzewie. Skutek uboczny, z którego korzystają listowania:
@@ -80,10 +81,12 @@ field.String("email").NotEmpty().
 	Annotations(entsql.IndexWhere("deleted_at IS NULL"))
 ```
 
-Adres i slug **zostają na starym wierszu** — nie są anonimizowane — bo dziennik zmian rozwiązuje aktora `LEFT JOIN`-em do
-`users` i bez nich przestałby odpowiadać na pytanie „kto to zrobił". Konsekwencja, o której trzeba wiedzieć: po zwolnieniu
-adresu ktoś inny może go zarejestrować, więc dwa wiersze mogą mieć ten sam adres — jeden usunięty, jeden żywy. Zapytania
-szukające po adresie muszą iść przez klienta ent (interceptor miękkiego usuwania), nie przez surowy SQL bez filtra.
+Adres i slug **zostają na starym wierszu** — nie są anonimizowane — bo dziennik zmian rozwiązuje aktora `LEFT JOIN`-em
+do
+`users` i bez nich przestałby odpowiadać na pytanie „kto to zrobił". Konsekwencja, o której trzeba wiedzieć: po
+zwolnieniu adresu ktoś inny może go zarejestrować, więc dwa wiersze mogą mieć ten sam adres — jeden usunięty, jeden
+żywy. Zapytania szukające po adresie muszą iść przez klienta ent (interceptor miękkiego usuwania), nie przez surowy SQL
+bez filtra.
 
 Dla sluga jest to bezpieczne, bo **nic nie adresuje organizacji slugiem** — każda trasa bierze id. Gdyby kiedyś zaczęło,
 ponowne użycie sluga sprawiłoby, że stary link wskazuje innego najemcę, i ta decyzja wymagałaby ponownego rozważenia.
@@ -110,9 +113,9 @@ spodziewamy. Stąd
 
 ### Hook waliduje cały wiersz tylko przy Create
 
-`Validate()` na wygenerowanym typie wymaga kompletnego wiersza. Update, który rusza jedno pole, sprawdza tylko to pole — rename nie może
-paść jako „invalid slug". Hooki są w `internal/store/ent/schema/validate.go` i wołają te same metody, których używa
-atrapa.
+`Validate()` na wygenerowanym typie wymaga kompletnego wiersza. Update, który rusza jedno pole, sprawdza tylko to pole —
+rename nie może paść jako „invalid slug". Hooki są w `internal/store/ent/schema/validate.go` i wołają te same metody,
+których używa atrapa.
 
 ## Enumeracje
 
@@ -139,19 +142,19 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 
 ## Spis tabel
 
-| Tabela                                     | Zawiera                                                                                       |
-|--------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `users`                                    | konta, epoka sesji, drugi składnik, zawieszenie, język                                        |
-| `devices`                                  | znane urządzenia, odcisk `SHA-256`, zaufanie, odwołanie                                       |
-| `login_events`                             | historia logowań                                                                              |
-| `password_resets`, `two_factor_challenges`, `email_changes` | kody jednorazowe (HMAC z osobnym `purpose`, TTL, licznik prób)               |
-| `organizations`                            | najemcy                                                                                       |
-| `memberships`                              | kto należy do której organizacji i w jakim stanie                                             |
-| `invitations`, `invitation_roles`          | oferty członkostwa; tożsamością jest hash tokenu, nie adres                                   |
-| `roles`, `role_permissions`                | role organizacji i to, co nadają                                                              |
-| `membership_roles`                         | przypisania ról                                                                               |
-| `user_system_roles`                        | role platformowe, przypisywane kluczem                                                        |
-| `authz_events`                             | dziennik zmian uprawnień                                                                      |
+| Tabela                                                      | Zawiera                                                        |
+|-------------------------------------------------------------|----------------------------------------------------------------|
+| `users`                                                     | konta, epoka sesji, drugi składnik, zawieszenie, język         |
+| `devices`                                                   | znane urządzenia, odcisk `SHA-256`, zaufanie, odwołanie        |
+| `login_events`                                              | historia logowań                                               |
+| `password_resets`, `two_factor_challenges`, `email_changes` | kody jednorazowe (HMAC z osobnym `purpose`, TTL, licznik prób) |
+| `organizations`                                             | najemcy                                                        |
+| `memberships`                                               | kto należy do której organizacji i w jakim stanie              |
+| `invitations`, `invitation_roles`                           | oferty członkostwa; tożsamością jest hash tokenu, nie adres    |
+| `roles`, `role_permissions`                                 | role organizacji i to, co nadają                               |
+| `membership_roles`                                          | przypisania ról                                                |
+| `user_system_roles`                                         | role platformowe, przypisywane kluczem                         |
+| `authz_events`                                              | dziennik zmian uprawnień                                       |
 
 Każdy nowy schemat trafia do opisu automatycznie: `ent generate` czyta cały katalog `schema/`. Poprzedni układ wymagał
 wpisania każdego modelu do ręcznej listy, a pominięty był po cichu nieobecny w generowanym schemacie — po czym Atlas
