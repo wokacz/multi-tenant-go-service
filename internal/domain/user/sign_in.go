@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // deviceTokenBytes is the length of the opaque secret a client keeps to be
@@ -52,8 +52,8 @@ type SignInContext struct {
 // SignInResult is what the password, the device and the second-factor rules
 // jointly decided.
 type SignInResult struct {
-	User   *models.User
-	Device *models.Device
+	User   *ent.User
+	Device *ent.Device
 
 	// DeviceToken is set only when this sign-in minted a new device. It is
 	// returned once and never recoverable, so a client that drops it simply
@@ -100,7 +100,7 @@ func (s *Service) SignIn(ctx context.Context, email, password string, sc SignInC
 		// Returning it would answer a wrong password with a 500 while an
 		// unknown address still got a 401 — exactly the account oracle the
 		// shared error is there to prevent.
-		s.tryRecordLogin(ctx, u.ID, nil, sc, models.OutcomeBadPassword)
+		s.tryRecordLogin(ctx, u.ID, nil, sc, ent.OutcomeBadPassword)
 
 		return nil, ErrInvalidCredentials
 	}
@@ -112,7 +112,7 @@ func (s *Service) SignIn(ctx context.Context, email, password string, sc SignInC
 	// blocks the ones already out, and without this a suspended account could
 	// simply sign in again and get a fresh one.
 	if u.IsSuspended() {
-		s.tryRecordLogin(ctx, u.ID, nil, sc, models.OutcomeLocked)
+		s.tryRecordLogin(ctx, u.ID, nil, sc, ent.OutcomeLocked)
 
 		return nil, ErrSuspended
 	}
@@ -123,7 +123,7 @@ func (s *Service) SignIn(ctx context.Context, email, password string, sc SignInC
 	}
 
 	if device.IsRevoked() {
-		s.tryRecordLogin(ctx, u.ID, &device.ID, sc, models.OutcomeLocked)
+		s.tryRecordLogin(ctx, u.ID, &device.ID, sc, ent.OutcomeLocked)
 
 		return nil, ErrDeviceRevoked
 	}
@@ -147,7 +147,7 @@ func (s *Service) SignIn(ctx context.Context, email, password string, sc SignInC
 
 	// Here the error is returned. A token handed out without its audit row is
 	// a gap in the history the account holder is meant to be able to trust.
-	if err := s.recordLogin(ctx, u.ID, &device.ID, sc, models.OutcomeSuccess); err != nil {
+	if err := s.recordLogin(ctx, u.ID, &device.ID, sc, ent.OutcomeSuccess); err != nil {
 		return nil, err
 	}
 
@@ -157,7 +157,7 @@ func (s *Service) SignIn(ctx context.Context, email, password string, sc SignInC
 // resolveDevice recognises the client's device or registers a new one. The
 // second result is a freshly minted device token, empty when the device was
 // already known.
-func (s *Service) resolveDevice(ctx context.Context, userID uuid.UUID, sc SignInContext) (*models.Device, string, error) {
+func (s *Service) resolveDevice(ctx context.Context, userID uuid.UUID, sc SignInContext) (*ent.Device, string, error) {
 	if sc.DeviceToken != "" {
 		device, err := s.repo.DeviceByFingerprint(ctx, userID, deviceFingerprint(sc.DeviceToken))
 		if err == nil {
@@ -177,7 +177,7 @@ func (s *Service) resolveDevice(ctx context.Context, userID uuid.UUID, sc SignIn
 		return nil, "", err
 	}
 
-	device := &models.Device{
+	device := &ent.Device{
 		UserID:      userID,
 		Fingerprint: deviceFingerprint(token),
 		UserAgent:   truncate(sc.UserAgent, maxUserAgentLength),
@@ -191,7 +191,7 @@ func (s *Service) resolveDevice(ctx context.Context, userID uuid.UUID, sc SignIn
 }
 
 // Devices lists the caller's known devices, most recently seen first.
-func (s *Service) Devices(ctx context.Context, userID uuid.UUID) ([]models.Device, error) {
+func (s *Service) Devices(ctx context.Context, userID uuid.UUID) ([]ent.Device, error) {
 	return s.repo.Devices(ctx, userID)
 }
 
@@ -204,7 +204,7 @@ func (s *Service) RevokeDevice(ctx context.Context, userID, deviceID uuid.UUID) 
 }
 
 // LoginEvents returns the caller's recent sign-in history, newest first.
-func (s *Service) LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]models.LoginEvent, error) {
+func (s *Service) LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]ent.LoginEvent, error) {
 	if limit <= 0 || limit > MaxLoginEvents {
 		limit = MaxLoginEvents
 	}
@@ -214,7 +214,7 @@ func (s *Service) LoginEvents(ctx context.Context, userID uuid.UUID, limit int) 
 
 // ActiveDevice is the bearer middleware's check that the device a token names
 // still exists and has not been revoked.
-func (s *Service) ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*models.Device, error) {
+func (s *Service) ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*ent.Device, error) {
 	return s.repo.ActiveDevice(ctx, userID, deviceID)
 }
 
@@ -223,9 +223,9 @@ func (s *Service) recordLogin(
 	userID uuid.UUID,
 	deviceID *uuid.UUID,
 	sc SignInContext,
-	outcome models.LoginOutcome,
+	outcome ent.LoginOutcome,
 ) error {
-	return s.repo.RecordLoginEvent(ctx, &models.LoginEvent{
+	return s.repo.RecordLoginEvent(ctx, &ent.LoginEvent{
 		UserID:    userID,
 		DeviceID:  deviceID,
 		IP:        normalizeIP(sc.IP),
@@ -241,7 +241,7 @@ func (s *Service) tryRecordLogin(
 	userID uuid.UUID,
 	deviceID *uuid.UUID,
 	sc SignInContext,
-	outcome models.LoginOutcome,
+	outcome ent.LoginOutcome,
 ) {
 	_ = s.recordLogin(ctx, userID, deviceID, sc, outcome)
 }

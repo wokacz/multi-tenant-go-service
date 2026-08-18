@@ -15,7 +15,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
@@ -94,10 +94,10 @@ func envOr(key, fallback string) string {
 
 // newUser inserts an account with a unique address so parallel runs and
 // repeated runs against the same database do not collide.
-func newUser(t *testing.T, repo *repositories.User) *models.User {
+func newUser(t *testing.T, repo *repositories.User) *ent.User {
 	t.Helper()
 
-	u := &models.User{
+	u := &ent.User{
 		Name:         "Ada",
 		Email:        "ada+" + uuid.Must(uuid.NewV7()).String() + "@example.com",
 		PasswordHash: "not-a-real-hash",
@@ -117,7 +117,7 @@ func TestFailPasswordResetIsAtomic(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	reset := &models.PasswordReset{
+	reset := &ent.PasswordReset{
 		UserID:    u.ID,
 		CodeHash:  "deadbeef",
 		ExpiresAt: time.Now().UTC().Add(time.Hour),
@@ -171,7 +171,7 @@ func TestFailPasswordResetUnderConcurrency(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	reset := &models.PasswordReset{
+	reset := &ent.PasswordReset{
 		UserID:    u.ID,
 		CodeHash:  "deadbeef",
 		ExpiresAt: time.Now().UTC().Add(time.Hour),
@@ -221,7 +221,7 @@ func TestTouchDeviceWritesInet(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	device := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	device := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
 	if err := repo.CreateDevice(ctx, device); err != nil {
 		t.Fatalf("CreateDevice() = %v", err)
 	}
@@ -247,14 +247,14 @@ func TestTouchDeviceWritesInet(t *testing.T) {
 }
 
 // TestRevokeAndTrustApplyTheModelRules checks that the FOR UPDATE read plus
-// models.Device is really what decides, including that revoking clears trust
+// ent.Device is really what decides, including that revoking clears trust
 // and that a revoked device cannot be trusted again.
 func TestRevokeAndTrustApplyTheModelRules(t *testing.T) {
 	repo := repositories.NewUser(testDB(t))
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	device := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	device := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
 	if err := repo.CreateDevice(ctx, device); err != nil {
 		t.Fatalf("CreateDevice() = %v", err)
 	}
@@ -305,10 +305,10 @@ func TestDevicesOrdersNullsLast(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	never := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
-	seen := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	never := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	seen := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
 
-	for _, d := range []*models.Device{never, seen} {
+	for _, d := range []*ent.Device{never, seen} {
 		if err := repo.CreateDevice(ctx, d); err != nil {
 			t.Fatalf("CreateDevice() = %v", err)
 		}
@@ -339,12 +339,12 @@ func TestConsumeTwoFactorChallengeIsSingleUse(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	device := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	device := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
 	if err := repo.CreateDevice(ctx, device); err != nil {
 		t.Fatalf("CreateDevice() = %v", err)
 	}
 
-	challenge := &models.TwoFactorChallenge{
+	challenge := &ent.TwoFactorChallenge{
 		UserID:    u.ID,
 		DeviceID:  device.ID,
 		CodeHash:  "deadbeef",
@@ -380,14 +380,14 @@ func TestLoginEventsRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	device := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	device := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
 	if err := repo.CreateDevice(ctx, device); err != nil {
 		t.Fatalf("CreateDevice() = %v", err)
 	}
 
-	outcomes := []models.LoginOutcome{models.OutcomeSuccess, models.OutcomeBadPassword}
+	outcomes := []ent.LoginOutcome{ent.OutcomeSuccess, ent.OutcomeBadPassword}
 	for _, outcome := range outcomes {
-		event := &models.LoginEvent{
+		event := &ent.LoginEvent{
 			UserID:    u.ID,
 			DeviceID:  &device.ID,
 			IP:        "192.0.2.10",
@@ -413,12 +413,12 @@ func TestLoginEventsRoundTrip(t *testing.T) {
 		t.Fatalf("events = %d, want 2", len(events))
 	}
 
-	if events[0].Outcome != models.OutcomeBadPassword {
+	if events[0].Outcome != ent.OutcomeBadPassword {
 		t.Errorf("newest outcome = %q, want bad_password", events[0].Outcome)
 	}
 
 	// The check constraint has to reject anything the enum does not name.
-	bad := &models.LoginEvent{UserID: u.ID, IP: "192.0.2.10", Outcome: models.LoginOutcome("nonsense")}
+	bad := &ent.LoginEvent{UserID: u.ID, IP: "192.0.2.10", Outcome: ent.LoginOutcome("nonsense")}
 	if err := repo.RecordLoginEvent(ctx, bad); err == nil {
 		t.Fatal("RecordLoginEvent accepted an unknown outcome")
 	}
@@ -433,7 +433,7 @@ func TestCreateTranslatesDuplicateEmail(t *testing.T) {
 	ctx := context.Background()
 	first := newUser(t, repo)
 
-	again := &models.User{Name: "Ada", Email: first.Email, PasswordHash: "another-hash"}
+	again := &ent.User{Name: "Ada", Email: first.Email, PasswordHash: "another-hash"}
 	if err := repo.Create(ctx, again); !errors.Is(err, user.ErrEmailTaken) {
 		t.Fatalf("Create(duplicate) = %v, want ErrEmailTaken", err)
 	}
@@ -480,7 +480,7 @@ func TestConsumePasswordResetIsTransactional(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	reset := &models.PasswordReset{
+	reset := &ent.PasswordReset{
 		UserID:    u.ID,
 		CodeHash:  "deadbeef",
 		ExpiresAt: time.Now().UTC().Add(time.Hour),
@@ -524,10 +524,10 @@ func TestDeviceByFingerprintIsScopedToTheUser(t *testing.T) {
 	ada, bob := newUser(t, repo), newUser(t, repo)
 	shared := uuid.Must(uuid.NewV7()).String()
 
-	adaDevice := &models.Device{UserID: ada.ID, Fingerprint: shared}
-	bobDevice := &models.Device{UserID: bob.ID, Fingerprint: shared}
+	adaDevice := &ent.Device{UserID: ada.ID, Fingerprint: shared}
+	bobDevice := &ent.Device{UserID: bob.ID, Fingerprint: shared}
 
-	for _, d := range []*models.Device{adaDevice, bobDevice} {
+	for _, d := range []*ent.Device{adaDevice, bobDevice} {
 		if err := repo.CreateDevice(ctx, d); err != nil {
 			t.Fatalf("CreateDevice() = %v", err)
 		}
@@ -555,12 +555,12 @@ func TestFailTwoFactorChallengeIsAtomic(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	device := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	device := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
 	if err := repo.CreateDevice(ctx, device); err != nil {
 		t.Fatalf("CreateDevice() = %v", err)
 	}
 
-	challenge := &models.TwoFactorChallenge{
+	challenge := &ent.TwoFactorChallenge{
 		UserID:    u.ID,
 		DeviceID:  device.ID,
 		CodeHash:  "deadbeef",
@@ -623,12 +623,12 @@ func TestActiveTwoFactorChallengeIgnoresExpired(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	device := &models.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
+	device := &ent.Device{UserID: u.ID, Fingerprint: uuid.Must(uuid.NewV7()).String()}
 	if err := repo.CreateDevice(ctx, device); err != nil {
 		t.Fatalf("CreateDevice() = %v", err)
 	}
 
-	expired := &models.TwoFactorChallenge{
+	expired := &ent.TwoFactorChallenge{
 		UserID:    u.ID,
 		DeviceID:  device.ID,
 		CodeHash:  "deadbeef",
@@ -737,7 +737,7 @@ func TestDeletingAnAccountRevokesItsDevices(t *testing.T) {
 	u := newUser(t, repo)
 
 	trusted := time.Now().UTC()
-	d := &models.Device{
+	d := &ent.Device{
 		UserID:      u.ID,
 		Fingerprint: uuid.Must(uuid.NewV7()).String(),
 		TrustedAt:   &trusted,
@@ -839,7 +839,7 @@ func TestFailEmailChangeUnderConcurrency(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, repo)
 
-	change := &models.EmailChange{
+	change := &ent.EmailChange{
 		UserID:    u.ID,
 		NewEmail:  "moved+" + uuid.Must(uuid.NewV7()).String() + "@example.com",
 		CodeHash:  "hash-" + uuid.Must(uuid.NewV7()).String(),

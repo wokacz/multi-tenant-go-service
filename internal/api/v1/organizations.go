@@ -13,7 +13,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // OrganizationResponse is the wire representation of an organization.
@@ -24,7 +24,7 @@ type OrganizationResponse struct {
 	CreatedAt time.Time `json:"created_at" doc:"When the organization was created"`
 }
 
-func newOrganizationResponse(o *models.Organization) OrganizationResponse {
+func newOrganizationResponse(o *ent.Organization) OrganizationResponse {
 	return OrganizationResponse{
 		ID:        o.ID,
 		Slug:      o.Slug,

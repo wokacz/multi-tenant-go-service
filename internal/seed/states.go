@@ -8,7 +8,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 type states struct{}
@@ -66,7 +66,7 @@ func (states) suspendCastMember(ctx context.Context, w *World) error {
 	}
 
 	return w.Orgs.SetMemberStatus(w.actingAs(ctx, owner.ID),
-		w.ownerGrant(acme.ID, owner.ID), membership.ID, models.MembershipSuspended)
+		w.ownerGrant(acme.ID, owner.ID), membership.ID, ent.MembershipSuspended)
 }
 
 // enableTwoFactor turns the second factor on for the account named after it, which

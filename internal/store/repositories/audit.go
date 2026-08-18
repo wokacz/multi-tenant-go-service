@@ -10,7 +10,6 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 var (
@@ -29,7 +28,7 @@ var (
 // A missing actor writes nothing. That is deliberate — see audit.Actor — and it
 // is why the guard against a forgotten one is a test that calls each mutating
 // endpoint and demands a row, rather than a nil check here.
-func recordEnt(ctx context.Context, tx *ent.Tx, event *models.AuthzEvent) error {
+func recordEnt(ctx context.Context, tx *ent.Tx, event *ent.AuthzEvent) error {
 	actor := audit.ActorFrom(ctx)
 	if actor.IsZero() {
 		return nil
@@ -48,7 +47,7 @@ func recordEnt(ctx context.Context, tx *ent.Tx, event *models.AuthzEvent) error 
 		SetActorID(actor.ID).
 		SetIP(ip).
 		SetUserAgent(truncateUserAgent(actor.UserAgent)).
-		SetAction(string(event.Action)).
+		SetAction(event.Action).
 		SetNillableOrganizationID(event.OrganizationID).
 		SetNillableSubjectID(event.SubjectID).
 		SetNillableRoleID(event.RoleID).
@@ -81,7 +80,7 @@ type eventRow struct {
 	ID             uuid.UUID
 	CreatedAt      time.Time
 	OrganizationID *uuid.UUID
-	Action         models.AuthzAction
+	Action         string
 	RoleID         *uuid.UUID
 	RoleKey        string
 	PermissionKey  string
@@ -108,16 +107,16 @@ func (r *Orgs) AllEvents(ctx context.Context, limit, offset int) ([]audit.Event,
 
 // events runs the one query both readers share.
 //
-// Raw SQL, deliberately, and the port to ent did not change that: three LEFT JOINs with
-// aliased columns is what this query *is*, and an ORM that carried it added nothing but
-// a place for it to be misread. It runs on the same pool as everything else, so it
-// shares the connection limits and — once the driver is wrapped — the same spans.
+// Raw SQL, deliberately: three LEFT JOINs with aliased columns is what this query
+// *is*, and an ORM that carried it added nothing but a place for it to be misread.
+// It runs on the same pool as everything else, so it shares the connection limits
+// and — once the driver is wrapped — the same spans.
 //
 // The joins to users are LEFT: an account may have been deleted since, and dropping its
 // entries from the history would quietly erase the very changes somebody is most likely
 // to be looking for. That also means the joined columns can be NULL, which is why the
-// scan below reads them through sql.NullString rather than into plain strings — GORM
-// used to fold a NULL into "" on the way past, and nothing else does.
+// scan below reads them through sql.NullString rather than into plain strings — a NULL
+// scanned into a string is an error, not an empty value.
 func (r *Orgs) events(
 	ctx context.Context,
 	where string,

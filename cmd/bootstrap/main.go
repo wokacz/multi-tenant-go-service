@@ -26,7 +26,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
@@ -48,7 +48,7 @@ func run() error {
 	// so an organization created through the platform API could not be given an
 	// owner from here either. The API can do it now; this stays for the case where
 	// there is nobody to call the API with yet.
-	slug := flag.String("org", models.DefaultOrganizationSlug,
+	slug := flag.String("org", ent.DefaultOrganizationSlug,
 		"slug of the organization to make them owner of")
 	flag.Parse()
 
@@ -124,8 +124,8 @@ func targetOrganization(
 	service *orgs.Service,
 	provisioner orgs.Provisioner,
 	slug string,
-) (*models.Organization, error) {
-	if slug == models.DefaultOrganizationSlug {
+) (*ent.Organization, error) {
+	if slug == ent.DefaultOrganizationSlug {
 		return service.EnsureDefaultOrganization(ctx)
 	}
 

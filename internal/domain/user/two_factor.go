@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // TwoFactorCodeLength is the number of decimal digits emailed to finish a
@@ -34,7 +34,7 @@ func (s *Service) issueTwoFactorChallenge(ctx context.Context, userID, deviceID 
 		return "", fmt.Errorf("user: generate two-factor code: %w", err)
 	}
 
-	challenge := &models.TwoFactorChallenge{
+	challenge := &ent.TwoFactorChallenge{
 		UserID:    userID,
 		DeviceID:  deviceID,
 		CodeHash:  s.hashCode(purposeTwoFactor, userID, code),
@@ -56,7 +56,7 @@ func (s *Service) VerifyTwoFactor(
 	ctx context.Context,
 	email, code string,
 	sc SignInContext,
-) (*models.User, *models.Device, error) {
+) (*ent.User, *ent.Device, error) {
 	u, err := s.repo.ByEmail(ctx, NormalizeEmail(email))
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
@@ -121,7 +121,7 @@ func (s *Service) VerifyTwoFactor(
 			return nil, nil, failErr
 		}
 
-		s.tryRecordLogin(ctx, u.ID, &device.ID, sc, models.OutcomeMFAFailed)
+		s.tryRecordLogin(ctx, u.ID, &device.ID, sc, ent.OutcomeMFAFailed)
 
 		return nil, nil, ErrInvalidTwoFactorCode
 	}
@@ -130,7 +130,7 @@ func (s *Service) VerifyTwoFactor(
 		return nil, nil, err
 	}
 
-	if err := s.recordLogin(ctx, u.ID, &device.ID, sc, models.OutcomeSuccess); err != nil {
+	if err := s.recordLogin(ctx, u.ID, &device.ID, sc, ent.OutcomeSuccess); err != nil {
 		return nil, nil, err
 	}
 

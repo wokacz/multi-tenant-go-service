@@ -15,7 +15,6 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/organization"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/role"
 	entuser "github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 func (r *Orgs) InviteMember(
@@ -34,8 +33,7 @@ func (r *Orgs) InviteMember(
 		// the two do not need telling apart badly enough to justify a second code.
 		//
 		// HasUserWith goes through the user interceptor, so a deleted account does
-		// not occupy the address — the same predicate the GORM join wrote as
-		// "u.deleted_at IS NULL".
+		// not occupy the address.
 		n, err := tx.Membership.Query().
 			Where(
 				membership.OrganizationID(orgID),
@@ -75,9 +73,9 @@ func (r *Orgs) InviteMember(
 			return err
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionMemberInvited,
+			Action:         ent.ActionMemberInvited,
 			Detail:         email,
 		})
 	})
@@ -145,8 +143,7 @@ func (r *Orgs) InvitationByToken(ctx context.Context, tokenHash string, now time
 			invitation.TokenHash(tokenHash),
 			invitation.AcceptedAtIsNil(),
 			// Live organizations only: the interceptor on Organization hides retired
-			// rows, so this is the JOIN … AND o.deleted_at IS NULL from the GORM
-			// version, without writing the predicate out.
+			// rows, so HasOrganization() already means the tenant is still there.
 			invitation.HasOrganization(),
 		)
 
@@ -231,7 +228,7 @@ func (r *Orgs) AcceptInvitation(ctx context.Context, invitationID, userID uuid.U
 			roleIDs = append(roleIDs, row.RoleID)
 		}
 
-		m := &models.Membership{
+		m := &ent.Membership{
 			OrganizationID: inv.OrganizationID,
 			UserID:         userID,
 			InvitedBy:      inv.InvitedBy,
@@ -241,7 +238,7 @@ func (r *Orgs) AcceptInvitation(ctx context.Context, invitationID, userID uuid.U
 		created, err := tx.Membership.Create().
 			SetOrganizationID(m.OrganizationID).
 			SetUserID(m.UserID).
-			SetStatus(membership.Status(m.Status)).
+			SetStatus(m.Status).
 			SetNillableInvitedBy(m.InvitedBy).
 			SetNillableJoinedAt(m.JoinedAt).
 			Save(ctx)
@@ -263,10 +260,10 @@ func (r *Orgs) AcceptInvitation(ctx context.Context, invitationID, userID uuid.U
 
 		subject := userID
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &inv.OrganizationID,
 			SubjectID:      &subject,
-			Action:         models.ActionMemberAccepted,
+			Action:         ent.ActionMemberAccepted,
 		})
 	})
 
@@ -302,9 +299,9 @@ func (r *Orgs) DeclineInvitation(ctx context.Context, invitationID uuid.UUID) er
 			return err
 		}
 
-		if err := recordEnt(ctx, tx, &models.AuthzEvent{
+		if err := recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &inv.OrganizationID,
-			Action:         models.ActionMemberInvitationDeclined,
+			Action:         ent.ActionMemberInvitationDeclined,
 			Detail:         inv.Email,
 		}); err != nil {
 			return err
@@ -343,7 +340,7 @@ func (r *Orgs) invitation(ctx context.Context, invitationID uuid.UUID) (*orgs.In
 
 	return &orgs.Invitation{
 		ID:           row.ID,
-		Organization: organizationModel(org),
+		Organization: *org,
 		Email:        row.Email,
 		InvitedBy:    row.InvitedBy,
 		ExpiresAt:    row.ExpiresAt,
@@ -396,9 +393,9 @@ func (r *Orgs) WithdrawInvitation(ctx context.Context, orgID, invitationID uuid.
 			return err
 		}
 
-		if err := recordEnt(ctx, tx, &models.AuthzEvent{
+		if err := recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionMemberInvitationWithdrawn,
+			Action:         ent.ActionMemberInvitationWithdrawn,
 			Detail:         inv.Email,
 		}); err != nil {
 			return err
@@ -436,9 +433,9 @@ func (r *Orgs) ReissueInvitation(
 			return err
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionMemberInvited,
+			Action:         ent.ActionMemberInvited,
 			Detail:         inv.Email,
 		})
 	})
@@ -447,19 +444,4 @@ func (r *Orgs) ReissueInvitation(
 	}
 
 	return r.invitation(ctx, invitationID)
-}
-
-func organizationModel(row *ent.Organization) models.Organization {
-	out := models.Organization{
-		Slug: row.Slug,
-		Name: row.Name,
-	}
-
-	out.ID = row.ID
-	out.CreatedAt = row.CreatedAt
-	out.UpdatedAt = row.UpdatedAt
-	out.IsProtected = row.IsProtected
-	out.DeletedAt = row.DeletedAt
-
-	return out
 }

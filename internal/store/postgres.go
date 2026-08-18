@@ -42,7 +42,7 @@ type DB struct {
 // actually usable before returning.
 //
 // It deliberately does not migrate anything: the schema belongs to the files in
-// migrations/, and AutoMigrate would quietly diverge from them.
+// migrations/, and generating columns at runtime would quietly diverge from them.
 func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*DB, error) {
 	sqlDB, err := sql.Open("pgx", cfg.DSN())
 	if err != nil {

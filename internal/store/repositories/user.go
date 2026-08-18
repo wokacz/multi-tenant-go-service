@@ -14,7 +14,6 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
 	entuser "github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // User implements user.Repository. The interface it satisfies is declared in
@@ -33,7 +32,7 @@ func NewUser(db *store.DB) *User {
 // site in main, far from either definition.
 var _ user.Repository = (*User)(nil)
 
-func (r *User) Create(ctx context.Context, u *models.User) error {
+func (r *User) Create(ctx context.Context, u *ent.User) error {
 	create := r.db.Ent().User.Create().
 		SetName(u.Name).
 		SetEmail(u.Email).
@@ -56,8 +55,7 @@ func (r *User) Create(ctx context.Context, u *models.User) error {
 		return fmt.Errorf("store: create user: %w", err)
 	}
 
-	// The caller reads the generated fields back off the struct it passed in, the
-	// way it did when GORM filled them in.
+	// The caller reads the generated fields back off the struct it passed in.
 	u.ID = created.ID
 	u.CreatedAt = created.CreatedAt
 	u.UpdatedAt = created.UpdatedAt
@@ -68,7 +66,7 @@ func (r *User) Create(ctx context.Context, u *models.User) error {
 	return nil
 }
 
-func (r *User) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+func (r *User) ByID(ctx context.Context, id uuid.UUID) (*ent.User, error) {
 	row, err := r.db.Ent().User.Get(ctx, id)
 	if err != nil {
 		if isNotFound(err) {
@@ -78,12 +76,12 @@ func (r *User) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 		return nil, fmt.Errorf("store: user by id: %w", err)
 	}
 
-	return userModel(row), nil
+	return row, nil
 }
 
 // All lists live accounts, newest first. UUIDv7 is time-ordered, so ordering by
 // the primary key is the same order as by creation and costs no extra index.
-func (r *User) All(ctx context.Context, limit, offset int) ([]models.User, error) {
+func (r *User) All(ctx context.Context, limit, offset int) ([]ent.User, error) {
 	rows, err := r.db.Ent().User.Query().
 		Order(ent.Desc(entuser.FieldID)).
 		Limit(limit).
@@ -93,9 +91,9 @@ func (r *User) All(ctx context.Context, limit, offset int) ([]models.User, error
 		return nil, fmt.Errorf("store: all users: %w", err)
 	}
 
-	out := make([]models.User, 0, len(rows))
+	out := make([]ent.User, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, *userModel(row))
+		out = append(out, *row)
 	}
 
 	return out, nil
@@ -119,9 +117,8 @@ func (r *User) Delete(ctx context.Context, userID uuid.UUID) error {
 	}
 
 	err = r.withTx(ctx, func(tx *ent.Tx) error {
-		// Written out here because it used to live on models.User.BeforeDelete, which
-		// GORM ran inside this same transaction. Soft delete does not fire the FK
-		// cascade, so without this the devices survive as trusted.
+		// Soft delete does not fire the FK cascade, so without this the devices
+		// survive as trusted after the account is gone.
 		_, err := tx.Device.Update().
 			Where(
 				device.UserID(userID),
@@ -152,9 +149,8 @@ func (r *User) Delete(ctx context.Context, userID uuid.UUID) error {
 // Both columns are always written, including an empty locale. That empty string
 // is the whole point of the statement: it means "no preference" and puts the
 // account back to negotiating per request. ClearLocale would store NULL, which
-// reads back as "" — but SetLocale("") is the write GORM's map-based Updates
-// performed, and TestUpdateProfileWritesBothColumns is the case that exists
-// because a struct-based update silently kept the old value.
+// reads back as "". SetLocale("") is the write TestUpdateProfileWritesBothColumns
+// exists for: omitting a zero value would silently keep the old locale.
 func (r *User) UpdateProfile(ctx context.Context, userID uuid.UUID, name, locale string) error {
 	affected, err := r.db.Ent().User.Update().
 		Where(entuser.ID(userID), entuser.DeletedAtIsNil()).
@@ -238,7 +234,7 @@ func (r *User) SetSuspended(ctx context.Context, userID uuid.UUID, at *time.Time
 	return nil
 }
 
-func (r *User) ByEmail(ctx context.Context, email string) (*models.User, error) {
+func (r *User) ByEmail(ctx context.Context, email string) (*ent.User, error) {
 	row, err := r.db.Ent().User.Query().Where(entuser.Email(email)).First(ctx)
 	if err != nil {
 		if isNotFound(err) {
@@ -248,10 +244,10 @@ func (r *User) ByEmail(ctx context.Context, email string) (*models.User, error) 
 		return nil, fmt.Errorf("store: user by email: %w", err)
 	}
 
-	return userModel(row), nil
+	return row, nil
 }
 
-func (r *User) ReplacePasswordReset(ctx context.Context, reset *models.PasswordReset) error {
+func (r *User) ReplacePasswordReset(ctx context.Context, reset *ent.PasswordReset) error {
 	err := r.withTx(ctx, func(tx *ent.Tx) error {
 		// Unused codes for this account go first, so asking again supersedes rather
 		// than leaving two codes that both work.
@@ -287,7 +283,7 @@ func (r *User) ReplacePasswordReset(ctx context.Context, reset *models.PasswordR
 	return nil
 }
 
-func (r *User) ActivePasswordReset(ctx context.Context, userID uuid.UUID, now time.Time) (*models.PasswordReset, error) {
+func (r *User) ActivePasswordReset(ctx context.Context, userID uuid.UUID, now time.Time) (*ent.PasswordReset, error) {
 	row, err := r.db.Ent().PasswordReset.Query().
 		Where(
 			passwordreset.UserID(userID),
@@ -304,7 +300,7 @@ func (r *User) ActivePasswordReset(ctx context.Context, userID uuid.UUID, now ti
 		return nil, fmt.Errorf("store: active password reset: %w", err)
 	}
 
-	return passwordResetModel(row), nil
+	return row, nil
 }
 
 // FailPasswordReset moves the attempt counter in a single statement.
@@ -348,7 +344,7 @@ func (r *User) FailPasswordReset(ctx context.Context, resetID uuid.UUID, maxAtte
 	return nil
 }
 
-func (r *User) ConsumePasswordReset(ctx context.Context, reset *models.PasswordReset, passwordHash string) error {
+func (r *User) ConsumePasswordReset(ctx context.Context, reset *ent.PasswordReset, passwordHash string) error {
 	err := r.withTx(ctx, func(tx *ent.Tx) error {
 		_, err := tx.User.Update().
 			Where(entuser.ID(reset.UserID), entuser.DeletedAtIsNil()).
@@ -375,45 +371,4 @@ func (r *User) ConsumePasswordReset(ctx context.Context, reset *models.PasswordR
 	}
 
 	return nil
-}
-
-// userModel maps the entity onto the struct the domain reads.
-//
-// The mapping is the price of keeping ent inside the store — see ENT.md, D1 —
-// and it buys the thing that makes this migration reviewable: the domain, the
-// in-memory fake and every contract case stay exactly as they were.
-func userModel(row *ent.User) *models.User {
-	out := &models.User{
-		Name:             row.Name,
-		Email:            row.Email,
-		PasswordHash:     row.PasswordHash,
-		SessionEpoch:     row.SessionEpoch,
-		TwoFactorEnabled: row.TwoFactorEnabled,
-		SuspendedAt:      row.SuspendedAt,
-		Locale:           row.Locale,
-	}
-
-	out.ID = row.ID
-	out.CreatedAt = row.CreatedAt
-	out.UpdatedAt = row.UpdatedAt
-	out.IsProtected = row.IsProtected
-	out.DeletedAt = row.DeletedAt
-
-	return out
-}
-
-func passwordResetModel(row *ent.PasswordReset) *models.PasswordReset {
-	out := &models.PasswordReset{
-		UserID:     row.UserID,
-		CodeHash:   row.CodeHash,
-		ExpiresAt:  row.ExpiresAt,
-		Attempts:   row.Attempts,
-		ConsumedAt: row.ConsumedAt,
-	}
-
-	out.ID = row.ID
-	out.CreatedAt = row.CreatedAt
-	out.UpdatedAt = row.UpdatedAt
-
-	return out
 }

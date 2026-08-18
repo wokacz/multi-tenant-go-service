@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 const (
@@ -123,11 +123,11 @@ func (volume) suspendSome(ctx context.Context, w *World, orgID uuid.UUID) error 
 
 		// Idempotent: a second run finds them already suspended and leaves the
 		// audit log alone rather than adding an identical entry every time.
-		if membership.Status == models.MembershipSuspended {
+		if membership.Status == ent.MembershipSuspended {
 			continue
 		}
 
-		if err := w.Orgs.SetMemberStatus(acting, grant, membership.ID, models.MembershipSuspended); err != nil {
+		if err := w.Orgs.SetMemberStatus(acting, grant, membership.ID, ent.MembershipSuspended); err != nil {
 			return fmt.Errorf("suspend %s: %w", handle, err)
 		}
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/auth"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
@@ -173,8 +173,8 @@ func signInOutcome(err error) string {
 // the one place "granted" can be counted once.
 func (h *sessionHandlers) issue(
 	ctx context.Context,
-	u *models.User,
-	device *models.Device,
+	u *ent.User,
+	device *ent.Device,
 	deviceToken string,
 ) (*CreateSessionOutput, error) {
 	if h.tokens == nil {

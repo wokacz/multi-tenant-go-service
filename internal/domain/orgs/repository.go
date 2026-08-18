@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 var (
@@ -72,8 +72,8 @@ type Membership struct {
 	// leave. It used to be how an invitation was accepted or declined, back when an
 	// invitation was a membership row; those go by token now.
 	ID           uuid.UUID
-	Organization models.Organization
-	Status       models.MembershipStatus
+	Organization ent.Organization
+	Status       ent.MembershipStatus
 	RoleKeys     []string
 }
 
@@ -85,7 +85,7 @@ type Membership struct {
 // table.
 type Invitation struct {
 	ID           uuid.UUID
-	Organization models.Organization
+	Organization ent.Organization
 	Email        string
 	InvitedBy    *uuid.UUID
 	ExpiresAt    time.Time
@@ -98,7 +98,7 @@ type Member struct {
 	UserID   uuid.UUID
 	Name     string
 	Email    string
-	Status   models.MembershipStatus
+	Status   ent.MembershipStatus
 	JoinedAt *time.Time
 	Roles    []RoleSummary
 }
@@ -113,7 +113,7 @@ type RoleSummary struct {
 
 // Role is a role with everything it grants.
 type Role struct {
-	models.Role
+	ent.Role
 	Permissions []authz.Permission
 	// Members is how many people hold it, which is what the settings screen
 	// needs to warn before a deletion and what the last-owner rule counts.
@@ -189,12 +189,12 @@ type Repository interface {
 type Organizations interface {
 	// Organization returns the organization, or ErrNotFound when it does not
 	// exist or has been deleted.
-	Organization(ctx context.Context, orgID uuid.UUID) (*models.Organization, error)
+	Organization(ctx context.Context, orgID uuid.UUID) (*ent.Organization, error)
 
 	// UpdateOrganization renames it.
 	UpdateOrganization(ctx context.Context, orgID uuid.UUID, name string) error
 
-	// DeleteOrganization soft deletes it. It returns models.ErrProtected for an
+	// DeleteOrganization soft deletes it. It returns ent.ErrProtected for an
 	// organization marked as protected — the default one is.
 	DeleteOrganization(ctx context.Context, orgID uuid.UUID) error
 }
@@ -251,7 +251,7 @@ type Memberships interface {
 
 	// SetMemberStatus suspends or reinstates a membership. guard is called inside
 	// the transaction, with the organization row locked.
-	SetMemberStatus(ctx context.Context, orgID, memberID uuid.UUID, status models.MembershipStatus, at time.Time, guard OwnerGuard) error
+	SetMemberStatus(ctx context.Context, orgID, memberID uuid.UUID, status ent.MembershipStatus, at time.Time, guard OwnerGuard) error
 
 	// RemoveMember deletes the membership and, by cascade, its role
 	// assignments.
@@ -265,7 +265,7 @@ type Memberships interface {
 	// has been deleted, and it must stay that way: everything else reports such a
 	// row as not found, so refusing here too would leave it in the organization
 	// with no way to take it out. Do not add a Member lookup in front of this.
-	RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, action models.AuthzAction, guard OwnerGuard) error
+	RemoveMember(ctx context.Context, orgID, memberID uuid.UUID, action string, guard OwnerGuard) error
 
 	// ReplaceMemberRoles sets the member's roles to exactly roleIDs, in one
 	// transaction.
@@ -295,7 +295,7 @@ type Roles interface {
 
 	// CreateRole stores a role and its permissions in one transaction. It
 	// returns ErrRoleKeyTaken when the key is already used here.
-	CreateRole(ctx context.Context, orgID uuid.UUID, role *models.Role, permissions []authz.Permission) (*Role, error)
+	CreateRole(ctx context.Context, orgID uuid.UUID, role *ent.Role, permissions []authz.Permission) (*Role, error)
 
 	// UpdateRole renames a role. Permissions are changed separately, because
 	// the two operations need different checks.

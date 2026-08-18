@@ -8,8 +8,9 @@ Schemat ent jest źródłem prawdy dla bazy. Migracje z niego **wynikają**, nie
 2. `task ent:generate` — bez tego kod klienta nie wie o zmianie, a `task check` przewraca build (`ent:check`).
 3. `task migrate:diff NAME=cos` — migracja.
 4. `task migrate` — zastosowanie.
-5. Struktura w [`internal/store/models/`](../../internal/store/models), jeśli domena ma o niej wiedzieć: typy ent **nie
-   wychodzą** z `internal/store` (`TestEntStaysInsideTheStore`), więc repozytorium mapuje jedno na drugie.
+5. Jeśli domena ma o wierszu wiedzieć, używa wygenerowanego typu z [`internal/store/ent`](../../internal/store/ent).
+   Typy entgo.io (klient, mutacje) **nie wychodzą** z `internal/store` (`TestEntStaysInsideTheStore`); same struktury
+   `ent.User`, `ent.Organization` są modelami i nie ma drugiej kopii.
 
 Kroku „dopisz encję do listy" **nie ma**: `ent generate` czyta cały katalog `schema/`. Poprzedni układ wymagał wpisania
 każdego modelu do ręcznej listy w osobnym module, a pominięty był po cichu nieobecny w schemacie — po czym Atlas

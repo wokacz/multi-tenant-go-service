@@ -9,7 +9,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // The four fixed organizations, each one a shape the code has a rule about.
@@ -127,7 +127,7 @@ func (organizations) customRoles(ctx context.Context, w *World, orgID uuid.UUID)
 			return err
 		}
 
-		role := &models.Role{Key: def.Key, Name: def.Name, Description: def.Description}
+		role := &ent.Role{Key: def.Key, Name: def.Name, Description: def.Description}
 		if _, err := w.Repo.CreateRole(ctx, orgID, role, def.Permissions); err != nil {
 			return fmt.Errorf("custom role %s: %w", def.Key, err)
 		}
@@ -137,7 +137,7 @@ func (organizations) customRoles(ctx context.Context, w *World, orgID uuid.UUID)
 }
 
 // memberships puts the rest of the cast where the documentation says they are.
-func (organizations) memberships(ctx context.Context, w *World, acme, solo *models.Organization) error {
+func (organizations) memberships(ctx context.Context, w *World, acme, solo *ent.Organization) error {
 	shipped := map[authz.RoleKey]uuid.UUID{}
 
 	for _, key := range []authz.RoleKey{authz.RoleAdmin, authz.RoleMember, authz.RoleViewer} {

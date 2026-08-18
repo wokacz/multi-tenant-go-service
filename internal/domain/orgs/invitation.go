@@ -71,9 +71,9 @@ func (s *Service) Invite(
 //
 // Two things have to hold, and they answer different questions. The token proves
 // the caller received the message — that is what replaced "whoever registers this
-// address first". The address then has to match the account accepting, which is
-// the narrower rule chosen in D4: it keeps the offer pointed at the person it was
-// meant for rather than at whoever the message was forwarded to.
+// address first". The address then has to match the account accepting: that keeps
+// the offer pointed at the person it was meant for rather than at whoever the
+// message was forwarded to.
 //
 // The roles are read from the invitation inside the repository, never taken from
 // the caller. Somebody accepting an offer must not get to choose what they are

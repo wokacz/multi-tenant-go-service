@@ -10,10 +10,9 @@ import (
 
 // Translating ent's errors into the domain's vocabulary.
 //
-// This is what GORM's TranslateError did, written out: the domain deals in
-// user.ErrNotFound and orgs.ErrAlreadyMember, and internal/api maps those onto status
-// codes without knowing a database was involved. A raw driver error reaching that far
-// arrives as an opaque 500.
+// The domain deals in user.ErrNotFound and orgs.ErrAlreadyMember, and internal/api
+// maps those onto status codes without knowing a database was involved. A raw driver
+// error reaching that far arrives as an opaque 500.
 //
 // ent reports a constraint violation as ent.ConstraintError wrapping the driver's
 // error, and the driver's error is what says *which* constraint. Postgres codes rather

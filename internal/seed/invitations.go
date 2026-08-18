@@ -42,7 +42,7 @@ func (in invitations) Run(ctx context.Context, w *World) error {
 	}
 
 	// One to an account that exists, which is the case where accepting works
-	// immediately — and the case D4 constrains, since the address has to match.
+	// immediately — and the case the address-match rule constrains.
 	invited, err := w.castAccount(ctx, "invited")
 	if err != nil {
 		return err

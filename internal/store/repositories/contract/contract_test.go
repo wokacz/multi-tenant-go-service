@@ -32,7 +32,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
@@ -99,7 +99,7 @@ func accountFixture(users user.Repository) func(*testing.T, string) (uuid.UUID, 
 	return func(t *testing.T, name string) (uuid.UUID, string) {
 		t.Helper()
 
-		u := &models.User{
+		u := &ent.User{
 			Name:         name,
 			Email:        "ada+" + uuid.Must(uuid.NewV7()).String() + "@example.com",
 			PasswordHash: "not-a-real-hash",
@@ -146,14 +146,14 @@ func newMemoryBackend(t *testing.T) *backend {
 		registerEmail: func(t *testing.T, email string) error {
 			t.Helper()
 
-			return users.Create(t.Context(), &models.User{
+			return users.Create(t.Context(), &ent.User{
 				Name: "Bob", Email: email, PasswordHash: "not-a-real-hash",
 			})
 		},
 		newOrgSlug: func(t *testing.T, slug string) error {
 			t.Helper()
 
-			_, err := repo.CreateOrganization(t.Context(), &models.Organization{Slug: slug, Name: "Org"}, nil)
+			_, err := repo.CreateOrganization(t.Context(), &ent.Organization{Slug: slug, Name: "Org"}, nil)
 
 			return err
 		},
@@ -245,14 +245,14 @@ func newPostgresBackend(t *testing.T) *backend {
 		registerEmail: func(t *testing.T, email string) error {
 			t.Helper()
 
-			return users.Create(t.Context(), &models.User{
+			return users.Create(t.Context(), &ent.User{
 				Name: "Bob", Email: email, PasswordHash: "not-a-real-hash",
 			})
 		},
 		newOrgSlug: func(t *testing.T, slug string) error {
 			t.Helper()
 
-			_, err := repo.CreateOrganization(t.Context(), &models.Organization{Slug: slug, Name: "Org"}, nil)
+			_, err := repo.CreateOrganization(t.Context(), &ent.Organization{Slug: slug, Name: "Org"}, nil)
 
 			return err
 		},
@@ -266,7 +266,7 @@ func newPostgresBackend(t *testing.T) *backend {
 		newOrg: func(t *testing.T) uuid.UUID {
 			t.Helper()
 
-			org := &models.Organization{
+			org := &ent.Organization{
 				Slug: "org-" + uuid.Must(uuid.NewV7()).String(),
 				Name: "Org",
 			}
@@ -281,7 +281,7 @@ func newPostgresBackend(t *testing.T) *backend {
 		newProtectedOrg: func(t *testing.T) uuid.UUID {
 			t.Helper()
 
-			org := &models.Organization{
+			org := &ent.Organization{
 				Slug: "protected-" + uuid.Must(uuid.NewV7()).String(),
 				Name: "Protected",
 			}
@@ -310,7 +310,7 @@ func newPostgresBackend(t *testing.T) *backend {
 			}
 
 			role, err := repo.CreateRole(t.Context(), orgID,
-				&models.Role{Key: key, Name: key}, perms)
+				&ent.Role{Key: key, Name: key}, perms)
 			if err != nil {
 				t.Fatalf("create role: %v", err)
 			}
@@ -326,7 +326,7 @@ func newPostgresBackend(t *testing.T) *backend {
 			}
 
 			role, err := repo.CreateRole(t.Context(), orgID,
-				&models.Role{Key: string(key), Name: def.Name, IsSystem: true}, def.Permissions)
+				&ent.Role{Key: string(key), Name: def.Name, IsSystem: true}, def.Permissions)
 			if err != nil {
 				t.Fatalf("create shipped role: %v", err)
 			}
@@ -416,7 +416,7 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 		// Removal is the one thing that must still work on such a row: everything
 		// else reports it as missing, so refusing here too would leave it in the
 		// organization with no way to take it out.
-		if err := b.repo.RemoveMember(t.Context(), orgID, goneMember, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
+		if err := b.repo.RemoveMember(t.Context(), orgID, goneMember, ent.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
 			t.Errorf("RemoveMember() for a deleted account = %v, want it removed", err)
 		}
 	})
@@ -442,7 +442,7 @@ func TestTheOwnerStateBothSidesSee(t *testing.T) {
 
 		suspended, _ := addMember(t, b, orgID, owner)
 		if err := b.repo.SetMemberStatus(t.Context(), orgID, suspended,
-			models.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true)); err != nil {
+			ent.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true)); err != nil {
 			t.Fatalf("SetMemberStatus(suspended) = %v", err)
 		}
 
@@ -453,7 +453,7 @@ func TestTheOwnerStateBothSidesSee(t *testing.T) {
 
 			var seen orgs.OwnerState
 
-			err := b.repo.RemoveMember(t.Context(), orgID, memberID, models.ActionMemberRemoved, func(s orgs.OwnerState) error {
+			err := b.repo.RemoveMember(t.Context(), orgID, memberID, ent.ActionMemberRemoved, func(s orgs.OwnerState) error {
 				seen = s
 
 				return errStop
@@ -500,7 +500,7 @@ func TestOnlyAnActiveMembershipResolves(t *testing.T) {
 		}
 
 		if err := b.repo.SetMemberStatus(t.Context(), orgID, memberID,
-			models.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true)); err != nil {
+			ent.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true)); err != nil {
 			t.Fatalf("SetMemberStatus(suspended) = %v", err)
 		}
 
@@ -611,7 +611,7 @@ func TestAnInvitationTravelsFromOfferToMembership(t *testing.T) {
 			t.Fatalf("MemberByUser() after accepting = _, %v", err)
 		}
 
-		if member.Status != models.MembershipActive {
+		if member.Status != ent.MembershipActive {
 			t.Errorf("status = %q, want active", member.Status)
 		}
 
@@ -987,11 +987,12 @@ func TestADeletedOrganizationReleasesItsSlug(t *testing.T) {
 // TestADeletedAccountIsNotFoundByEitherLookup pins a difference that only shows at
 // this level.
 //
-// Postgres hides a soft-deleted account because GORM's scope does it, without anybody
-// writing it down; the fake looked it up regardless. It is invisible through the API —
-// deleting an account also revokes its devices, so requireBearer refuses on the
-// device before the account lookup matters — which is exactly why it belongs here
-// rather than in an HTTP test that would pass either way.
+// Postgres hides a soft-deleted account because the interceptor does it, without
+// anybody writing the predicate at each call site; the fake used to look it up
+// regardless. It is invisible through the API — deleting an account also revokes
+// its devices, so requireBearer refuses on the device before the account lookup
+// matters — which is exactly why it belongs here rather than in an HTTP test that
+// would pass either way.
 func TestADeletedAccountIsNotFoundByEitherLookup(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b *backend) {
 		userID, email := b.newAccount(t)
@@ -1234,7 +1235,7 @@ func TestTheOwnerCountAgreesWithTheOwnerRule(t *testing.T) {
 		// What the rule sees, read from the guard itself rather than assumed.
 		var fromGuard int
 
-		err := b.repo.RemoveMember(t.Context(), orgID, memberID, models.ActionMemberRemoved,
+		err := b.repo.RemoveMember(t.Context(), orgID, memberID, ent.ActionMemberRemoved,
 			func(state orgs.OwnerState) error {
 				fromGuard = state.Owners
 

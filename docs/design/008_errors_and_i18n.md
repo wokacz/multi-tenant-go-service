@@ -73,7 +73,7 @@ zawartości.
 | `user.ErrLocaleUnsupported`                                                                 | 422    | `unsupported_locale`                            |
 | `authz.ErrUnknownPermission`, `ErrWrongScope`                                               | 422    | `unknown_permission`, `wrong_scope`             |
 | `orgs.ErrLastOwner`, `ErrRoleInUse`, `ErrRoleKeyTaken`, `ErrAlreadyMember`, `ErrSlugTaken` | 409    | odpowiedni kod                                  |
-| `models.ErrProtected`                                                                      | 409    | `record_protected`                              |
+| `ent.ErrProtected`                                                                         | 409    | `record_protected`                              |
 | błędy walidacji domenowej                                                                  | 422    | odpowiedni kod                                  |
 | `context.Canceled`                                                                         | 499    | `client_closed`                                 |
 | `context.DeadlineExceeded`                                                                 | 504    | `timeout`                                       |

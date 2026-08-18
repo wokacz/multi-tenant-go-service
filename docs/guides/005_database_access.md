@@ -60,7 +60,7 @@ Pilnuje tego `TestFailPasswordResetUnderConcurrency` na prawdziwym Postgresie.
 
 ## Hooki a `UPDATE` jednego pola
 
-Hook create woła `models.Validate()` na całym wierszu. Update, który rusza jedno pole, **nie** może tego zrobić — rename
+Hook create woła `Validate()` na całym wierszu. Update, który rusza jedno pole, **nie** może tego zrobić — rename
 organizacji padłby jako „invalid slug". `schema/validate.go` sprawdza wtedy tylko ruszone pole. Serwis i tak waliduje
 wcześniej; ograniczenia kolumny są drugą siatką.
 
@@ -83,7 +83,7 @@ err := r.withTx(ctx, func(tx *ent.Tx) error {
 		return err
 	}
 
-	return recordEnt(ctx, tx, &models.AuthzEvent{ ... })
+	return recordEnt(ctx, tx, &ent.AuthzEvent{ ... })
 })
 ```
 

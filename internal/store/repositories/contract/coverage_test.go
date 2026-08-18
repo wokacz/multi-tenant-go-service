@@ -13,16 +13,15 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
-// The cases in this file were written for the migration off GORM (see ENT.md).
+// These cases cover repository methods that HTTP tests never reach on their own.
 //
-// Nineteen exported repository methods had no store-level test at all — not here and
-// not in the Postgres suites. They were reached only through fixtures, or through the
-// API tests, which run against the fake and prove nothing about the SQL. Rewriting
-// them against a different query builder with that as the safety net would be a
-// rewrite nobody could review honestly.
+// They were added because those methods were reached only through fixtures, or
+// through the API tests, which run against the fake and prove nothing about the
+// SQL. A store-level suite is the place a query can be wrong without the HTTP
+// layer noticing.
 //
 // Every case states a rule the code already has a reason for, taken from the comment
 // on the method rather than invented here.
@@ -82,7 +81,7 @@ func TestTheDefaultOrganizationRefusesDeletion(t *testing.T) {
 		orgID := b.newProtectedOrg(t)
 
 		err := b.repo.DeleteOrganization(t.Context(), orgID)
-		if !errors.Is(err, models.ErrProtected) {
+		if !errors.Is(err, ent.ErrProtected) {
 			t.Errorf("DeleteOrganization() on a protected organization = %v, want ErrProtected", err)
 		}
 
@@ -211,7 +210,7 @@ func TestMemberPermissionsIgnoresSuspension(t *testing.T) {
 		}
 
 		err = b.repo.SetMemberStatus(t.Context(), orgID, memberID,
-			models.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true))
+			ent.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true))
 		if err != nil {
 			t.Fatalf("SetMemberStatus() = %v", err)
 		}
@@ -464,7 +463,7 @@ func TestReplacingAnEmailChangeSupersedesThePreviousOne(t *testing.T) {
 		userID, _ := b.newAccount(t)
 		now := time.Now().UTC()
 
-		first := &models.EmailChange{
+		first := &ent.EmailChange{
 			UserID: userID, NewEmail: "first@example.com",
 			CodeHash: "hash-first", ExpiresAt: now.Add(time.Hour),
 		}
@@ -472,7 +471,7 @@ func TestReplacingAnEmailChangeSupersedesThePreviousOne(t *testing.T) {
 			t.Fatalf("ReplaceEmailChange() = %v", err)
 		}
 
-		second := &models.EmailChange{
+		second := &ent.EmailChange{
 			UserID: userID, NewEmail: "second@example.com",
 			CodeHash: "hash-second", ExpiresAt: now.Add(time.Hour),
 		}
@@ -498,7 +497,7 @@ func TestAnExpiredEmailChangeIsNotActive(t *testing.T) {
 		userID, _ := b.newAccount(t)
 		now := time.Now().UTC()
 
-		change := &models.EmailChange{
+		change := &ent.EmailChange{
 			UserID: userID, NewEmail: "late@example.com",
 			CodeHash: "hash-late", ExpiresAt: now.Add(-time.Minute),
 		}
@@ -523,7 +522,7 @@ func TestTheEmailChangeAttemptCounterSpendsTheCode(t *testing.T) {
 		userID, _ := b.newAccount(t)
 		now := time.Now().UTC()
 
-		change := &models.EmailChange{
+		change := &ent.EmailChange{
 			UserID: userID, NewEmail: "guarded@example.com",
 			CodeHash: "hash-guarded", ExpiresAt: now.Add(time.Hour),
 		}
@@ -557,7 +556,7 @@ func TestConfirmingAnAddressReportsOneThatWasTaken(t *testing.T) {
 		_, takenEmail := b.newAccount(t)
 		now := time.Now().UTC()
 
-		change := &models.EmailChange{
+		change := &ent.EmailChange{
 			UserID: userID, NewEmail: takenEmail,
 			CodeHash: "hash-collision", ExpiresAt: now.Add(time.Hour),
 		}

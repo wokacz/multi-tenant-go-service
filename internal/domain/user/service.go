@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // MaxUserPage caps the installation-wide account listing. It is the same shape
@@ -41,7 +41,7 @@ const (
 
 // Service carries the user rules that are not invariants of the model itself.
 // Anything that must hold for every User regardless of who is asking belongs on
-// models.User; anything that needs the database to decide belongs here.
+// ent.User; anything that needs the database to decide belongs here.
 type Service struct {
 	repo      Repository
 	cost      int
@@ -184,7 +184,7 @@ func (s *Service) hashedPassword(ctx context.Context, password string) (string, 
 // Accept-Language, and a preference nobody was prompted for is one that is
 // right far more often than a default. It is what mail is written in, which is
 // the case no request header can answer.
-func (s *Service) Create(ctx context.Context, name, email, password, confirm, locale string) (*models.User, error) {
+func (s *Service) Create(ctx context.Context, name, email, password, confirm, locale string) (*ent.User, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, ErrNameEmpty
@@ -203,7 +203,7 @@ func (s *Service) Create(ctx context.Context, name, email, password, confirm, lo
 		return nil, err
 	}
 
-	u := &models.User{
+	u := &ent.User{
 		Name:         name,
 		Email:        NormalizeEmail(email),
 		PasswordHash: hash,
@@ -221,7 +221,7 @@ func (s *Service) Create(ctx context.Context, name, email, password, confirm, lo
 	return u, nil
 }
 
-func (s *Service) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+func (s *Service) ByID(ctx context.Context, id uuid.UUID) (*ent.User, error) {
 	return s.repo.ByID(ctx, id)
 }
 
@@ -232,12 +232,12 @@ func (s *Service) ByID(ctx context.Context, id uuid.UUID) (*models.User, error) 
 // equalise. It is also not reachable anonymously — the only caller is adding
 // somebody to an organization, which needs members.invite — so it is not an
 // oracle for whether an address is registered.
-func (s *Service) ByEmail(ctx context.Context, email string) (*models.User, error) {
+func (s *Service) ByEmail(ctx context.Context, email string) (*ent.User, error) {
 	return s.repo.ByEmail(ctx, NormalizeEmail(email))
 }
 
 // All lists accounts for the installation-wide administration screens.
-func (s *Service) All(ctx context.Context, limit, offset int) ([]models.User, error) {
+func (s *Service) All(ctx context.Context, limit, offset int) ([]ent.User, error) {
 	if limit <= 0 || limit > MaxUserPage {
 		limit = MaxUserPage
 	}
@@ -273,7 +273,7 @@ func (s *Service) Delete(ctx context.Context, userID uuid.UUID) error {
 // It is the password half of sign-in only. SignIn wraps it with the device and
 // second-factor rules; this stays exported because a non-HTTP caller — a CLI,
 // a seeder — still needs a way to check a password without minting devices.
-func (s *Service) Authenticate(ctx context.Context, email, password string) (*models.User, error) {
+func (s *Service) Authenticate(ctx context.Context, email, password string) (*ent.User, error) {
 	u, err := s.repo.ByEmail(ctx, NormalizeEmail(email))
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
@@ -324,7 +324,7 @@ func (s *Service) BeginPasswordReset(ctx context.Context, email string) (string,
 	}
 
 	now := time.Now().UTC()
-	reset := &models.PasswordReset{
+	reset := &ent.PasswordReset{
 		UserID:    u.ID,
 		CodeHash:  s.hashResetCode(u.ID, code),
 		ExpiresAt: now.Add(resetTTL),

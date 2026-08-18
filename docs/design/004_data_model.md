@@ -33,23 +33,10 @@ Krok po kroku: [instrukcja modeli i migracji](../guides/003_models_and_migration
 Katalog trzyma **jedną** migrację bazową, dopóki nic nie jest wdrożone — i dlaczego to przestaje być darmowe
 po pierwszym wdrożeniu: [instrukcja 003](../guides/003_models_and_migrations.md#zgniatanie-historii-dopóki-nic-nie-jest-wdrożone).
 
-## Typy bazowe
+## Mixiny
 
-```go
-type Model struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-type SoftDelete struct {
-	DeletedAt   *time.Time
-	IsProtected bool
-}
-```
-
-Id, czasy i (gdzie trzeba) `deleted_at` / `is_protected` pochodzą z mixinów ent, nie z tagów na tej strukturze.
-`internal/store/models` to słownik, którym operuje domena; repozytorium mapuje encję ent na te pola.
+Id, czasy i (gdzie trzeba) `deleted_at` / `is_protected` pochodzą z mixinów w `internal/store/ent/schema`.
+Wygenerowane typy w `internal/store/ent` są jedynymi modelami; repozytorium oddaje je wprost.
 
 Domyślne `id` to **UUIDv7**, nie v4. v7 jest uporządkowane w czasie, więc kolejne wstawienia lądują obok siebie w
 indeksie klucza głównego zamiast rozsypywać się po całym B-drzewie. Skutek uboczny, z którego korzystają listowania:
@@ -123,25 +110,19 @@ spodziewamy. Stąd
 
 ### Hook waliduje cały wiersz tylko przy Create
 
-`models.Validate()` wymaga kompletnego wiersza. Update, który rusza jedno pole, sprawdza tylko to pole — rename nie może
+`Validate()` na wygenerowanym typie wymaga kompletnego wiersza. Update, który rusza jedno pole, sprawdza tylko to pole — rename nie może
 paść jako „invalid slug". Hooki są w `internal/store/ent/schema/validate.go` i wołają te same metody, których używa
 atrapa.
 
 ## Enumeracje
 
-Wartość enumeracyjna to typ stringowy z metodą `Valid()`, walidacją przy zapisie **i** ograniczeniem `CHECK` w bazie —
-reguła istnieje więc i w Go, i w Postgresie.
+Wartość enumeracyjna to wygenerowany typ stringowy z `Valid()`, walidacją przy zapisie **i** ograniczeniem `CHECK` w
+bazie — reguła istnieje więc i w Go, i w Postgresie. Stałe (`MembershipActive`, `OutcomeSuccess`, …) są aliasowane w
+pakiecie `ent`, żeby wołający nie importował podpakietów tabel.
 
 ```go
-type MembershipStatus string
-
-const (
-	MembershipActive    MembershipStatus = "active"
-	MembershipSuspended MembershipStatus = "suspended"
-)
-
-func (s MembershipStatus) Valid() bool { ... }
-func (s MembershipStatus) GrantsPermissions() bool { return s == MembershipActive }
+func (s Status) Valid() bool { return StatusValidator(s) == nil }
+func (s Status) GrantsPermissions() bool { return s == StatusActive }
 ```
 
 `GrantsPermissions` jest metodą, a nie porównaniem `== MembershipActive`

@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // minPasswordLength mirrors the minLength tag on CreateUserRequest.Password. A
@@ -33,7 +33,7 @@ const (
 
 // UserResponse is the wire representation of a user.
 //
-// It exists so that models.User never reaches JSON. The model carries
+// It exists so that ent.User never reaches JSON. The model carries
 // PasswordHash, IsProtected and DeletedAt; encoding it directly would leak the
 // first and expose internal lifecycle state in the other two. More importantly
 // it makes the API contract explicit — adding a column to the model cannot
@@ -50,7 +50,7 @@ type UserResponse struct {
 // newUserResponse is the only place a model becomes a DTO. Keeping the
 // conversion in one function means a new model field is invisible to clients
 // until someone deliberately adds it here.
-func newUserResponse(u *models.User) UserResponse {
+func newUserResponse(u *ent.User) UserResponse {
 	return UserResponse{
 		ID:               u.ID,
 		Name:             u.Name,
@@ -78,7 +78,7 @@ type DeviceResponse struct {
 	CreatedAt time.Time  `json:"created_at" doc:"When it was first seen"`
 }
 
-func newDeviceResponse(d *models.Device, currentID uuid.UUID) DeviceResponse {
+func newDeviceResponse(d *ent.Device, currentID uuid.UUID) DeviceResponse {
 	out := DeviceResponse{
 		ID:        d.ID,
 		Label:     d.Label,
@@ -107,7 +107,7 @@ type LoginEventResponse struct {
 	CreatedAt time.Time  `json:"created_at" doc:"When it happened"`
 }
 
-func newLoginEventResponse(e *models.LoginEvent) LoginEventResponse {
+func newLoginEventResponse(e *ent.LoginEvent) LoginEventResponse {
 	return LoginEventResponse{
 		ID:        e.ID,
 		DeviceID:  e.DeviceID,

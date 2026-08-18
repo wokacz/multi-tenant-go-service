@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // EmailChangeCodeLength matches the reset code: short enough to type, and with
@@ -67,7 +67,7 @@ func (s *Service) BeginEmailChange(ctx context.Context, userID uuid.UUID, newEma
 	}
 
 	now := time.Now().UTC()
-	change := &models.EmailChange{
+	change := &ent.EmailChange{
 		UserID:    u.ID,
 		NewEmail:  newEmail,
 		CodeHash:  s.hashCode(purposeEmailChange, u.ID, code),

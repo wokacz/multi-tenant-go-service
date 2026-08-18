@@ -12,7 +12,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // Authz is an in-memory implementation of the whole authorization surface.
@@ -42,14 +42,14 @@ type Authz struct {
 	// allowed for tests that never list members.
 	users *Users
 
-	orgs         map[uuid.UUID]*models.Organization
-	memberships  map[uuid.UUID]*models.Membership
-	roles        map[uuid.UUID]*models.Role
+	orgs         map[uuid.UUID]*ent.Organization
+	memberships  map[uuid.UUID]*ent.Membership
+	roles        map[uuid.UUID]*ent.Role
 	rolePerms    map[uuid.UUID][]string
 	memberRoles  map[uuid.UUID][]uuid.UUID
 	systemRoles  map[uuid.UUID][]string
 	deletedUsers map[uuid.UUID]bool
-	invitations  map[uuid.UUID]*models.Invitation
+	invitations  map[uuid.UUID]*ent.Invitation
 	systemGrants map[systemGrantKey]systemGrant
 	inviteRoles  map[uuid.UUID][]uuid.UUID
 
@@ -57,10 +57,10 @@ type Authz struct {
 	// recordLocked so the "no actor, no row" rule is copied exactly rather than
 	// approximated — a test that passed here and failed against Postgres would
 	// be worse than no test.
-	events []models.AuthzEvent
+	events []ent.AuthzEvent
 }
 
-// Compile-time checks, the same ones the GORM implementations carry.
+// Compile-time checks that this still satisfies the interfaces the domain declares.
 var (
 	_ authz.Repository = (*Authz)(nil)
 	_ orgs.Repository  = (*Authz)(nil)
@@ -74,21 +74,21 @@ var (
 func NewAuthz(users *Users) *Authz {
 	return &Authz{
 		users:        users,
-		orgs:         map[uuid.UUID]*models.Organization{},
-		memberships:  map[uuid.UUID]*models.Membership{},
-		roles:        map[uuid.UUID]*models.Role{},
+		orgs:         map[uuid.UUID]*ent.Organization{},
+		memberships:  map[uuid.UUID]*ent.Membership{},
+		roles:        map[uuid.UUID]*ent.Role{},
 		rolePerms:    map[uuid.UUID][]string{},
 		memberRoles:  map[uuid.UUID][]uuid.UUID{},
 		systemRoles:  map[uuid.UUID][]string{},
 		deletedUsers: map[uuid.UUID]bool{},
-		invitations:  map[uuid.UUID]*models.Invitation{},
+		invitations:  map[uuid.UUID]*ent.Invitation{},
 		systemGrants: map[systemGrantKey]systemGrant{},
 		inviteRoles:  map[uuid.UUID][]uuid.UUID{},
 	}
 }
 
 // recordLocked mirrors the store's record: nothing is written without an actor.
-func (m *Authz) recordLocked(ctx context.Context, event models.AuthzEvent) {
+func (m *Authz) recordLocked(ctx context.Context, event ent.AuthzEvent) {
 	actor := audit.ActorFrom(ctx)
 	if actor.IsZero() {
 		return
@@ -152,7 +152,7 @@ func page[T any](rows []T, limit, offset int) []T {
 	return rows
 }
 
-func sameAccount(membership *models.Membership, userID uuid.UUID) bool {
+func sameAccount(membership *ent.Membership, userID uuid.UUID) bool {
 	return membership != nil && membership.UserID == userID
 }
 
@@ -165,7 +165,7 @@ func sameAccount(membership *models.Membership, userID uuid.UUID) bool {
 // missing, so deleting an account and then asking for the owner count gave different
 // answers here and in SQL — and the contract suite could not see it, because its own
 // fixture told both fakes by hand.
-func (m *Authz) accountDeletedLocked(membership *models.Membership) bool {
+func (m *Authz) accountDeletedLocked(membership *ent.Membership) bool {
 	return m.accountIDDeletedLocked(membership.UserID)
 }
 
@@ -193,7 +193,7 @@ func (m *Authz) Events(_ context.Context, orgID uuid.UUID, limit, offset int) ([
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.readEventsLocked(func(e *models.AuthzEvent) bool {
+	return m.readEventsLocked(func(e *ent.AuthzEvent) bool {
 		return e.OrganizationID != nil && *e.OrganizationID == orgID
 	}, limit, offset), nil
 }
@@ -202,10 +202,10 @@ func (m *Authz) AllEvents(_ context.Context, limit, offset int) ([]audit.Event, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.readEventsLocked(func(*models.AuthzEvent) bool { return true }, limit, offset), nil
+	return m.readEventsLocked(func(*ent.AuthzEvent) bool { return true }, limit, offset), nil
 }
 
-func (m *Authz) readEventsLocked(keep func(*models.AuthzEvent) bool, limit, offset int) []audit.Event {
+func (m *Authz) readEventsLocked(keep func(*ent.AuthzEvent) bool, limit, offset int) []audit.Event {
 	out := make([]audit.Event, 0, len(m.events))
 
 	// Newest first, like the SQL's ORDER BY created_at DESC.
@@ -388,7 +388,7 @@ func (m *Authz) MembershipsForUser(_ context.Context, userID uuid.UUID) ([]orgs.
 
 // --- orgs.Repository ---
 
-func (m *Authz) Organization(_ context.Context, orgID uuid.UUID) (*models.Organization, error) {
+func (m *Authz) Organization(_ context.Context, orgID uuid.UUID) (*ent.Organization, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -407,8 +407,8 @@ func (m *Authz) UpdateOrganization(ctx context.Context, orgID uuid.UUID, name st
 	m.orgs[orgID].Name = name
 	_ = org
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, Action: models.ActionOrganizationUpdated, Detail: name,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &orgID, Action: ent.ActionOrganizationUpdated, Detail: name,
 	})
 
 	return nil
@@ -428,8 +428,8 @@ func (m *Authz) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 		return err
 	}
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, Action: models.ActionOrganizationDeleted,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &orgID, Action: ent.ActionOrganizationDeleted,
 	})
 
 	return nil
@@ -505,11 +505,11 @@ func (m *Authz) AddMember(
 	}
 
 	id := uuid.Must(uuid.NewV7())
-	membership := &models.Membership{
-		Model:          models.Model{ID: id},
+	membership := &ent.Membership{
+		ID:             id,
 		UserID:         userID,
 		OrganizationID: orgID,
-		Status:         models.MembershipActive,
+		Status:         ent.MembershipActive,
 	}
 
 	if invitedBy != uuid.Nil {
@@ -522,8 +522,8 @@ func (m *Authz) AddMember(
 	m.memberships[id] = membership
 	m.memberRoles[id] = uniqueIDs(roleIDs)
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, SubjectID: &userID, Action: models.ActionMemberJoined,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &orgID, SubjectID: &userID, Action: ent.ActionMemberJoined,
 	})
 
 	member := m.memberLocked(membership)
@@ -534,7 +534,7 @@ func (m *Authz) AddMember(
 func (m *Authz) SetMemberStatus(
 	ctx context.Context,
 	orgID, memberID uuid.UUID,
-	status models.MembershipStatus,
+	status ent.MembershipStatus,
 	at time.Time,
 	guard orgs.OwnerGuard,
 ) error {
@@ -550,15 +550,15 @@ func (m *Authz) SetMemberStatus(
 		return err
 	}
 
-	action := models.ActionMemberSuspended
+	action := ent.ActionMemberSuspended
 	if status.GrantsPermissions() {
 		membership.Activate(at)
-		action = models.ActionMemberReinstated
+		action = ent.ActionMemberReinstated
 	} else {
 		membership.Status = status
 	}
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &orgID,
 		SubjectID:      m.subjectOfLocked(memberID),
 		Action:         action,
@@ -571,7 +571,7 @@ func (m *Authz) SetMemberStatus(
 func (m *Authz) RemoveMember(
 	ctx context.Context,
 	orgID, memberID uuid.UUID,
-	action models.AuthzAction,
+	action string,
 	guard orgs.OwnerGuard,
 ) error {
 	m.mu.Lock()
@@ -586,7 +586,7 @@ func (m *Authz) RemoveMember(
 		return err
 	}
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &orgID,
 		SubjectID:      m.subjectOfLocked(memberID),
 		Action:         action,
@@ -622,10 +622,10 @@ func (m *Authz) ReplaceMemberRoles(
 
 	m.memberRoles[memberID] = uniqueIDs(roleIDs)
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &orgID,
 		SubjectID:      m.subjectOfLocked(memberID),
-		Action:         models.ActionMemberRolesChanged,
+		Action:         ent.ActionMemberRolesChanged,
 	})
 
 	return nil
@@ -678,7 +678,7 @@ func (m *Authz) Role(_ context.Context, orgID, roleID uuid.UUID) (*orgs.Role, er
 func (m *Authz) CreateRole(
 	ctx context.Context,
 	orgID uuid.UUID,
-	role *models.Role,
+	role *ent.Role,
 	permissions []authz.Permission,
 ) (*orgs.Role, error) {
 	m.mu.Lock()
@@ -700,8 +700,8 @@ func (m *Authz) CreateRole(
 	m.roles[role.ID] = &stored
 	m.rolePerms[role.ID] = permissionStrings(permissions)
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, Action: models.ActionRoleCreated,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &orgID, Action: ent.ActionRoleCreated,
 		RoleID: &stored.ID, Detail: stored.Key,
 	})
 
@@ -722,8 +722,8 @@ func (m *Authz) UpdateRole(ctx context.Context, orgID, roleID uuid.UUID, name, d
 	role.Name = name
 	role.Description = description
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, Action: models.ActionRoleUpdated,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &orgID, Action: ent.ActionRoleUpdated,
 		RoleID: &roleID, Detail: name,
 	})
 
@@ -757,8 +757,8 @@ func (m *Authz) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard o
 		return err
 	}
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, Action: models.ActionRoleDeleted,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &orgID, Action: ent.ActionRoleDeleted,
 		RoleID: &roleID, Detail: role.Key,
 	})
 
@@ -789,8 +789,8 @@ func (m *Authz) ReplaceRolePermissions(
 
 	m.rolePerms[roleID] = permissionStrings(permissions)
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &orgID, Action: models.ActionRolePermissionsChanged,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &orgID, Action: ent.ActionRolePermissionsChanged,
 		RoleID: &roleID,
 	})
 
@@ -799,7 +799,7 @@ func (m *Authz) ReplaceRolePermissions(
 
 // --- orgs.Provisioner ---
 
-func (m *Authz) OrganizationBySlug(_ context.Context, slug string) (*models.Organization, error) {
+func (m *Authz) OrganizationBySlug(_ context.Context, slug string) (*ent.Organization, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -816,9 +816,9 @@ func (m *Authz) OrganizationBySlug(_ context.Context, slug string) (*models.Orga
 
 func (m *Authz) CreateOrganization(
 	ctx context.Context,
-	org *models.Organization,
+	org *ent.Organization,
 	roles []authz.RoleDefinition,
-) (*models.Organization, error) {
+) (*ent.Organization, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -835,14 +835,14 @@ func (m *Authz) CreateOrganization(
 	stored := *org
 	m.orgs[org.ID] = &stored
 
-	m.recordLocked(ctx, models.AuthzEvent{
-		OrganizationID: &stored.ID, Action: models.ActionOrganizationCreated, Detail: stored.Slug,
+	m.recordLocked(ctx, ent.AuthzEvent{
+		OrganizationID: &stored.ID, Action: ent.ActionOrganizationCreated, Detail: stored.Slug,
 	})
 
 	for _, def := range roles {
 		id := uuid.Must(uuid.NewV7())
-		m.roles[id] = &models.Role{
-			Model:          models.Model{ID: id},
+		m.roles[id] = &ent.Role{
+			ID:             id,
 			OrganizationID: org.ID,
 			Key:            string(def.Key),
 			Name:           def.Name,
@@ -893,7 +893,7 @@ func (m *Authz) ownerCountLocked(orgID uuid.UUID) int {
 	owners := 0
 
 	for _, membership := range m.memberships {
-		if membership.OrganizationID != orgID || membership.Status != models.MembershipActive {
+		if membership.OrganizationID != orgID || membership.Status != ent.MembershipActive {
 			continue
 		}
 
@@ -931,9 +931,9 @@ func (m *Authz) GrantSystemRole(
 	m.systemRoles[userID] = append(m.systemRoles[userID], string(key))
 	m.systemGrants[systemGrantKey{userID, string(key)}] = systemGrant{by: grantedBy, at: time.Now().UTC()}
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		SubjectID: ptr(userID),
-		Action:    models.ActionSystemRoleGranted,
+		Action:    ent.ActionSystemRoleGranted,
 		Detail:    string(key),
 	})
 
@@ -954,9 +954,9 @@ func (m *Authz) RevokeSystemRole(ctx context.Context, userID uuid.UUID, key auth
 	})
 	delete(m.systemGrants, systemGrantKey{userID, string(key)})
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		SubjectID: ptr(userID),
-		Action:    models.ActionSystemRoleRevoked,
+		Action:    ent.ActionSystemRoleRevoked,
 		Detail:    string(key),
 	})
 
@@ -1103,7 +1103,7 @@ func (m *Authz) MemberByUser(_ context.Context, orgID, userID uuid.UUID) (*orgs.
 
 // --- helpers, all called with the lock held ---
 
-func (m *Authz) organizationLocked(orgID uuid.UUID) (*models.Organization, error) {
+func (m *Authz) organizationLocked(orgID uuid.UUID) (*ent.Organization, error) {
 	org, ok := m.orgs[orgID]
 	if !ok || org.IsDeleted() {
 		return nil, orgs.ErrNotFound
@@ -1116,7 +1116,7 @@ func (m *Authz) organizationLocked(orgID uuid.UUID) (*models.Organization, error
 
 // activeMembershipLocked applies every condition the SQL applies: the user is
 // live, the organization is live, the row exists, and its status grants.
-func (m *Authz) activeMembershipLocked(userID, orgID uuid.UUID) *models.Membership {
+func (m *Authz) activeMembershipLocked(userID, orgID uuid.UUID) *ent.Membership {
 	if m.accountIDDeletedLocked(userID) {
 		return nil
 	}
@@ -1141,7 +1141,7 @@ func (m *Authz) activeMembershipLocked(userID, orgID uuid.UUID) *models.Membersh
 	return nil
 }
 
-func (m *Authz) memberLocked(membership *models.Membership) orgs.Member {
+func (m *Authz) memberLocked(membership *ent.Membership) orgs.Member {
 	member := orgs.Member{
 		ID:       membership.ID,
 		UserID:   membership.UserID,
@@ -1171,7 +1171,7 @@ func (m *Authz) memberLocked(membership *models.Membership) orgs.Member {
 	return member
 }
 
-func (m *Authz) roleLocked(role *models.Role) orgs.Role {
+func (m *Authz) roleLocked(role *ent.Role) orgs.Role {
 	permissions := make([]authz.Permission, 0, len(m.rolePerms[role.ID]))
 	for _, key := range m.rolePerms[role.ID] {
 		permissions = append(permissions, authz.Permission(key))
@@ -1234,7 +1234,7 @@ func (m *Authz) SeedOrganization(slug, name string) uuid.UUID {
 	defer m.mu.Unlock()
 
 	id := uuid.Must(uuid.NewV7())
-	m.orgs[id] = &models.Organization{Model: models.Model{ID: id}, Slug: slug, Name: name}
+	m.orgs[id] = &ent.Organization{ID: id, Slug: slug, Name: name}
 
 	return id
 }
@@ -1279,8 +1279,8 @@ func (m *Authz) SeedRole(orgID uuid.UUID, key string, permissions ...string) uui
 	defer m.mu.Unlock()
 
 	id := uuid.Must(uuid.NewV7())
-	m.roles[id] = &models.Role{
-		Model:          models.Model{ID: id},
+	m.roles[id] = &ent.Role{
+		ID:             id,
 		OrganizationID: orgID,
 		Key:            key,
 		Name:           key,
@@ -1321,15 +1321,15 @@ func (m *Authz) SeedDeleteRole(roleID uuid.UUID) {
 // SeedMember puts a user in an organization with the given status and roles.
 func (m *Authz) SeedMember(
 	orgID, userID uuid.UUID,
-	status models.MembershipStatus,
+	status ent.MembershipStatus,
 	roleIDs ...uuid.UUID,
 ) uuid.UUID {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	id := uuid.Must(uuid.NewV7())
-	m.memberships[id] = &models.Membership{
-		Model:          models.Model{ID: id},
+	m.memberships[id] = &ent.Membership{
+		ID:             id,
 		UserID:         userID,
 		OrganizationID: orgID,
 		Status:         status,
@@ -1341,7 +1341,7 @@ func (m *Authz) SeedMember(
 
 // SeedMemberStatus changes a membership's status without going through the
 // service, so a test can arrange a state the rules would refuse to create.
-func (m *Authz) SeedMemberStatus(membershipID uuid.UUID, status models.MembershipStatus) {
+func (m *Authz) SeedMemberStatus(membershipID uuid.UUID, status ent.MembershipStatus) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

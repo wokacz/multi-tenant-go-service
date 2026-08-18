@@ -15,14 +15,13 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/predicate"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/twofactorchallenge"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // This file holds the sign-in side of user.Repository: devices, login history and the
 // emailed second factor. It is the same type as user.go — the split is for reading, not
 // for scope.
 
-func (r *User) DeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*models.Device, error) {
+func (r *User) DeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*ent.Device, error) {
 	row, err := r.db.Ent().Device.Query().
 		Where(
 			device.UserID(userID),
@@ -37,10 +36,10 @@ func (r *User) DeviceByFingerprint(ctx context.Context, userID uuid.UUID, finger
 		return nil, fmt.Errorf("store: device by fingerprint: %w", err)
 	}
 
-	return deviceModel(row), nil
+	return row, nil
 }
 
-func (r *User) ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*models.Device, error) {
+func (r *User) ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*ent.Device, error) {
 	row, err := r.db.Ent().Device.Query().
 		Where(
 			device.ID(deviceID),
@@ -56,10 +55,10 @@ func (r *User) ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*m
 		return nil, fmt.Errorf("store: active device: %w", err)
 	}
 
-	return deviceModel(row), nil
+	return row, nil
 }
 
-func (r *User) CreateDevice(ctx context.Context, d *models.Device) error {
+func (r *User) CreateDevice(ctx context.Context, d *ent.Device) error {
 	created, err := r.db.Ent().Device.Create().
 		SetUserID(d.UserID).
 		SetFingerprint(d.Fingerprint).
@@ -74,8 +73,7 @@ func (r *User) CreateDevice(ctx context.Context, d *models.Device) error {
 		return fmt.Errorf("store: create device: %w", err)
 	}
 
-	// The caller reads the generated id back off the struct it passed in, the way it
-	// did when GORM filled it in.
+	// The caller reads the generated id back off the struct it passed in.
 	d.ID = created.ID
 	d.CreatedAt = created.CreatedAt
 	d.UpdatedAt = created.UpdatedAt
@@ -90,13 +88,8 @@ func (r *User) TouchDevice(ctx context.Context, deviceID uuid.UUID, seenAt time.
 	err := r.db.Ent().Device.UpdateOneID(deviceID).
 		SetLastSeenAt(seenAt).
 		SetUserAgent(userAgent).
-		// No ::inet cast, and that is a change from the GORM version rather than an
-		// omission. The cast was there because GORM's map-based Updates sent the
-		// parameter in a form Postgres would not coerce, and the comment said it broke
-		// on the first non-loopback address. Through ent and pgx it coerces:
-		// TestTouchDeviceWritesInet writes 192.0.2.10 and 2001:db8::1 and passes
-		// without it, which is why the cast is gone instead of carried forward out of
-		// superstition.
+		// No ::inet cast. pgx coerces the text parameter; TestTouchDeviceWritesInet
+		// writes 192.0.2.10 and 2001:db8::1 and is why the cast stays gone.
 		SetLastIP(ip).
 		Exec(ctx)
 	if err != nil && !isNotFound(err) {
@@ -109,7 +102,7 @@ func (r *User) TouchDevice(ctx context.Context, deviceID uuid.UUID, seenAt time.
 }
 
 // TrustDevice and RevokeDevice both load the row FOR UPDATE and then apply the rules
-// from models.Device, so "a revoked device cannot be trusted" and "revoking clears
+// from ent.Device, so "a revoked device cannot be trusted" and "revoking clears
 // trust" have one definition rather than one in the model and a second written out in
 // SQL here.
 func (r *User) TrustDevice(ctx context.Context, deviceID uuid.UUID) error {
@@ -119,7 +112,7 @@ func (r *User) TrustDevice(ctx context.Context, deviceID uuid.UUID) error {
 			return err
 		}
 
-		d := deviceModel(row)
+		d := row
 		if err := d.Trust(); err != nil {
 			return err
 		}
@@ -137,7 +130,7 @@ func (r *User) RevokeDevice(ctx context.Context, userID, deviceID uuid.UUID) err
 			return err
 		}
 
-		d := deviceModel(row)
+		d := row
 		if err := d.Revoke(); err != nil {
 			return err
 		}
@@ -158,14 +151,14 @@ func (r *User) RevokeDevice(ctx context.Context, userID, deviceID uuid.UUID) err
 	// Revoking twice is not a failure. The caller asked for the device to be blocked
 	// and it is blocked; answering 409 would only make clients write retry logic around
 	// a state they already have.
-	if errors.Is(err, models.ErrDeviceRevoked) {
+	if errors.Is(err, ent.ErrDeviceRevoked) {
 		return nil
 	}
 
 	return translateDeviceError("revoke device", err)
 }
 
-func (r *User) Devices(ctx context.Context, userID uuid.UUID) ([]models.Device, error) {
+func (r *User) Devices(ctx context.Context, userID uuid.UUID) ([]ent.Device, error) {
 	// NULLS LAST so a device that has never been seen sorts after ones that have,
 	// rather than to the top where Postgres puts NULL by default on DESC. ent's Desc
 	// helper does not carry the null ordering, so the term is written out.
@@ -180,20 +173,20 @@ func (r *User) Devices(ctx context.Context, userID uuid.UUID) ([]models.Device, 
 		return nil, fmt.Errorf("store: devices: %w", err)
 	}
 
-	out := make([]models.Device, 0, len(rows))
+	out := make([]ent.Device, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, *deviceModel(row))
+		out = append(out, *row)
 	}
 
 	return out, nil
 }
 
-func (r *User) RecordLoginEvent(ctx context.Context, event *models.LoginEvent) error {
+func (r *User) RecordLoginEvent(ctx context.Context, event *ent.LoginEvent) error {
 	created, err := r.db.Ent().LoginEvent.Create().
 		SetUserID(event.UserID).
 		SetNillableDeviceID(event.DeviceID).
 		SetIP(event.IP).
-		SetOutcome(loginevent.Outcome(event.Outcome)).
+		SetOutcome(event.Outcome).
 		SetUserAgent(event.UserAgent).
 		SetCountry(event.Country).
 		Save(ctx)
@@ -207,7 +200,7 @@ func (r *User) RecordLoginEvent(ctx context.Context, event *models.LoginEvent) e
 	return nil
 }
 
-func (r *User) LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]models.LoginEvent, error) {
+func (r *User) LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]ent.LoginEvent, error) {
 	// user_id then created_at is the column order of idx_login_user_time, so this reads
 	// the index rather than sorting the user's whole history.
 	rows, err := r.db.Ent().LoginEvent.Query().
@@ -219,14 +212,14 @@ func (r *User) LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]
 		return nil, fmt.Errorf("store: login events: %w", err)
 	}
 
-	out := make([]models.LoginEvent, 0, len(rows))
+	out := make([]ent.LoginEvent, 0, len(rows))
 	for _, row := range rows {
-		event := models.LoginEvent{
+		event := ent.LoginEvent{
 			UserID:    row.UserID,
 			DeviceID:  row.DeviceID,
 			IP:        row.IP,
 			UserAgent: row.UserAgent,
-			Outcome:   models.LoginOutcome(row.Outcome),
+			Outcome:   row.Outcome,
 			Country:   row.Country,
 		}
 		event.ID = row.ID
@@ -251,7 +244,7 @@ func (r *User) SetTwoFactorEnabled(ctx context.Context, userID uuid.UUID, enable
 	return nil
 }
 
-func (r *User) ReplaceTwoFactorChallenge(ctx context.Context, challenge *models.TwoFactorChallenge) error {
+func (r *User) ReplaceTwoFactorChallenge(ctx context.Context, challenge *ent.TwoFactorChallenge) error {
 	err := r.withTx(ctx, func(tx *ent.Tx) error {
 		_, err := tx.TwoFactorChallenge.Delete().
 			Where(
@@ -290,7 +283,7 @@ func (r *User) ActiveTwoFactorChallenge(
 	ctx context.Context,
 	userID uuid.UUID,
 	now time.Time,
-) (*models.TwoFactorChallenge, error) {
+) (*ent.TwoFactorChallenge, error) {
 	row, err := r.db.Ent().TwoFactorChallenge.Query().
 		Where(
 			twofactorchallenge.UserID(userID),
@@ -307,7 +300,7 @@ func (r *User) ActiveTwoFactorChallenge(
 		return nil, fmt.Errorf("store: active two factor challenge: %w", err)
 	}
 
-	challenge := &models.TwoFactorChallenge{
+	challenge := &ent.TwoFactorChallenge{
 		UserID:     row.UserID,
 		DeviceID:   row.DeviceID,
 		CodeHash:   row.CodeHash,
@@ -380,7 +373,7 @@ func (r *User) ConsumeTwoFactorChallenge(ctx context.Context, challengeID, devic
 			return err
 		}
 
-		d := deviceModel(row)
+		d := row
 		if err := d.Trust(); err != nil {
 			return err
 		}
@@ -400,31 +393,9 @@ func lockDevice(ctx context.Context, tx *ent.Tx, predicates ...predicate.Device)
 	return tx.Device.Query().Where(predicates...).ForUpdate().Only(ctx)
 }
 
-// deviceModel maps the entity onto the struct the domain reads — and, more to the point,
-// onto the type that owns the rules: Trust and Revoke are methods on models.Device, so
-// the repository applies them rather than reimplementing them in SQL.
-func deviceModel(row *ent.Device) *models.Device {
-	out := &models.Device{
-		UserID:      row.UserID,
-		Fingerprint: row.Fingerprint,
-		Label:       row.Label,
-		UserAgent:   row.UserAgent,
-		LastSeenAt:  row.LastSeenAt,
-		LastIP:      row.LastIP,
-		TrustedAt:   row.TrustedAt,
-		RevokedAt:   row.RevokedAt,
-	}
-
-	out.ID = row.ID
-	out.CreatedAt = row.CreatedAt
-	out.UpdatedAt = row.UpdatedAt
-
-	return out
-}
-
 // translateDeviceError turns the model's and ent's vocabulary into the domain's. This is
 // the boundary the whole error chain depends on: nothing above internal/store is allowed
-// to see ent's not-found or models.ErrDeviceRevoked.
+// to see ent's not-found or ent.ErrDeviceRevoked.
 func translateDeviceError(op string, err error) error {
 	switch {
 	case err == nil:
@@ -433,7 +404,7 @@ func translateDeviceError(op string, err error) error {
 	case isNotFound(err):
 		return user.ErrNotFound
 
-	case errors.Is(err, models.ErrDeviceRevoked):
+	case errors.Is(err, ent.ErrDeviceRevoked):
 		return user.ErrDeviceRevoked
 
 	case errors.Is(err, user.ErrInvalidTwoFactorCode):

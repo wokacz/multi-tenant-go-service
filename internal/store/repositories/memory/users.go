@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // Users is an in-memory user.Repository. The zero value is not usable; call
@@ -30,30 +30,30 @@ import (
 type Users struct {
 	mu sync.Mutex
 
-	users      map[uuid.UUID]*models.User
+	users      map[uuid.UUID]*ent.User
 	byEmail    map[string]uuid.UUID
-	resets     map[uuid.UUID]*models.PasswordReset
-	emailChg   map[uuid.UUID]*models.EmailChange
-	devices    map[uuid.UUID]*models.Device
-	challenges map[uuid.UUID]*models.TwoFactorChallenge
-	events     []models.LoginEvent
+	resets     map[uuid.UUID]*ent.PasswordReset
+	emailChg   map[uuid.UUID]*ent.EmailChange
+	devices    map[uuid.UUID]*ent.Device
+	challenges map[uuid.UUID]*ent.TwoFactorChallenge
+	events     []ent.LoginEvent
 }
 
-// Compile-time check, the same one the GORM implementation carries.
+// Compile-time check that this still satisfies the interface the domain declares.
 var _ user.Repository = (*Users)(nil)
 
 func NewUsers() *Users {
 	return &Users{
-		users:      map[uuid.UUID]*models.User{},
+		users:      map[uuid.UUID]*ent.User{},
 		byEmail:    map[string]uuid.UUID{},
-		resets:     map[uuid.UUID]*models.PasswordReset{},
-		emailChg:   map[uuid.UUID]*models.EmailChange{},
-		devices:    map[uuid.UUID]*models.Device{},
-		challenges: map[uuid.UUID]*models.TwoFactorChallenge{},
+		resets:     map[uuid.UUID]*ent.PasswordReset{},
+		emailChg:   map[uuid.UUID]*ent.EmailChange{},
+		devices:    map[uuid.UUID]*ent.Device{},
+		challenges: map[uuid.UUID]*ent.TwoFactorChallenge{},
 	}
 }
 
-func (m *Users) Create(_ context.Context, u *models.User) error {
+func (m *Users) Create(_ context.Context, u *ent.User) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -76,11 +76,11 @@ func (m *Users) Create(_ context.Context, u *models.User) error {
 	return nil
 }
 
-// ByID hides a deleted account, which is what GORM's soft-delete scope does for
-// the SQL implementation without anybody writing it down. It matters more than it
+// ByID hides a deleted account, which is what the SQL interceptor does without
+// anybody writing the predicate at each call site. It matters more than it
 // looks: requireBearer loads the account on every request, so this is what makes a
 // deleted account's token stop working.
-func (m *Users) ByID(_ context.Context, id uuid.UUID) (*models.User, error) {
+func (m *Users) ByID(_ context.Context, id uuid.UUID) (*ent.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -92,11 +92,11 @@ func (m *Users) ByID(_ context.Context, id uuid.UUID) (*models.User, error) {
 	return copyOf(u), nil
 }
 
-func (m *Users) All(_ context.Context, limit, offset int) ([]models.User, error) {
+func (m *Users) All(_ context.Context, limit, offset int) ([]ent.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	out := make([]models.User, 0, len(m.users))
+	out := make([]ent.User, 0, len(m.users))
 	for _, u := range m.users {
 		if !u.IsDeleted() {
 			out = append(out, *u)
@@ -233,7 +233,7 @@ func (m *Users) SetSuspended(_ context.Context, userID uuid.UUID, at *time.Time)
 	return nil
 }
 
-func (m *Users) ByEmail(_ context.Context, email string) (*models.User, error) {
+func (m *Users) ByEmail(_ context.Context, email string) (*ent.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -249,7 +249,7 @@ func (m *Users) ByEmail(_ context.Context, email string) (*models.User, error) {
 	return copyOf(m.users[id]), nil
 }
 
-func (m *Users) ReplacePasswordReset(_ context.Context, reset *models.PasswordReset) error {
+func (m *Users) ReplacePasswordReset(_ context.Context, reset *ent.PasswordReset) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -269,7 +269,7 @@ func (m *Users) ReplacePasswordReset(_ context.Context, reset *models.PasswordRe
 	return nil
 }
 
-func (m *Users) ActivePasswordReset(_ context.Context, userID uuid.UUID, now time.Time) (*models.PasswordReset, error) {
+func (m *Users) ActivePasswordReset(_ context.Context, userID uuid.UUID, now time.Time) (*ent.PasswordReset, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -300,7 +300,7 @@ func (m *Users) FailPasswordReset(_ context.Context, resetID uuid.UUID, maxAttem
 	return nil
 }
 
-func (m *Users) ConsumePasswordReset(_ context.Context, reset *models.PasswordReset, passwordHash string) error {
+func (m *Users) ConsumePasswordReset(_ context.Context, reset *ent.PasswordReset, passwordHash string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -323,7 +323,7 @@ func (m *Users) ConsumePasswordReset(_ context.Context, reset *models.PasswordRe
 // The four email-change methods mirror the reset ones exactly, including the
 // attempt counter moving under the mutex rather than being read and written back.
 
-func (m *Users) ReplaceEmailChange(_ context.Context, change *models.EmailChange) error {
+func (m *Users) ReplaceEmailChange(_ context.Context, change *ent.EmailChange) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -343,7 +343,7 @@ func (m *Users) ReplaceEmailChange(_ context.Context, change *models.EmailChange
 	return nil
 }
 
-func (m *Users) ActiveEmailChange(_ context.Context, userID uuid.UUID, now time.Time) (*models.EmailChange, error) {
+func (m *Users) ActiveEmailChange(_ context.Context, userID uuid.UUID, now time.Time) (*ent.EmailChange, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -376,7 +376,7 @@ func (m *Users) FailEmailChange(_ context.Context, changeID uuid.UUID, maxAttemp
 	return nil
 }
 
-func (m *Users) ConsumeEmailChange(_ context.Context, change *models.EmailChange, email string) error {
+func (m *Users) ConsumeEmailChange(_ context.Context, change *ent.EmailChange, email string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -404,7 +404,7 @@ func (m *Users) ConsumeEmailChange(_ context.Context, change *models.EmailChange
 	return nil
 }
 
-func (m *Users) DeviceByFingerprint(_ context.Context, userID uuid.UUID, fingerprint string) (*models.Device, error) {
+func (m *Users) DeviceByFingerprint(_ context.Context, userID uuid.UUID, fingerprint string) (*ent.Device, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -417,7 +417,7 @@ func (m *Users) DeviceByFingerprint(_ context.Context, userID uuid.UUID, fingerp
 	return nil, user.ErrNotFound
 }
 
-func (m *Users) ActiveDevice(_ context.Context, userID, deviceID uuid.UUID) (*models.Device, error) {
+func (m *Users) ActiveDevice(_ context.Context, userID, deviceID uuid.UUID) (*ent.Device, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -429,7 +429,7 @@ func (m *Users) ActiveDevice(_ context.Context, userID, deviceID uuid.UUID) (*mo
 	return copyOf(device), nil
 }
 
-func (m *Users) CreateDevice(_ context.Context, device *models.Device) error {
+func (m *Users) CreateDevice(_ context.Context, device *ent.Device) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -489,17 +489,17 @@ func (m *Users) RevokeDevice(_ context.Context, userID, deviceID uuid.UUID) erro
 		return user.ErrNotFound
 	}
 
-	// Revoking twice succeeds, matching the GORM implementation.
+	// Revoking twice succeeds: the device is already revoked.
 	_ = device.Revoke()
 
 	return nil
 }
 
-func (m *Users) Devices(_ context.Context, userID uuid.UUID) ([]models.Device, error) {
+func (m *Users) Devices(_ context.Context, userID uuid.UUID) ([]ent.Device, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var out []models.Device
+	var out []ent.Device
 
 	for _, device := range m.devices {
 		if device.UserID == userID {
@@ -514,7 +514,7 @@ func (m *Users) Devices(_ context.Context, userID uuid.UUID) ([]models.Device, e
 	return out, nil
 }
 
-func (m *Users) RecordLoginEvent(_ context.Context, event *models.LoginEvent) error {
+func (m *Users) RecordLoginEvent(_ context.Context, event *ent.LoginEvent) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -531,11 +531,11 @@ func (m *Users) RecordLoginEvent(_ context.Context, event *models.LoginEvent) er
 	return nil
 }
 
-func (m *Users) LoginEvents(_ context.Context, userID uuid.UUID, limit int) ([]models.LoginEvent, error) {
+func (m *Users) LoginEvents(_ context.Context, userID uuid.UUID, limit int) ([]ent.LoginEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var out []models.LoginEvent
+	var out []ent.LoginEvent
 
 	// Newest first, which for equal timestamps means insertion order reversed
 	// — UUIDv7 ids are time-ordered, so this matches what the index would give.
@@ -567,7 +567,7 @@ func (m *Users) SetTwoFactorEnabled(_ context.Context, userID uuid.UUID, enabled
 	return nil
 }
 
-func (m *Users) ReplaceTwoFactorChallenge(_ context.Context, challenge *models.TwoFactorChallenge) error {
+func (m *Users) ReplaceTwoFactorChallenge(_ context.Context, challenge *ent.TwoFactorChallenge) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -587,7 +587,7 @@ func (m *Users) ReplaceTwoFactorChallenge(_ context.Context, challenge *models.T
 	return nil
 }
 
-func (m *Users) ActiveTwoFactorChallenge(_ context.Context, userID uuid.UUID, now time.Time) (*models.TwoFactorChallenge, error) {
+func (m *Users) ActiveTwoFactorChallenge(_ context.Context, userID uuid.UUID, now time.Time) (*ent.TwoFactorChallenge, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -658,7 +658,7 @@ func (m *Users) Attempts(userID uuid.UUID) (int, bool) {
 	return 0, false
 }
 
-func lastSeen(d models.Device) time.Time {
+func lastSeen(d ent.Device) time.Time {
 	if d.LastSeenAt == nil {
 		return time.Time{}
 	}

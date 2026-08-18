@@ -10,7 +10,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 type auditEventBody struct {
@@ -51,7 +51,7 @@ func (f *authzFixture) auditLog(t *testing.T) []auditEventBody {
 func TestRegisteringIsAudited(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
-	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), models.DefaultOrganizationSlug)
+	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), ent.DefaultOrganizationSlug)
 	if err != nil {
 		t.Fatalf("default organization: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestRegisteringIsAudited(t *testing.T) {
 	found := false
 
 	for _, event := range body.Events {
-		if event.Action != string(models.ActionMemberJoined) || event.Actor.Email != joiner {
+		if event.Action != string(ent.ActionMemberJoined) || event.Actor.Email != joiner {
 			continue
 		}
 
@@ -87,7 +87,7 @@ func TestRegisteringIsAudited(t *testing.T) {
 
 	if !found {
 		t.Errorf("no %s entry for %s; the log has %+v",
-			models.ActionMemberJoined, joiner, body.Events)
+			ent.ActionMemberJoined, joiner, body.Events)
 	}
 }
 
@@ -97,22 +97,22 @@ func TestRegisteringIsAudited(t *testing.T) {
 // The read-only ones are absent by design; TestEveryMutatingOperationIsAudited
 // checks that the split still matches operationAccess, so a new mutating
 // operation cannot be quietly left out of both.
-var mutatingProbes = map[string]models.AuthzAction{
-	"update-organization":  models.ActionOrganizationUpdated,
-	"delete-organization":  models.ActionOrganizationDeleted,
-	"add-member":           models.ActionMemberInvited,
-	"update-member-status": models.ActionMemberReinstated,
-	"remove-member":        models.ActionMemberRemoved,
-	"set-member-roles":     models.ActionMemberRolesChanged,
-	"create-role":          models.ActionRoleCreated,
-	"update-role":          models.ActionRoleUpdated,
-	"set-role-permissions": models.ActionRolePermissionsChanged,
-	"delete-role":          models.ActionRoleDeleted,
-	"reissue-invitation":   models.ActionMemberInvited,
+var mutatingProbes = map[string]ent.AuthzAction{
+	"update-organization":  ent.ActionOrganizationUpdated,
+	"delete-organization":  ent.ActionOrganizationDeleted,
+	"add-member":           ent.ActionMemberInvited,
+	"update-member-status": ent.ActionMemberReinstated,
+	"remove-member":        ent.ActionMemberRemoved,
+	"set-member-roles":     ent.ActionMemberRolesChanged,
+	"create-role":          ent.ActionRoleCreated,
+	"update-role":          ent.ActionRoleUpdated,
+	"set-role-permissions": ent.ActionRolePermissionsChanged,
+	"delete-role":          ent.ActionRoleDeleted,
+	"reissue-invitation":   ent.ActionMemberInvited,
 	// The batch records one entry per address, the same as inviting one at a time —
 	// which is the point of it reusing Invite rather than a bulk insert.
-	"invite-members":      models.ActionMemberInvited,
-	"withdraw-invitation": models.ActionMemberInvitationWithdrawn,
+	"invite-members":      ent.ActionMemberInvited,
+	"withdraw-invitation": ent.ActionMemberInvitationWithdrawn,
 }
 
 var readOnlyProbes = []string{
@@ -167,7 +167,7 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 			// Somebody else to act on, so remove-member and the status change do
 			// not hit the last owner and get refused for an unrelated reason.
 			other := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()),
-				models.MembershipActive, held)
+				ent.MembershipActive, held)
 
 			// A registered account that is not yet in the organization, for
 			// add-member. Ada is already the owner.
@@ -290,7 +290,7 @@ func TestTheAuditLogNamesWhoItWasAbout(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	victim := uuid.Must(uuid.NewV7())
-	member := f.repo.SeedMember(f.orgID, victim, models.MembershipActive)
+	member := f.repo.SeedMember(f.orgID, victim, ent.MembershipActive)
 
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+member.String()), "").
 		expect(t, http.StatusNoContent)
@@ -344,13 +344,13 @@ func TestTheAuditLogIsScopedToTheOrganization(t *testing.T) {
 
 	// Something happens in another organization.
 	foreign := f.repo.SeedOrganization("globex", "Globex")
-	foreignMember := f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), models.MembershipActive)
+	foreignMember := f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive)
 	_ = foreignMember
 
 	f.call(t, http.MethodPatch, f.orgPath(""), `{"name":"Renamed"}`).expect(t, http.StatusOK)
 
 	for _, event := range f.auditLog(t) {
-		if event.Action == string(models.ActionOrganizationCreated) && event.Detail == "globex" {
+		if event.Action == string(ent.ActionOrganizationCreated) && event.Detail == "globex" {
 			t.Error("the organization's log names activity from another organization")
 		}
 	}

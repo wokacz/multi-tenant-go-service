@@ -16,8 +16,7 @@ import (
 //
 // It exists because ent's transaction API is three steps — begin, use, commit or roll
 // back — and a repository that writes two rows should not spend four lines on the
-// bookkeeping each time. GORM's Transaction did the same thing; this is the same shape
-// so the ported methods read like the ones still to come.
+// bookkeeping each time.
 //
 // A rollback failure is joined rather than swallowed: it means the transaction may
 // still be open, which matters more than the error that caused the rollback.

@@ -13,7 +13,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
 
@@ -403,7 +403,7 @@ func (h *memberHandlers) setStatus(ctx context.Context, in *UpdateMemberStatusIn
 		return nil, err
 	}
 
-	status := models.MembershipStatus(in.Body.Status)
+	status := ent.MembershipStatus(in.Body.Status)
 	if err := h.orgs.SetMemberStatus(ctx, grant, in.MemberID, status); err != nil {
 		return nil, problem.Error(ctx, err)
 	}

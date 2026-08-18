@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
@@ -45,7 +45,7 @@ func TestPermissionsAreTheUnionOfEveryRole(t *testing.T) {
 	readers := repo.SeedRole(org, "readers", string(authz.PermMembersRead))
 	editors := repo.SeedRole(org, "editors", string(authz.PermRolesRead), string(authz.PermRolesUpdate))
 
-	repo.SeedMember(org, user, models.MembershipActive, readers, editors)
+	repo.SeedMember(org, user, ent.MembershipActive, readers, editors)
 
 	got := permissions(t, svc, user, org, authz.PermMembersRead)
 	want := []authz.Permission{authz.PermMembersRead, authz.PermRolesRead, authz.PermRolesUpdate}
@@ -65,8 +65,8 @@ func TestPermissionsAreTheUnionOfEveryRole(t *testing.T) {
 // would produce a 403, and a 403 confirms the organization exists. An invitation
 // used to be the second case here and is no longer a membership at all.
 func TestOnlyAnActiveMembershipGrantsAnything(t *testing.T) {
-	for name, status := range map[string]models.MembershipStatus{
-		"suspended": models.MembershipSuspended,
+	for name, status := range map[string]ent.MembershipStatus{
+		"suspended": ent.MembershipSuspended,
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc, repo := testAuthz(t)
@@ -96,7 +96,7 @@ func TestAMemberWithNoRolesIsStillAMember(t *testing.T) {
 	user := uuid.Must(uuid.NewV7())
 	org := repo.SeedOrganization("acme", "Acme")
 
-	repo.SeedMember(org, user, models.MembershipActive)
+	repo.SeedMember(org, user, ent.MembershipActive)
 
 	_, err := svc.Authorize(t.Context(), authz.Request{
 		Actor: user, Org: org, Permission: authz.PermMembersRead,
@@ -115,7 +115,7 @@ func TestRevokingARoleTakesEffectImmediately(t *testing.T) {
 	user := uuid.Must(uuid.NewV7())
 	org := repo.SeedOrganization("acme", "Acme")
 	role := repo.SeedRole(org, "editors", string(authz.PermRolesUpdate))
-	membership := repo.SeedMember(org, user, models.MembershipActive, role)
+	membership := repo.SeedMember(org, user, ent.MembershipActive, role)
 
 	if _, err := svc.Authorize(t.Context(), authz.Request{
 		Actor: user, Org: org, Permission: authz.PermRolesUpdate,
@@ -141,9 +141,9 @@ func TestSuspendingAMemberTakesEffectImmediately(t *testing.T) {
 	user := uuid.Must(uuid.NewV7())
 	org := repo.SeedOrganization("acme", "Acme")
 	role := repo.SeedShippedRole(org, authz.RoleAdmin)
-	membership := repo.SeedMember(org, user, models.MembershipActive, role)
+	membership := repo.SeedMember(org, user, ent.MembershipActive, role)
 
-	repo.SeedMemberStatus(membership, models.MembershipSuspended)
+	repo.SeedMemberStatus(membership, ent.MembershipSuspended)
 
 	_, err := svc.Authorize(t.Context(), authz.Request{
 		Actor: user, Org: org, Permission: authz.PermMembersRead,
@@ -163,7 +163,7 @@ func TestStoredKeysOutsideTheCatalogGrantNothing(t *testing.T) {
 	org := repo.SeedOrganization("acme", "Acme")
 	role := repo.SeedRole(org, "legacy", "organization.teleport", string(authz.PermMembersRead))
 
-	repo.SeedMember(org, user, models.MembershipActive, role)
+	repo.SeedMember(org, user, ent.MembershipActive, role)
 
 	got := permissions(t, svc, user, org, authz.PermMembersRead)
 	want := []authz.Permission{authz.PermMembersRead}
@@ -183,7 +183,7 @@ func TestAnAssignmentToADeletedRoleGrantsNothing(t *testing.T) {
 	kept := repo.SeedRole(org, "readers", string(authz.PermMembersRead))
 	gone := repo.SeedRole(org, "editors", string(authz.PermRolesUpdate))
 
-	repo.SeedMember(org, user, models.MembershipActive, kept, gone)
+	repo.SeedMember(org, user, ent.MembershipActive, kept, gone)
 	repo.SeedDeleteRole(gone)
 
 	got := permissions(t, svc, user, org, authz.PermMembersRead)
@@ -201,7 +201,7 @@ func TestASoftDeletedOrganizationGrantsNothing(t *testing.T) {
 	org := repo.SeedOrganization("acme", "Acme")
 	role := repo.SeedShippedRole(org, authz.RoleOwner)
 
-	repo.SeedMember(org, user, models.MembershipActive, role)
+	repo.SeedMember(org, user, ent.MembershipActive, role)
 	repo.SeedSoftDeletedOrganization(org)
 
 	_, err := svc.Authorize(t.Context(), authz.Request{
@@ -221,7 +221,7 @@ func TestASoftDeletedAccountHoldsNothing(t *testing.T) {
 	org := repo.SeedOrganization("acme", "Acme")
 	role := repo.SeedShippedRole(org, authz.RoleOwner)
 
-	repo.SeedMember(org, user, models.MembershipActive, role)
+	repo.SeedMember(org, user, ent.MembershipActive, role)
 	repo.SeedSystemRole(user, string(authz.RolePlatformAdmin))
 	repo.SeedSoftDeletedUser(user)
 
@@ -247,10 +247,10 @@ func TestOrganizationsDoNotBleedIntoEachOther(t *testing.T) {
 	user := uuid.Must(uuid.NewV7())
 
 	acme := repo.SeedOrganization("acme", "Acme")
-	repo.SeedMember(acme, user, models.MembershipActive, repo.SeedShippedRole(acme, authz.RoleOwner))
+	repo.SeedMember(acme, user, ent.MembershipActive, repo.SeedShippedRole(acme, authz.RoleOwner))
 
 	globex := repo.SeedOrganization("globex", "Globex")
-	repo.SeedMember(globex, user, models.MembershipActive, repo.SeedShippedRole(globex, authz.RoleViewer))
+	repo.SeedMember(globex, user, ent.MembershipActive, repo.SeedShippedRole(globex, authz.RoleViewer))
 
 	if _, err := svc.Authorize(t.Context(), authz.Request{
 		Actor: user, Org: acme, Permission: authz.PermOrganizationDelete,

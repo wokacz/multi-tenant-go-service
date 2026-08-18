@@ -2,8 +2,8 @@
 
 ## Interfejs należy do konsumenta
 
-Interfejs deklaruje **domena**, implementuje **store**. Dzięki temu store zależy od domeny, nigdy odwrotnie, a interfejs
-wymienia tylko to, czego domena naprawdę używa.
+Interfejs deklaruje **domena**, implementuje **store**. Typy na interfejsie to wygenerowane struktury z
+`internal/store/ent`. Klient zapytań zostaje w store.
 
 ```
 internal/domain/widgets/repository.go       ← interfejs + błędy domenowe
@@ -33,11 +33,11 @@ testów z luźniejszym przestaje cokolwiek sprawdzać.
 // kompilacji, a nie dziurą do wypatrzenia na review.
 type Repository interface {
 // Widget zwraca ErrNotFound, gdy widget należy do innej organizacji.
-Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*models.Widget, error)
+Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*ent.Widget, error)
 
-Widgets(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]models.Widget, error)
+Widgets(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]ent.Widget, error)
 
-CreateWidget(ctx context.Context, orgID uuid.UUID, widget *models.Widget) error
+CreateWidget(ctx context.Context, orgID uuid.UUID, widget *ent.Widget) error
 }
 ```
 
@@ -121,7 +121,7 @@ func NewWidgets(db *store.DB) *Widgets { return &Widgets{db: db} }
 // w main, daleko od obu definicji.
 var _ widgets.Repository = (*Widgets)(nil)
 
-func (r *Widgets) Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*models.Widget, error) {
+func (r *Widgets) Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*ent.Widget, error) {
 	row, err := r.db.Ent().Widget.Query().
 		Where(widget.ID(widgetID), widget.OrganizationID(orgID)).
 		Only(ctx)
@@ -129,9 +129,7 @@ func (r *Widgets) Widget(ctx context.Context, orgID, widgetID uuid.UUID) (*model
 		return nil, translateWidgetError("widget", err)
 	}
 
-	out := widgetModel(row)
-
-	return &out, nil
+	return row, nil
 }
 ```
 
@@ -151,8 +149,8 @@ return nil
 		return widgets.ErrNotFound
 	case isUniqueViolation(err):
 		return widgets.ErrKeyTaken
-case errors.Is(err, models.ErrWidgetLocked):
-return err // błąd modelu przechodzi dalej
+case errors.Is(err, widgets.ErrLocked):
+return err // błąd domenowy przechodzi dalej
 default:
 return fmt.Errorf("store: %s: %w", op, err)
 }
@@ -197,7 +195,7 @@ err := r.withTx(ctx, func(tx *ent.Tx) error {
 		return err
 	}
 
-	return recordEnt(ctx, tx, &models.AuthzEvent{ ... })
+	return recordEnt(ctx, tx, &ent.AuthzEvent{ ... })
 })
 ```
 

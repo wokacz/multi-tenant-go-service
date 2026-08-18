@@ -31,7 +31,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 const (
@@ -102,8 +102,8 @@ type World struct {
 	// and "joined last week" mean.
 	Now time.Time
 
-	accounts map[string]*models.User
-	orgs     map[string]*models.Organization
+	accounts map[string]*ent.User
+	orgs     map[string]*ent.Organization
 }
 
 // NewWorld wires a World. It does not touch the database.
@@ -125,8 +125,8 @@ func NewWorld(
 		Rand:     rng,
 		Log:      log,
 		Now:      time.Now().UTC(),
-		accounts: map[string]*models.User{},
-		orgs:     map[string]*models.Organization{},
+		accounts: map[string]*ent.User{},
+		orgs:     map[string]*ent.Organization{},
 	}
 }
 
@@ -207,7 +207,7 @@ func Slug(name string) string {
 // new Part gets it without thinking about it. The address is the identity: a
 // second run finds the same people and moves on, which is what makes it possible
 // to add a Part and re-run without wiping what is already there.
-func (w *World) ensureAccount(ctx context.Context, handle, name, locale string) (*models.User, error) {
+func (w *World) ensureAccount(ctx context.Context, handle, name, locale string) (*ent.User, error) {
 	if existing, ok := w.accounts[handle]; ok {
 		return existing, nil
 	}
@@ -242,7 +242,7 @@ func (w *World) ensureAccount(ctx context.Context, handle, name, locale string) 
 // that needs Olga Owner says so, and does not have to care whether the cast part
 // ran. The name and locale come from Cast() either way, so there is one definition
 // of who these people are.
-func (w *World) castAccount(ctx context.Context, handle string) (*models.User, error) {
+func (w *World) castAccount(ctx context.Context, handle string) (*ent.User, error) {
 	if existing, ok := w.accounts[handle]; ok {
 		return existing, nil
 	}
@@ -258,7 +258,7 @@ func (w *World) castAccount(ctx context.Context, handle string) (*models.User, e
 
 // ensureOrganization creates an organization with the shipped roles, or returns
 // the one already there.
-func (w *World) ensureOrganization(ctx context.Context, name, display string) (*models.Organization, error) {
+func (w *World) ensureOrganization(ctx context.Context, name, display string) (*ent.Organization, error) {
 	slug := Slug(name)
 
 	if existing, ok := w.orgs[slug]; ok {
@@ -296,7 +296,7 @@ func (w *World) ensureOrganization(ctx context.Context, name, display string) (*
 func (w *World) ensureMember(
 	ctx context.Context,
 	orgID uuid.UUID,
-	account *models.User,
+	account *ent.User,
 	roleIDs ...uuid.UUID,
 ) error {
 	_, err := w.Repo.MemberByUser(ctx, orgID, account.ID)

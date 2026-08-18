@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // Actor is who is making the change, and from where.
@@ -77,7 +75,7 @@ type Event struct {
 	ID             uuid.UUID
 	At             time.Time
 	OrganizationID *uuid.UUID
-	Action         models.AuthzAction
+	Action         string
 
 	Actor Party
 	// Subject is absent for changes that are not about a person — editing a

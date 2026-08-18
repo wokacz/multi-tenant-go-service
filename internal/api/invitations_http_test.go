@@ -13,7 +13,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // acceptToken posts a token to the accept endpoint and returns the raw result, so
@@ -80,7 +80,7 @@ func TestAcceptingAnInvitationJoinsTheOrganization(t *testing.T) {
 	acceptToken(t, f.server, token, bobToken).expect(t, http.StatusNotFound)
 }
 
-// TestAnInvitationCannotBeAcceptedByAnotherAccount is D4: the token proves the
+// TestAnInvitationCannotBeAcceptedByAnotherAccount: the token proves the
 // mailbox, the address says whose mailbox was meant.
 //
 // It is a 409 naming the reason rather than a 404. The caller is holding the token,
@@ -241,7 +241,7 @@ func TestRegisteringDoesNotAcceptAnInvitation(t *testing.T) {
 func TestAnInvitationToTheDefaultOrganizationSurvivesRegistration(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
-	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), models.DefaultOrganizationSlug)
+	defaultOrg, err := f.repo.OrganizationBySlug(t.Context(), ent.DefaultOrganizationSlug)
 	if err != nil {
 		t.Fatalf("default organization: %v", err)
 	}
@@ -264,8 +264,8 @@ func TestAnInvitationToTheDefaultOrganizationSurvivesRegistration(t *testing.T) 
 	// No membership yet, so the offer is still takeable.
 	acceptToken(t, f.server, f.mailer.inviteToken, token).expect(t, http.StatusNoContent)
 
-	entry := membershipIn(t, f, token, models.DefaultOrganizationSlug)
-	if entry.Status != string(models.MembershipActive) {
+	entry := membershipIn(t, f, token, ent.DefaultOrganizationSlug)
+	if entry.Status != string(ent.MembershipActive) {
 		t.Errorf("status = %q, want active", entry.Status)
 	}
 

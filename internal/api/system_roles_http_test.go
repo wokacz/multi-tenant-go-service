@@ -9,7 +9,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 type systemRoleHolders struct {
@@ -80,9 +80,9 @@ func TestGrantingAnInstallationRoleIsRecorded(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/platform/audit", "").
 		expect(t, http.StatusOK).decode(t, &log)
 
-	if !hasEvent(log.Events, string(models.ActionSystemRoleGranted), f.userID, targetID) {
+	if !hasEvent(log.Events, string(ent.ActionSystemRoleGranted), f.userID, targetID) {
 		t.Errorf("no %s entry attributing the grant to the caller; the log has %+v",
-			models.ActionSystemRoleGranted, log.Events)
+			ent.ActionSystemRoleGranted, log.Events)
 	}
 
 	// Granting again changes nothing and records nothing: an entry for a grant that
@@ -121,8 +121,8 @@ func TestRevokingAnInstallationRoleIsRecorded(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/platform/audit", "").
 		expect(t, http.StatusOK).decode(t, &log)
 
-	if !hasEvent(log.Events, string(models.ActionSystemRoleRevoked), f.userID, other) {
-		t.Errorf("no %s entry; the log has %+v", models.ActionSystemRoleRevoked, log.Events)
+	if !hasEvent(log.Events, string(ent.ActionSystemRoleRevoked), f.userID, other) {
+		t.Errorf("no %s entry; the log has %+v", ent.ActionSystemRoleRevoked, log.Events)
 	}
 
 	// Revoking again is not an error and records nothing.

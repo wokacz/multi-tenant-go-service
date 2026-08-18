@@ -32,7 +32,8 @@ These are enforced by tests, not by review, because every violation looks harmle
    `internal/`, not under `internal/api/`).
 2. **The consumer owns the repository interface.** It is declared in
    `internal/domain/<thing>/repository.go` and implemented in
-   `internal/store/repositories/<thing>.go`. The store depends on the domain, never the reverse.
+   `internal/store/repositories/<thing>.go`. The structs on that interface are
+   the generated `ent` types. There is no second models package.
 3. **Models never reach JSON.** DTOs live in `internal/api/v1` and never leave it.
 4. **Every operation is classified in exactly one** of `publicOperations`,
    `selfServiceOperations`, `operationAccess`.
@@ -62,7 +63,7 @@ internal/
     audit/ authz/ orgs/ user/
   store/                the only place entgo.io appears
     ent/schema/         the source of truth for the schema
-    models/             domain structs; repositories map ent entities onto these
+    ent/                generated types — these are the models; no parallel package
     repositories/       implementations
       memory/           in-memory fake, shared by every test package
 tools/entgen/           SEPARATE Go module — the ent code generator

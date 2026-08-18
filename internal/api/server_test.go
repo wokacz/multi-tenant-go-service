@@ -24,7 +24,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
@@ -123,7 +123,7 @@ type replaceResetErrorRepo struct {
 	err error
 }
 
-func (r *replaceResetErrorRepo) ReplacePasswordReset(context.Context, *models.PasswordReset) error {
+func (r *replaceResetErrorRepo) ReplacePasswordReset(context.Context, *ent.PasswordReset) error {
 	return r.err
 }
 

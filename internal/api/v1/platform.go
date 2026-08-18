@@ -12,7 +12,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/auth"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // The installation-wide surface.
@@ -241,7 +241,7 @@ func newPlatformOrganizationResponse(o *orgs.OrganizationSummary) PlatformOrgani
 	}
 }
 
-func newPlatformUserResponse(u *models.User) PlatformUserResponse {
+func newPlatformUserResponse(u *ent.User) PlatformUserResponse {
 	out := PlatformUserResponse{
 		ID:        u.ID,
 		Name:      u.Name,

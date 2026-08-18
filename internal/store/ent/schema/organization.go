@@ -26,6 +26,9 @@ func (Organization) Fields() []ent.Field {
 
 func (Organization) Edges() []ent.Edge {
 	return []ent.Edge{
+		// CASCADE only fires on a hard delete. Organizations are soft-deleted, so
+		// every query that reads through these has to treat a retired tenant as
+		// gone — HasOrganization() is enough, because the interceptor hides the row.
 		edge.To("roles", Role.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("memberships", Membership.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("invitations", Invitation.Type).Annotations(entsql.OnDelete(entsql.Cascade)),

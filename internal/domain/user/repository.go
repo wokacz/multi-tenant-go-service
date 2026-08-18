@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 var (
@@ -85,23 +85,23 @@ const maxConcurrentHashes = 2
 // interface honest — it lists what this package actually uses, not everything
 // the store happens to be able to do.
 //
-// The store implements it. Nothing here knows that GORM exists.
+// The store implements it. This package does not import a driver.
 type Repository interface {
 	// Create persists u and fills in its generated fields. It returns
 	// ErrEmailTaken when the address is already registered.
-	Create(ctx context.Context, u *models.User) error
+	Create(ctx context.Context, u *ent.User) error
 
 	// ByID returns ErrNotFound when no live user has that id.
-	ByID(ctx context.Context, id uuid.UUID) (*models.User, error)
+	ByID(ctx context.Context, id uuid.UUID) (*ent.User, error)
 
 	// ByEmail returns ErrNotFound when no live user has that address.
-	ByEmail(ctx context.Context, email string) (*models.User, error)
+	ByEmail(ctx context.Context, email string) (*ent.User, error)
 
 	// All lists live accounts, newest first, for the installation-wide
 	// administration screens. It is not scoped to an organization because
 	// nothing about it is: it is the only listing that crosses tenants, and it
 	// sits behind a system-scope permission for exactly that reason.
-	All(ctx context.Context, limit, offset int) ([]models.User, error)
+	All(ctx context.Context, limit, offset int) ([]ent.User, error)
 
 	// Delete soft deletes an account. The model's hook revokes its devices,
 	// which the foreign key cascade does not do for a soft delete.
@@ -135,11 +135,11 @@ type Repository interface {
 
 	// ReplacePasswordReset drops unused codes for the user and stores the new
 	// one. A user may only have one live reset at a time.
-	ReplacePasswordReset(ctx context.Context, reset *models.PasswordReset) error
+	ReplacePasswordReset(ctx context.Context, reset *ent.PasswordReset) error
 
 	// ActivePasswordReset is the unused, unexpired code for userID, or
 	// ErrNotFound.
-	ActivePasswordReset(ctx context.Context, userID uuid.UUID, now time.Time) (*models.PasswordReset, error)
+	ActivePasswordReset(ctx context.Context, userID uuid.UUID, now time.Time) (*ent.PasswordReset, error)
 
 	// FailPasswordReset records one wrong guess against resetID and spends the
 	// code once maxAttempts is reached.
@@ -154,16 +154,16 @@ type Repository interface {
 	// epoch so tokens issued under the old password stop working, and marks
 	// the code used — all in one transaction, so a crash cannot leave a
 	// consumed code with the old password still in force.
-	ConsumePasswordReset(ctx context.Context, reset *models.PasswordReset, passwordHash string) error
+	ConsumePasswordReset(ctx context.Context, reset *ent.PasswordReset, passwordHash string) error
 
 	// ReplaceEmailChange drops any unused change for the user and stores the new
 	// one, so asking again supersedes rather than accumulating codes that all
 	// still work.
-	ReplaceEmailChange(ctx context.Context, change *models.EmailChange) error
+	ReplaceEmailChange(ctx context.Context, change *ent.EmailChange) error
 
 	// ActiveEmailChange is the unused, unexpired change for userID, or
 	// ErrNotFound.
-	ActiveEmailChange(ctx context.Context, userID uuid.UUID, now time.Time) (*models.EmailChange, error)
+	ActiveEmailChange(ctx context.Context, userID uuid.UUID, now time.Time) (*ent.EmailChange, error)
 
 	// FailEmailChange records one wrong guess and spends the code once the cap is
 	// reached, in one conditional UPDATE. Same reasoning as FailPasswordReset: a
@@ -174,15 +174,15 @@ type Repository interface {
 	// transaction. It returns ErrEmailTaken when the address was claimed in the
 	// meantime — by then the caller has proved they can read that mailbox, which
 	// is why this is the one place the answer is given.
-	ConsumeEmailChange(ctx context.Context, change *models.EmailChange, email string) error
+	ConsumeEmailChange(ctx context.Context, change *ent.EmailChange, email string) error
 
 	// DeviceByFingerprint returns the caller's device with that fingerprint, or
 	// ErrNotFound. It is scoped by user, so one account's device token can
 	// never resolve to another account's device.
-	DeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*models.Device, error)
+	DeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*ent.Device, error)
 
 	// CreateDevice persists a newly seen device.
-	CreateDevice(ctx context.Context, device *models.Device) error
+	CreateDevice(ctx context.Context, device *ent.Device) error
 
 	// TouchDevice records that the device was just used. It is a targeted
 	// UPDATE rather than a Save of a loaded row so that a concurrent revoke is
@@ -190,12 +190,12 @@ type Repository interface {
 	TouchDevice(ctx context.Context, deviceID uuid.UUID, seenAt time.Time, ip, userAgent string) error
 
 	// TrustDevice marks the device as having passed a second factor. The
-	// timestamp comes from models.Device rather than from a parameter,
+	// timestamp comes from ent.Device rather than from a parameter,
 	// because that type owns what trusting a device means.
 	TrustDevice(ctx context.Context, deviceID uuid.UUID) error
 
 	// Devices lists the caller's devices, most recently seen first.
-	Devices(ctx context.Context, userID uuid.UUID) ([]models.Device, error)
+	Devices(ctx context.Context, userID uuid.UUID) ([]ent.Device, error)
 
 	// RevokeDevice withdraws trust and blocks the device. It returns
 	// ErrNotFound when the device is not the caller's, and ErrDeviceRevoked
@@ -206,24 +206,24 @@ type Repository interface {
 	// not been revoked. The bearer middleware calls it on every authenticated
 	// request, which is what makes revocation take effect on tokens that were
 	// already handed out.
-	ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*models.Device, error)
+	ActiveDevice(ctx context.Context, userID, deviceID uuid.UUID) (*ent.Device, error)
 
 	// RecordLoginEvent appends to the login history.
-	RecordLoginEvent(ctx context.Context, event *models.LoginEvent) error
+	RecordLoginEvent(ctx context.Context, event *ent.LoginEvent) error
 
 	// LoginEvents returns the caller's most recent login history, newest first.
-	LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]models.LoginEvent, error)
+	LoginEvents(ctx context.Context, userID uuid.UUID, limit int) ([]ent.LoginEvent, error)
 
 	// SetTwoFactorEnabled flips the account's second-factor flag.
 	SetTwoFactorEnabled(ctx context.Context, userID uuid.UUID, enabled bool) error
 
 	// ReplaceTwoFactorChallenge drops the user's unspent challenges and stores
 	// the new one, so a sign-in attempt always invalidates the previous code.
-	ReplaceTwoFactorChallenge(ctx context.Context, challenge *models.TwoFactorChallenge) error
+	ReplaceTwoFactorChallenge(ctx context.Context, challenge *ent.TwoFactorChallenge) error
 
 	// ActiveTwoFactorChallenge is the unspent, unexpired challenge for userID,
 	// or ErrNotFound.
-	ActiveTwoFactorChallenge(ctx context.Context, userID uuid.UUID, now time.Time) (*models.TwoFactorChallenge, error)
+	ActiveTwoFactorChallenge(ctx context.Context, userID uuid.UUID, now time.Time) (*ent.TwoFactorChallenge, error)
 
 	// FailTwoFactorChallenge is FailPasswordReset for the sign-in code, and
 	// atomic for the same reason.

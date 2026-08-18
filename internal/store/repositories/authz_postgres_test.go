@@ -10,8 +10,6 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
@@ -28,7 +26,7 @@ import (
 // The insert goes through ent, not the repository: CreateOrganization also
 // materialises the shipped roles, and several cases below need an empty tenant
 // so they can plant a role the catalog does not define.
-func newOrganization(t *testing.T, db *store.DB) *models.Organization {
+func newOrganization(t *testing.T, db *store.DB) *ent.Organization {
 	t.Helper()
 
 	row, err := db.Ent().Organization.Create().
@@ -39,7 +37,7 @@ func newOrganization(t *testing.T, db *store.DB) *models.Organization {
 		t.Fatalf("create organization: %v", err)
 	}
 
-	org := &models.Organization{Slug: row.Slug, Name: row.Name}
+	org := &ent.Organization{Slug: row.Slug, Name: row.Name}
 	org.ID = row.ID
 	org.CreatedAt = row.CreatedAt
 	org.UpdatedAt = row.UpdatedAt
@@ -51,7 +49,7 @@ func newOrganization(t *testing.T, db *store.DB) *models.Organization {
 
 // newRole inserts a role and its permissions. The keys are written as given so a
 // test can store one the catalog does not define.
-func newRole(t *testing.T, db *store.DB, orgID uuid.UUID, key string, permissions ...string) *models.Role {
+func newRole(t *testing.T, db *store.DB, orgID uuid.UUID, key string, permissions ...string) *ent.Role {
 	t.Helper()
 
 	row, err := db.Ent().Role.Create().
@@ -72,7 +70,7 @@ func newRole(t *testing.T, db *store.DB, orgID uuid.UUID, key string, permission
 		}
 	}
 
-	role := &models.Role{OrganizationID: orgID, Key: key, Name: key}
+	role := &ent.Role{OrganizationID: orgID, Key: key, Name: key}
 	role.ID = row.ID
 	role.CreatedAt = row.CreatedAt
 	role.UpdatedAt = row.UpdatedAt
@@ -85,15 +83,15 @@ func newMembership(
 	t *testing.T,
 	db *store.DB,
 	orgID, userID uuid.UUID,
-	status models.MembershipStatus,
+	status ent.MembershipStatus,
 	roleIDs ...uuid.UUID,
-) *models.Membership {
+) *ent.Membership {
 	t.Helper()
 
 	row, err := db.Ent().Membership.Create().
 		SetOrganizationID(orgID).
 		SetUserID(userID).
-		SetStatus(membership.Status(status)).
+		SetStatus(status).
 		Save(t.Context())
 	if err != nil {
 		t.Fatalf("create membership: %v", err)
@@ -108,7 +106,7 @@ func newMembership(
 		}
 	}
 
-	out := &models.Membership{
+	out := &ent.Membership{
 		OrganizationID: orgID,
 		UserID:         userID,
 		Status:         status,
@@ -152,7 +150,7 @@ func TestOrganizationPermissionKeysUnionsEveryRole(t *testing.T) {
 	readers := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 	editors := newRole(t, db, org.ID, "editors", string(authz.PermRolesRead), string(authz.PermRolesUpdate))
 
-	newMembership(t, db, org.ID, u.ID, models.MembershipActive, readers.ID, editors.ID)
+	newMembership(t, db, org.ID, u.ID, ent.MembershipActive, readers.ID, editors.ID)
 
 	keys, err := repo.OrganizationPermissionKeys(t.Context(), u.ID, org.ID)
 	if err != nil {
@@ -184,7 +182,7 @@ func TestAMemberWithNoRolesIsDistinctFromAStranger(t *testing.T) {
 	org := newOrganization(t, db)
 
 	member := newUser(t, users)
-	newMembership(t, db, org.ID, member.ID, models.MembershipActive)
+	newMembership(t, db, org.ID, member.ID, ent.MembershipActive)
 
 	keys, err := repo.OrganizationPermissionKeys(t.Context(), member.ID, org.ID)
 	if err != nil {
@@ -203,7 +201,7 @@ func TestAMemberWithNoRolesIsDistinctFromAStranger(t *testing.T) {
 }
 
 func TestOnlyActiveMembershipsResolve(t *testing.T) {
-	for _, status := range []models.MembershipStatus{models.MembershipSuspended} {
+	for _, status := range []ent.MembershipStatus{ent.MembershipSuspended} {
 		t.Run(string(status), func(t *testing.T) {
 			db := testDB(t)
 			repo := repositories.NewAuthz(db)
@@ -233,7 +231,7 @@ func TestSoftDeletesStopGranting(t *testing.T) {
 		u := newUser(t, repositories.NewUser(db))
 		org := newOrganization(t, db)
 		role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
-		newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
+		newMembership(t, db, org.ID, u.ID, ent.MembershipActive, role.ID)
 
 		if err := db.Ent().Organization.DeleteOneID(org.ID).Exec(t.Context()); err != nil {
 			t.Fatalf("delete organization: %v", err)
@@ -251,7 +249,7 @@ func TestSoftDeletesStopGranting(t *testing.T) {
 		u := newUser(t, repositories.NewUser(db))
 		org := newOrganization(t, db)
 		role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
-		newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
+		newMembership(t, db, org.ID, u.ID, ent.MembershipActive, role.ID)
 
 		retireAccount(t, db, u.ID)
 
@@ -272,7 +270,7 @@ func TestKeysAreReturnedRaw(t *testing.T) {
 	org := newOrganization(t, db)
 	role := newRole(t, db, org.ID, "legacy", "organization.teleport")
 
-	newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
+	newMembership(t, db, org.ID, u.ID, ent.MembershipActive, role.ID)
 
 	keys, err := repo.OrganizationPermissionKeys(t.Context(), u.ID, org.ID)
 	if err != nil {
@@ -300,7 +298,7 @@ func TestDeletingARoleCascadesItsAssignments(t *testing.T) {
 	kept := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 	gone := newRole(t, db, org.ID, "editors", string(authz.PermRolesUpdate))
 
-	newMembership(t, db, org.ID, u.ID, models.MembershipActive, kept.ID, gone.ID)
+	newMembership(t, db, org.ID, u.ID, ent.MembershipActive, kept.ID, gone.ID)
 
 	if err := db.Ent().Role.DeleteOneID(gone.ID).Exec(t.Context()); err != nil {
 		t.Fatalf("delete role: %v", err)
@@ -356,7 +354,7 @@ func TestARepeatedRoleAssignmentIsRefusedByTheIndex(t *testing.T) {
 	u := newUser(t, repositories.NewUser(db))
 	org := newOrganization(t, db)
 	role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive, role.ID)
 
 	_, err := db.Ent().MembershipRole.Create().
 		SetMembershipID(membership.ID).

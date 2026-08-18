@@ -11,8 +11,8 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/authzevent"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
@@ -51,7 +51,7 @@ func TestAnAuditRowRollsBackWithItsChange(t *testing.T) {
 	mine := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 	theirs := newRole(t, db, foreign.ID, "readers", string(authz.PermMembersRead))
 
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive)
 
 	ctx := actorContext(t, u.ID)
 
@@ -75,7 +75,7 @@ func TestAnAuditRowLandsWithItsChange(t *testing.T) {
 	u := newUser(t, repositories.NewUser(db))
 	org := newOrganization(t, db)
 	role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive)
 
 	ctx := actorContext(t, u.ID)
 
@@ -94,8 +94,8 @@ func TestAnAuditRowLandsWithItsChange(t *testing.T) {
 
 	newest := events[0]
 
-	if newest.Action != models.ActionMemberRolesChanged {
-		t.Errorf("action = %q, want %q", newest.Action, models.ActionMemberRolesChanged)
+	if newest.Action != ent.ActionMemberRolesChanged {
+		t.Errorf("action = %q, want %q", newest.Action, ent.ActionMemberRolesChanged)
 	}
 
 	// The actor's name and address come from the join, so a reader does not need
@@ -124,7 +124,7 @@ func TestNothingIsRecordedWithoutAnActor(t *testing.T) {
 	u := newUser(t, repositories.NewUser(db))
 	org := newOrganization(t, db)
 	role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive)
 
 	// No actor on the context.
 	if err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{role.ID}, orgs.RefuseLastOwnerLoss(true)); err != nil {
@@ -147,7 +147,7 @@ func TestTheHistorySurvivesWhatItDescribes(t *testing.T) {
 	org := newOrganization(t, db)
 	ctx := actorContext(t, u.ID)
 
-	role, err := repo.CreateRole(ctx, org.ID, &models.Role{Key: "temporary", Name: "Temporary"}, nil)
+	role, err := repo.CreateRole(ctx, org.ID, &ent.Role{Key: "temporary", Name: "Temporary"}, nil)
 	if err != nil {
 		t.Fatalf("CreateRole() = _, %v", err)
 	}
@@ -164,7 +164,7 @@ func TestTheHistorySurvivesWhatItDescribes(t *testing.T) {
 	var deletion *audit.Event
 
 	for i := range events {
-		if events[i].Action == models.ActionRoleDeleted {
+		if events[i].Action == ent.ActionRoleDeleted {
 			deletion = &events[i]
 
 			break
@@ -193,7 +193,7 @@ func TestTheHistoryIsScopedToTheOrganization(t *testing.T) {
 
 	ctx := actorContext(t, u.ID)
 
-	if _, err := repo.CreateRole(ctx, theirs.ID, &models.Role{Key: "secret", Name: "Secret"}, nil); err != nil {
+	if _, err := repo.CreateRole(ctx, theirs.ID, &ent.Role{Key: "secret", Name: "Secret"}, nil); err != nil {
 		t.Fatalf("CreateRole() = _, %v", err)
 	}
 

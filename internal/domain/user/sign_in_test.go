@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 const (
@@ -108,11 +108,11 @@ func TestSignInRecordsHistory(t *testing.T) {
 		t.Fatalf("events = %d, want 2", len(events))
 	}
 
-	if events[0].Outcome != models.OutcomeBadPassword {
+	if events[0].Outcome != ent.OutcomeBadPassword {
 		t.Errorf("newest outcome = %q, want bad_password", events[0].Outcome)
 	}
 
-	if events[1].Outcome != models.OutcomeSuccess {
+	if events[1].Outcome != ent.OutcomeSuccess {
 		t.Errorf("oldest outcome = %q, want success", events[1].Outcome)
 	}
 

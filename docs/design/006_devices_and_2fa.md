@@ -58,7 +58,7 @@ Odwołanie **kasuje zaufanie** i blokuje logowanie z tego urządzenia. Token ju�
 - Cudze `id` to `404`, nie `403` — inaczej odpowiedź potwierdzałaby istnienie rekordu.
 
 Reguły („odwołanie kasuje zaufanie", „odwołanego nie da się zaufać") mieszkają w
-`models.Device`. Repozytorium czyta wiersz `SELECT … FOR UPDATE` i je stosuje, zamiast zapisywać drugą kopię tych reguł
+`ent.Device`. Repozytorium czyta wiersz `SELECT … FOR UPDATE` i je stosuje, zamiast zapisywać drugą kopię tych reguł
 w SQL-u.
 
 ## Historia logowań

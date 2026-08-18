@@ -9,7 +9,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // Authz implements authz.Repository. The interface it satisfies is declared in
@@ -50,7 +50,7 @@ func (r *Authz) OrganizationPermissionKeys(ctx context.Context, userID, orgID uu
 		LEFT JOIN role_permissions rp ON rp.role_id = r.id
 		WHERE m.user_id = $1 AND m.organization_id = $2 AND m.status = $3`
 
-	keys, rowCount, err := r.permissionKeys(ctx, query, userID, orgID, models.MembershipActive)
+	keys, rowCount, err := r.permissionKeys(ctx, query, userID, orgID, ent.MembershipActive)
 	if err != nil {
 		return nil, fmt.Errorf("store: organization permission keys: %w", err)
 	}
@@ -122,7 +122,7 @@ func (r *Authz) PermissionKeysByOrganization(ctx context.Context, userID uuid.UU
 		JOIN role_permissions rp ON rp.role_id = r.id
 		WHERE m.user_id = $1 AND m.status = $2`
 
-	rows, err := r.db.SQL().QueryContext(ctx, query, userID, models.MembershipActive)
+	rows, err := r.db.SQL().QueryContext(ctx, query, userID, ent.MembershipActive)
 	if err != nil {
 		return nil, fmt.Errorf("store: permission keys by organization: %w", err)
 	}

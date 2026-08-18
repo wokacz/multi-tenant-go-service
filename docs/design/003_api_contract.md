@@ -47,7 +47,7 @@ Przepis na dodanie operacji:
 
 ## DTO nie opuszczają `internal/api`
 
-Modele **nigdy** nie trafiają do JSON-a. `models.User` niesie `PasswordHash`,
+Modele **nigdy** nie trafiają do JSON-a. `ent.User` niesie `PasswordHash`,
 `IsProtected`, `DeletedAt` i `SuspendedAt`; zakodowanie go wprost ujawniłoby pierwsze i wystawiło wewnętrzny cykl życia
 w pozostałych.
 

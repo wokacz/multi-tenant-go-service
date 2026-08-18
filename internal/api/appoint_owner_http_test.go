@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // TestAnOrganizationCreatedByThePlatformCanBeGivenAnOwner is the H2 story end to
@@ -91,9 +91,9 @@ func TestAppointingAnOwnerIsAudited(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/platform/audit", "").
 		expect(t, http.StatusOK).decode(t, &log)
 
-	if !hasEvent(log.Events, string(models.ActionMemberJoined), f.userID, outsiderID) {
+	if !hasEvent(log.Events, string(ent.ActionMemberJoined), f.userID, outsiderID) {
 		t.Errorf("no %s entry attributing the appointment to the caller; the log has %+v",
-			models.ActionMemberJoined, log.Events)
+			ent.ActionMemberJoined, log.Events)
 	}
 }
 

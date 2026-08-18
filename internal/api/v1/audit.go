@@ -44,7 +44,7 @@ func newAuditEventResponse(e *audit.Event) AuditEventResponse {
 	out := AuditEventResponse{
 		ID:             e.ID,
 		At:             e.At,
-		Action:         string(e.Action),
+		Action:         e.Action,
 		Actor:          AuditParty{ID: e.Actor.ID, Name: e.Actor.Name, Email: e.Actor.Email},
 		OrganizationID: e.OrganizationID,
 		RoleID:         e.RoleID,

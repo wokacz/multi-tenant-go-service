@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // The invitation semantics are copied from the SQL rather than approximated, the
@@ -48,7 +48,7 @@ func (m *Authz) InviteMember(
 		return nil, err
 	}
 
-	invitation := &models.Invitation{
+	invitation := &ent.Invitation{
 		OrganizationID: orgID,
 		Email:          email,
 		TokenHash:      tokenHash,
@@ -68,9 +68,9 @@ func (m *Authz) InviteMember(
 	m.invitations[invitation.ID] = invitation
 	m.inviteRoles[invitation.ID] = uniqueIDs(roleIDs)
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &orgID,
-		Action:         models.ActionMemberInvited,
+		Action:         ent.ActionMemberInvited,
 		Detail:         email,
 	})
 
@@ -156,10 +156,10 @@ func (m *Authz) AcceptInvitation(ctx context.Context, invitationID, userID uuid.
 		}
 	}
 
-	membership := &models.Membership{
+	membership := &ent.Membership{
 		OrganizationID: invitation.OrganizationID,
 		UserID:         userID,
-		Status:         models.MembershipActive,
+		Status:         ent.MembershipActive,
 		InvitedBy:      invitation.InvitedBy,
 	}
 	membership.ID = uuid.Must(uuid.NewV7())
@@ -172,10 +172,10 @@ func (m *Authz) AcceptInvitation(ctx context.Context, invitationID, userID uuid.
 	invitation.AcceptedAt = &accepted
 
 	subject := userID
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &invitation.OrganizationID,
 		SubjectID:      &subject,
-		Action:         models.ActionMemberAccepted,
+		Action:         ent.ActionMemberAccepted,
 	})
 
 	return nil
@@ -190,9 +190,9 @@ func (m *Authz) DeclineInvitation(ctx context.Context, invitationID uuid.UUID) e
 		return orgs.ErrNotFound
 	}
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &invitation.OrganizationID,
-		Action:         models.ActionMemberInvitationDeclined,
+		Action:         ent.ActionMemberInvitationDeclined,
 		Detail:         invitation.Email,
 	})
 
@@ -202,7 +202,7 @@ func (m *Authz) DeclineInvitation(ctx context.Context, invitationID uuid.UUID) e
 	return nil
 }
 
-func (m *Authz) invitationLocked(invitation *models.Invitation) orgs.Invitation {
+func (m *Authz) invitationLocked(invitation *ent.Invitation) orgs.Invitation {
 	keys := []string{}
 
 	for _, roleID := range m.inviteRoles[invitation.ID] {
@@ -234,7 +234,7 @@ func (m *Authz) SeedInvitation(orgID uuid.UUID, email, token string, expiresAt t
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	invitation := &models.Invitation{
+	invitation := &ent.Invitation{
 		OrganizationID: orgID,
 		Email:          email,
 		TokenHash:      orgs.HashInvitationToken(token),
@@ -286,9 +286,9 @@ func (m *Authz) WithdrawInvitation(ctx context.Context, orgID, invitationID uuid
 		return orgs.ErrNotFound
 	}
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &orgID,
-		Action:         models.ActionMemberInvitationWithdrawn,
+		Action:         ent.ActionMemberInvitationWithdrawn,
 		Detail:         invitation.Email,
 	})
 
@@ -315,9 +315,9 @@ func (m *Authz) ReissueInvitation(
 	invitation.TokenHash = tokenHash
 	invitation.ExpiresAt = expiresAt.UTC()
 
-	m.recordLocked(ctx, models.AuthzEvent{
+	m.recordLocked(ctx, ent.AuthzEvent{
 		OrganizationID: &orgID,
-		Action:         models.ActionMemberInvited,
+		Action:         ent.ActionMemberInvited,
 		Detail:         invitation.Email,
 	})
 

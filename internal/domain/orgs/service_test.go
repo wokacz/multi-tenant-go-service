@@ -8,7 +8,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
@@ -37,12 +37,12 @@ func TestSetMemberStatusRefusesInvited(t *testing.T) {
 	viewer := repo.SeedShippedRole(orgID, authz.RoleViewer)
 
 	actor := uuid.Must(uuid.NewV7())
-	repo.SeedMember(orgID, actor, models.MembershipActive, repo.SeedShippedRole(orgID, authz.RoleOwner))
+	repo.SeedMember(orgID, actor, ent.MembershipActive, repo.SeedShippedRole(orgID, authz.RoleOwner))
 
 	// A subject holding less than the caller, so the rank rule is satisfied and
 	// this test is about the status argument alone.
 	subject := uuid.Must(uuid.NewV7())
-	member := repo.SeedMember(orgID, subject, models.MembershipActive, viewer)
+	member := repo.SeedMember(orgID, subject, ent.MembershipActive, viewer)
 
 	grant := authz.NewGrant(actor, orgID, []authz.Permission{
 		authz.PermMembersSuspend,
@@ -53,14 +53,14 @@ func TestSetMemberStatusRefusesInvited(t *testing.T) {
 	// refusing it — a row carrying it would be a membership nobody agreed to. The
 	// literal stands in for any status somebody adds to the enum later and forgets
 	// is settable from here.
-	err := service.SetMemberStatus(t.Context(), grant, member, models.MembershipStatus("invited"))
+	err := service.SetMemberStatus(t.Context(), grant, member, ent.MembershipStatus("invited"))
 	if !errors.Is(err, orgs.ErrInvalidStatus) {
 		t.Errorf("SetMemberStatus(invited) = %v, want ErrInvalidStatus", err)
 	}
 
 	// The two the operation is actually for still work, so the narrower check has
 	// not taken out more than it should.
-	for _, status := range []models.MembershipStatus{models.MembershipSuspended, models.MembershipActive} {
+	for _, status := range []ent.MembershipStatus{ent.MembershipSuspended, ent.MembershipActive} {
 		if err := service.SetMemberStatus(t.Context(), grant, member, status); err != nil {
 			t.Errorf("SetMemberStatus(%s) = %v, want it accepted", status, err)
 		}

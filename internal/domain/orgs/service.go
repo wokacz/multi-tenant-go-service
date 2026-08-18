@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // Service carries the organization rules that need storage to decide.
@@ -39,7 +39,7 @@ func NewService(repo Repository, dir Directory, provisioner Provisioner) *Servic
 // middleware, which resolved their permissions in it and refused with a 404 if
 // they had no active membership. Re-deriving that here would be a second answer
 // to a question that already has one, and two answers eventually disagree.
-func (s *Service) Organization(ctx context.Context, orgID uuid.UUID) (*models.Organization, error) {
+func (s *Service) Organization(ctx context.Context, orgID uuid.UUID) (*ent.Organization, error) {
 	return s.repo.Organization(ctx, orgID)
 }
 
@@ -52,7 +52,7 @@ func (s *Service) Mine(ctx context.Context, userID uuid.UUID) ([]Membership, err
 
 // Rename changes the organization's display name. The slug is not editable:
 // it appears in links people have already shared.
-func (s *Service) Rename(ctx context.Context, grant *authz.Grant, name string) (*models.Organization, error) {
+func (s *Service) Rename(ctx context.Context, grant *authz.Grant, name string) (*ent.Organization, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || utf8.RuneCountInString(name) > 100 {
 		return nil, ErrInvalidName
@@ -112,12 +112,12 @@ func (s *Service) SetMemberStatus(
 	ctx context.Context,
 	grant *authz.Grant,
 	memberID uuid.UUID,
-	status models.MembershipStatus,
+	status ent.MembershipStatus,
 ) error {
 	// status.Valid() would do now that "invited" is gone from the enum, but the
 	// two are written out on purpose: this operation suspends and reinstates, and
 	// a status added to the enum later must not become settable here by default.
-	if status != models.MembershipActive && status != models.MembershipSuspended {
+	if status != ent.MembershipActive && status != ent.MembershipSuspended {
 		return ErrInvalidStatus
 	}
 
@@ -153,7 +153,7 @@ func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID
 			// deleted account behind it, and removing it is the only way to clean
 			// that up, so the repository decides.
 			return s.repo.RemoveMember(ctx, orgID, memberID,
-				models.ActionMemberRemoved, RefuseLastOwnerLoss(true))
+				ent.ActionMemberRemoved, RefuseLastOwnerLoss(true))
 		}
 
 		return err
@@ -164,7 +164,7 @@ func (s *Service) RemoveMember(ctx context.Context, grant *authz.Grant, memberID
 	}
 
 	return s.repo.RemoveMember(ctx, orgID, memberID,
-		models.ActionMemberRemoved, RefuseLastOwnerLoss(true))
+		ent.ActionMemberRemoved, RefuseLastOwnerLoss(true))
 }
 
 // SetMemberRoles replaces somebody's roles.
@@ -248,7 +248,7 @@ func (s *Service) CreateRole(
 		return nil, err
 	}
 
-	role := &models.Role{
+	role := &ent.Role{
 		OrganizationID: grant.OrganizationID(),
 		Key:            strings.TrimSpace(key),
 		Name:           strings.TrimSpace(name),

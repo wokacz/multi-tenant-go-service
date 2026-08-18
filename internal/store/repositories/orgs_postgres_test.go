@@ -10,8 +10,8 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membershiprole"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
 )
 
@@ -44,7 +44,7 @@ func TestReplaceMemberRolesRefusesAnotherOrganizationsRole(t *testing.T) {
 	mine := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 	theirs := newRole(t, db, foreign.ID, "readers", string(authz.PermMembersRead))
 
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive)
 
 	err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{mine.ID, theirs.ID}, orgs.RefuseLastOwnerLoss(true))
 	if !errors.Is(err, orgs.ErrNotFound) {
@@ -75,7 +75,7 @@ func TestReplaceMemberRolesIsAtomic(t *testing.T) {
 	first := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 	second := newRole(t, db, org.ID, "editors", string(authz.PermRolesUpdate))
 
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive, first.ID)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive, first.ID)
 
 	if err := repo.ReplaceMemberRoles(t.Context(), org.ID, membership.ID, []uuid.UUID{second.ID}, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("ReplaceMemberRoles() = %v", err)
@@ -101,7 +101,7 @@ func TestMemberIsScopedToTheOrganization(t *testing.T) {
 	org := newOrganization(t, db)
 	other := newOrganization(t, db)
 
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive)
 
 	if _, err := repo.Member(t.Context(), other.ID, membership.ID); !errors.Is(err, orgs.ErrNotFound) {
 		t.Fatalf("Member() across organizations = %v, want ErrNotFound", err)
@@ -127,18 +127,18 @@ func TestTheOwnerStateTheGuardSeesCountsOnlyRealOwners(t *testing.T) {
 	viewer := newRole(t, db, org.ID, string(authz.RoleViewer), string(authz.PermOrganizationRead))
 
 	active := newUser(t, users)
-	activeMembership := newMembership(t, db, org.ID, active.ID, models.MembershipActive, owner.ID)
+	activeMembership := newMembership(t, db, org.ID, active.ID, ent.MembershipActive, owner.ID)
 
 	suspended := newUser(t, users)
-	newMembership(t, db, org.ID, suspended.ID, models.MembershipSuspended, owner.ID)
+	newMembership(t, db, org.ID, suspended.ID, ent.MembershipSuspended, owner.ID)
 
 	plain := newUser(t, users)
-	plainMembership := newMembership(t, db, org.ID, plain.ID, models.MembershipActive, viewer.ID)
+	plainMembership := newMembership(t, db, org.ID, plain.ID, ent.MembershipActive, viewer.ID)
 
 	// A deleted account is not an owner either, and a soft delete never fires the
 	// foreign key cascade, so the membership row is still there.
 	deleted := newUser(t, users)
-	newMembership(t, db, org.ID, deleted.ID, models.MembershipActive, owner.ID)
+	newMembership(t, db, org.ID, deleted.ID, ent.MembershipActive, owner.ID)
 
 	retireAccount(t, db, deleted.ID)
 
@@ -151,7 +151,7 @@ func TestTheOwnerStateTheGuardSeesCountsOnlyRealOwners(t *testing.T) {
 
 		var seen orgs.OwnerState
 
-		err := repo.RemoveMember(t.Context(), org.ID, memberID, models.ActionMemberRemoved, func(state orgs.OwnerState) error {
+		err := repo.RemoveMember(t.Context(), org.ID, memberID, ent.ActionMemberRemoved, func(state orgs.OwnerState) error {
 			seen = state
 
 			return errStop
@@ -194,10 +194,10 @@ func TestTheRoleGuardCountsHoldersInsideTheTransaction(t *testing.T) {
 	role := newRole(t, db, org.ID, "auditor", string(authz.PermMembersRead))
 
 	first := newUser(t, users)
-	newMembership(t, db, org.ID, first.ID, models.MembershipActive, role.ID)
+	newMembership(t, db, org.ID, first.ID, ent.MembershipActive, role.ID)
 
 	second := newUser(t, users)
-	newMembership(t, db, org.ID, second.ID, models.MembershipActive, role.ID)
+	newMembership(t, db, org.ID, second.ID, ent.MembershipActive, role.ID)
 
 	var seen int
 
@@ -246,10 +246,10 @@ func TestADeletedAccountIsNotAMember(t *testing.T) {
 	role := newRole(t, db, org.ID, string(authz.RoleViewer), string(authz.PermOrganizationRead))
 
 	live := newUser(t, users)
-	liveMembership := newMembership(t, db, org.ID, live.ID, models.MembershipActive, role.ID)
+	liveMembership := newMembership(t, db, org.ID, live.ID, ent.MembershipActive, role.ID)
 
 	gone := newUser(t, users)
-	goneMembership := newMembership(t, db, org.ID, gone.ID, models.MembershipActive, role.ID)
+	goneMembership := newMembership(t, db, org.ID, gone.ID, ent.MembershipActive, role.ID)
 
 	// A soft delete never fires the foreign key cascade, so the membership row
 	// is still there afterwards.
@@ -306,19 +306,19 @@ func TestAnOwnerWhoseAccountIsDeletedDoesNotBlockRemoval(t *testing.T) {
 	owner := newRole(t, db, org.ID, string(authz.RoleOwner), string(authz.PermOrganizationDelete))
 
 	live := newUser(t, users)
-	liveMembership := newMembership(t, db, org.ID, live.ID, models.MembershipActive, owner.ID)
+	liveMembership := newMembership(t, db, org.ID, live.ID, ent.MembershipActive, owner.ID)
 
 	gone := newUser(t, users)
-	goneMembership := newMembership(t, db, org.ID, gone.ID, models.MembershipActive, owner.ID)
+	goneMembership := newMembership(t, db, org.ID, gone.ID, ent.MembershipActive, owner.ID)
 
 	retireAccount(t, db, gone.ID)
 
-	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
+	if err := repo.RemoveMember(t.Context(), org.ID, goneMembership.ID, ent.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("RemoveMember() for an owner whose account is deleted = %v, want it removed", err)
 	}
 
 	// The rule still holds for the owner who is actually there.
-	err := repo.RemoveMember(t.Context(), org.ID, liveMembership.ID, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true))
+	err := repo.RemoveMember(t.Context(), org.ID, liveMembership.ID, ent.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true))
 	if !errors.Is(err, orgs.ErrLastOwner) {
 		t.Errorf("RemoveMember() for the last live owner = %v, want ErrLastOwner", err)
 	}
@@ -332,7 +332,7 @@ func TestCreateRoleIsAtomic(t *testing.T) {
 	org := newOrganization(t, db)
 
 	role, err := repo.CreateRole(t.Context(), org.ID,
-		&models.Role{Key: "auditor", Name: "Auditor"},
+		&ent.Role{Key: "auditor", Name: "Auditor"},
 		[]authz.Permission{authz.PermMembersRead, authz.PermRolesRead},
 	)
 	if err != nil {
@@ -364,17 +364,17 @@ func TestARoleKeyIsUniquePerOrganization(t *testing.T) {
 	other := newOrganization(t, db)
 
 	if _, err := repo.CreateRole(t.Context(), org.ID,
-		&models.Role{Key: "auditor", Name: "Auditor"}, nil); err != nil {
+		&ent.Role{Key: "auditor", Name: "Auditor"}, nil); err != nil {
 		t.Fatalf("CreateRole() = _, %v", err)
 	}
 
-	_, err := repo.CreateRole(t.Context(), org.ID, &models.Role{Key: "auditor", Name: "Again"}, nil)
+	_, err := repo.CreateRole(t.Context(), org.ID, &ent.Role{Key: "auditor", Name: "Again"}, nil)
 	if !errors.Is(err, orgs.ErrRoleKeyTaken) {
 		t.Errorf("CreateRole() with a duplicate key = %v, want ErrRoleKeyTaken", err)
 	}
 
 	if _, err := repo.CreateRole(t.Context(), other.ID,
-		&models.Role{Key: "auditor", Name: "Auditor"}, nil); err != nil {
+		&ent.Role{Key: "auditor", Name: "Auditor"}, nil); err != nil {
 		t.Errorf("CreateRole() in another organization = %v, want nil", err)
 	}
 }
@@ -398,7 +398,7 @@ func TestDeletingARoleIsRefusedForSystemRoles(t *testing.T) {
 		t.Fatalf("create role: %v", err)
 	}
 
-	if err := repo.DeleteRole(t.Context(), org.ID, row.ID, orgs.RefuseRoleInUse()); !errors.Is(err, models.ErrRoleIsSystem) {
+	if err := repo.DeleteRole(t.Context(), org.ID, row.ID, orgs.RefuseRoleInUse()); !errors.Is(err, ent.ErrRoleIsSystem) {
 		t.Errorf("DeleteRole() on a system role = %v, want ErrRoleIsSystem", err)
 	}
 }
@@ -414,7 +414,7 @@ func TestDeletingAnOrganizationIsRefusedWhenProtected(t *testing.T) {
 		t.Fatalf("protect organization: %v", err)
 	}
 
-	if err := repo.DeleteOrganization(t.Context(), org.ID); !errors.Is(err, models.ErrProtected) {
+	if err := repo.DeleteOrganization(t.Context(), org.ID); !errors.Is(err, ent.ErrProtected) {
 		t.Errorf("DeleteOrganization() on a protected organization = %v, want ErrProtected", err)
 	}
 }
@@ -457,12 +457,12 @@ func TestReinstatingKeepsTheOriginalJoinDate(t *testing.T) {
 	}
 
 	if err := repo.SetMemberStatus(t.Context(), org.ID, member.ID,
-		models.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true)); err != nil {
+		ent.MembershipSuspended, time.Now().UTC(), orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("SetMemberStatus(suspended) = %v", err)
 	}
 
 	if err := repo.SetMemberStatus(t.Context(), org.ID, member.ID,
-		models.MembershipActive, time.Now().UTC(), orgs.RefuseLastOwnerLoss(false)); err != nil {
+		ent.MembershipActive, time.Now().UTC(), orgs.RefuseLastOwnerLoss(false)); err != nil {
 		t.Fatalf("SetMemberStatus(active) = %v", err)
 	}
 
@@ -486,9 +486,9 @@ func TestRemovingAMemberCascadesTheirRoleAssignments(t *testing.T) {
 	org := newOrganization(t, db)
 	role := newRole(t, db, org.ID, "readers", string(authz.PermMembersRead))
 
-	membership := newMembership(t, db, org.ID, u.ID, models.MembershipActive, role.ID)
+	membership := newMembership(t, db, org.ID, u.ID, ent.MembershipActive, role.ID)
 
-	if err := repo.RemoveMember(t.Context(), org.ID, membership.ID, models.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
+	if err := repo.RemoveMember(t.Context(), org.ID, membership.ID, ent.ActionMemberRemoved, orgs.RefuseLastOwnerLoss(true)); err != nil {
 		t.Fatalf("RemoveMember() = %v", err)
 	}
 
@@ -567,8 +567,8 @@ func TestConcurrentDemotionsLeaveOneOwner(t *testing.T) {
 	owner := newRole(t, db, org.ID, string(authz.RoleOwner), string(authz.PermOrganizationDelete))
 	member := newRole(t, db, org.ID, string(authz.RoleMember), string(authz.PermMembersRead))
 
-	first := newMembership(t, db, org.ID, a.ID, models.MembershipActive, owner.ID)
-	second := newMembership(t, db, org.ID, b.ID, models.MembershipActive, owner.ID)
+	first := newMembership(t, db, org.ID, a.ID, ent.MembershipActive, owner.ID)
+	second := newMembership(t, db, org.ID, b.ID, ent.MembershipActive, owner.ID)
 
 	errs := make(chan error, 2)
 	go func() {
@@ -594,7 +594,7 @@ func TestConcurrentDemotionsLeaveOneOwner(t *testing.T) {
 
 	var seen orgs.OwnerState
 
-	err := repo.RemoveMember(t.Context(), org.ID, first.ID, models.ActionMemberRemoved, func(state orgs.OwnerState) error {
+	err := repo.RemoveMember(t.Context(), org.ID, first.ID, ent.ActionMemberRemoved, func(state orgs.OwnerState) error {
 		seen = state
 
 		return errStop

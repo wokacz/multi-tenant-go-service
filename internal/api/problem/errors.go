@@ -19,7 +19,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // statusClientClosedRequest is nginx's convention for "the client hung up
@@ -211,7 +211,7 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, orgs.ErrAlreadyMember):
 		return newDocument(locale, http.StatusConflict, CodeAlreadyMember)
 
-	case errors.Is(err, models.ErrProtected):
+	case errors.Is(err, ent.ErrProtected):
 		return newDocument(locale, http.StatusConflict, CodeRecordProtected)
 
 	case errors.Is(err, orgs.ErrInvalidName):

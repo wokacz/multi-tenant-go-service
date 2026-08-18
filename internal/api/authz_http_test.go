@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
 )
@@ -58,7 +58,7 @@ func newAuthzFixtureWith(t *testing.T, tel *telemetry.Telemetry, roles ...authz.
 		token:      session.Token,
 		userID:     session.User.ID,
 		orgID:      orgID,
-		membership: repo.SeedMember(orgID, session.User.ID, models.MembershipActive, roleIDs...),
+		membership: repo.SeedMember(orgID, session.User.ID, ent.MembershipActive, roleIDs...),
 	}
 }
 
@@ -202,7 +202,7 @@ func TestSuspendingAMemberTakesEffectOnTheNextRequest(t *testing.T) {
 		t.Fatalf("status before suspension = %d, want 200", rec)
 	}
 
-	f.repo.SeedMemberStatus(f.membership, models.MembershipSuspended)
+	f.repo.SeedMemberStatus(f.membership, ent.MembershipSuspended)
 
 	if rec := f.getOrg(t); rec != http.StatusNotFound {
 		t.Fatalf("status after suspension = %d, want 404", rec)
@@ -293,7 +293,7 @@ func TestMyOrganizationsShowsSuspensions(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleViewer)
 
 	suspended := f.repo.SeedOrganization("gamma", "Gamma")
-	f.repo.SeedMember(suspended, f.userID, models.MembershipSuspended)
+	f.repo.SeedMember(suspended, f.userID, ent.MembershipSuspended)
 
 	rec := do(t, f.server.http.Handler,
 		authed(t, http.MethodGet, "/v1/me/organizations", "", f.token, ""))
@@ -320,8 +320,8 @@ func TestMyOrganizationsShowsSuspensions(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"acme":  string(models.MembershipActive),
-		"gamma": string(models.MembershipSuspended),
+		"acme":  string(ent.MembershipActive),
+		"gamma": string(ent.MembershipSuspended),
 	}
 
 	for slug, status := range want {

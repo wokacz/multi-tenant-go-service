@@ -9,13 +9,12 @@ import (
 
 	gen "github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/hook"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
-// The hooks below call models.Validate so the rules live in one place: the tests
-// on the models package, and the write path that actually reaches Postgres. A
-// validator that only exists on the struct is a comment; one that only exists in
-// ent is a rule the in-memory fake cannot share.
+// The hooks below call Validate on the generated types so the rules live in one
+// place: the tests next to those methods, and the write path that reaches
+// Postgres. A validator that only exists on the struct is a comment; one that
+// only exists in a hook is a rule the in-memory fake cannot share.
 //
 // Updates that touch a subset of fields cannot reuse Validate() wholesale — that
 // method requires the whole row, and a rename would then fail as "invalid slug".
@@ -27,7 +26,7 @@ func (Organization) Hooks() []ent.Hook {
 			func(next ent.Mutator) ent.Mutator {
 				return hook.OrganizationFunc(func(ctx context.Context, m *gen.OrganizationMutation) (ent.Value, error) {
 					if m.Op().Is(ent.OpCreate) {
-						org := models.Organization{}
+						org := gen.Organization{}
 						if slug, ok := m.Slug(); ok {
 							org.Slug = slug
 						}
@@ -59,7 +58,7 @@ func (Role) Hooks() []ent.Hook {
 			func(next ent.Mutator) ent.Mutator {
 				return hook.RoleFunc(func(ctx context.Context, m *gen.RoleMutation) (ent.Value, error) {
 					if m.Op().Is(ent.OpCreate) {
-						role := models.Role{}
+						role := gen.Role{}
 						if key, ok := m.Key(); ok {
 							role.Key = key
 						}
@@ -94,13 +93,13 @@ func (Membership) Hooks() []ent.Hook {
 						return next.Mutate(ctx, m)
 					}
 
-					row := models.Membership{}
+					row := gen.Membership{}
 					if userID, ok := m.UserID(); ok {
 						row.UserID = userID
 					}
 
 					if status, ok := m.Status(); ok {
-						row.Status = models.MembershipStatus(status)
+						row.Status = status
 					}
 
 					if err := row.Validate(); err != nil {
@@ -124,7 +123,7 @@ func (Invitation) Hooks() []ent.Hook {
 						return next.Mutate(ctx, m)
 					}
 
-					inv := models.Invitation{}
+					inv := gen.Invitation{}
 					if email, ok := m.Email(); ok {
 						inv.Email = email
 					}
@@ -150,9 +149,9 @@ func (AuthzEvent) Hooks() []ent.Hook {
 		hook.On(
 			func(next ent.Mutator) ent.Mutator {
 				return hook.AuthzEventFunc(func(ctx context.Context, m *gen.AuthzEventMutation) (ent.Value, error) {
-					event := models.AuthzEvent{}
+					event := gen.AuthzEvent{}
 					if action, ok := m.Action(); ok {
-						event.Action = models.AuthzAction(action)
+						event.Action = action
 					}
 
 					if actor, ok := m.ActorID(); ok {
@@ -176,7 +175,7 @@ func (UserSystemRole) Hooks() []ent.Hook {
 		hook.On(
 			func(next ent.Mutator) ent.Mutator {
 				return hook.UserSystemRoleFunc(func(ctx context.Context, m *gen.UserSystemRoleMutation) (ent.Value, error) {
-					row := models.UserSystemRole{}
+					row := gen.UserSystemRole{}
 					if key, ok := m.RoleKey(); ok {
 						row.RoleKey = key
 					}
@@ -198,9 +197,9 @@ func (LoginEvent) Hooks() []ent.Hook {
 		hook.On(
 			func(next ent.Mutator) ent.Mutator {
 				return hook.LoginEventFunc(func(ctx context.Context, m *gen.LoginEventMutation) (ent.Value, error) {
-					event := models.LoginEvent{}
+					event := gen.LoginEvent{}
 					if outcome, ok := m.Outcome(); ok {
-						event.Outcome = models.LoginOutcome(outcome)
+						event.Outcome = outcome
 					}
 
 					if err := event.Validate(); err != nil {

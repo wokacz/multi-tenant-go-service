@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // Provisioner creates organizations and the roles they start with.
@@ -21,12 +21,12 @@ import (
 // organization.
 type Provisioner interface {
 	// OrganizationBySlug returns the organization with that slug, or ErrNotFound.
-	OrganizationBySlug(ctx context.Context, slug string) (*models.Organization, error)
+	OrganizationBySlug(ctx context.Context, slug string) (*ent.Organization, error)
 
 	// CreateOrganization stores the organization together with the roles from
 	// the shipped catalog, in one transaction. An organization that existed
 	// briefly without its roles would be one nobody could administer.
-	CreateOrganization(ctx context.Context, org *models.Organization, roles []authz.RoleDefinition) (*models.Organization, error)
+	CreateOrganization(ctx context.Context, org *ent.Organization, roles []authz.RoleDefinition) (*ent.Organization, error)
 
 	// AllOrganizations lists every organization in the installation. It is the
 	// one listing that crosses tenants, which is why it sits behind a
@@ -64,7 +64,7 @@ type Provisioner interface {
 // OrganizationSummary is one organization as an installation administrator sees
 // it: the row, plus the one fact that cannot be read off it.
 type OrganizationSummary struct {
-	models.Organization
+	ent.Organization
 
 	// Owners is how many people can administer it.
 	//
@@ -108,8 +108,8 @@ const DefaultOrganizationName = "Default"
 // it from a migration — would put the permission lists of every shipped role
 // into SQL, where no test can compare them against the catalog they were copied
 // from, and where changing a role means writing a backfill by hand.
-func (s *Service) EnsureDefaultOrganization(ctx context.Context) (*models.Organization, error) {
-	existing, err := s.provisioner.OrganizationBySlug(ctx, models.DefaultOrganizationSlug)
+func (s *Service) EnsureDefaultOrganization(ctx context.Context) (*ent.Organization, error) {
+	existing, err := s.provisioner.OrganizationBySlug(ctx, ent.DefaultOrganizationSlug)
 	if err == nil {
 		return existing, nil
 	}
@@ -118,8 +118,8 @@ func (s *Service) EnsureDefaultOrganization(ctx context.Context) (*models.Organi
 		return nil, err
 	}
 
-	org := &models.Organization{
-		Slug: models.DefaultOrganizationSlug,
+	org := &ent.Organization{
+		Slug: ent.DefaultOrganizationSlug,
 		Name: DefaultOrganizationName,
 	}
 
@@ -137,7 +137,7 @@ func (s *Service) EnsureDefaultOrganization(ctx context.Context) (*models.Organi
 	// unique index on the slug decides, and the loser simply reads what the
 	// winner wrote.
 	if errors.Is(err, ErrSlugTaken) {
-		return s.provisioner.OrganizationBySlug(ctx, models.DefaultOrganizationSlug)
+		return s.provisioner.OrganizationBySlug(ctx, ent.DefaultOrganizationSlug)
 	}
 
 	return nil, err
@@ -253,13 +253,13 @@ func (s *Service) AllOrganizations(
 // It deliberately does not add the creator as owner. A platform administrator
 // creating an organization for somebody else should not silently end up inside
 // it — that is a separate, visible act, and PromoteToOwner is what performs it.
-func (s *Service) CreateOrganization(ctx context.Context, slug, name string) (*models.Organization, error) {
+func (s *Service) CreateOrganization(ctx context.Context, slug, name string) (*ent.Organization, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || utf8.RuneCountInString(name) > 100 {
 		return nil, ErrInvalidName
 	}
 
-	org := &models.Organization{Slug: strings.TrimSpace(slug), Name: name}
+	org := &ent.Organization{Slug: strings.TrimSpace(slug), Name: name}
 
 	return s.provisioner.CreateOrganization(ctx, org, authz.OrganizationRoles())
 }

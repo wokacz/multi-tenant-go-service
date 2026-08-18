@@ -31,7 +31,7 @@ import (
 // here too would leave it in the organization with no way out — and the seeder's reset
 // has to delete rows it retired earlier.
 //
-// What is *not* here: models.ErrProtected. A delete hook receives a predicate, not a
+// What is *not* here: ent.ErrProtected. A delete hook receives a predicate, not a
 // row, so it cannot see whether is_protected is set without a query of its own. The
 // repository loads the organization before deleting it, and that is where the
 // refusal belongs.

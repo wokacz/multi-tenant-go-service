@@ -13,7 +13,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 )
 
@@ -294,7 +294,7 @@ func TestASecondOwnerMakesDemotionPossible(t *testing.T) {
 		t.Fatal("the fixture has no owner role")
 	}
 
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, ownerID)
+	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, ownerID)
 
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
 	body := fmt.Sprintf(`{"role_ids":[%q]}`, viewer)
@@ -316,13 +316,13 @@ func TestAnAdministratorCannotReachAboveThemselves(t *testing.T) {
 
 	owner := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
-	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, owner)
+	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
 
 	// A second owner, so the last-owner rule cannot refuse these on its own.
 	// Without it the organization is protected here by accident, and the hole this
 	// test is about — an administrator cutting an owner out of an organization that
 	// has more than one — stays invisible.
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, owner)
+	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
 
 	member := f.orgPath("/members/" + target.String())
 
@@ -355,7 +355,7 @@ func TestAnOwnerCanStillActOnAnAdministrator(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	admin := f.repo.SeedShippedRole(f.orgID, authz.RoleAdmin)
-	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, admin)
+	target := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, admin)
 
 	f.call(t, http.MethodPatch, f.orgPath("/members/"+target.String()),
 		`{"status":"suspended"}`).expect(t, http.StatusOK)
@@ -375,7 +375,7 @@ func TestTheRankRuleDoesNotBlockLeaving(t *testing.T) {
 
 	// A second, more powerful member, so nothing else about the organization makes
 	// this refusable: the caller is not the last owner and holds no owner role.
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive,
+	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive,
 		f.repo.SeedShippedRole(f.orgID, authz.RoleOwner))
 
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+f.membership.String()), "").
@@ -400,7 +400,7 @@ func TestAnOwnerWhoseAccountIsDeletedCanBeRemoved(t *testing.T) {
 	}
 
 	ghostAccount := uuid.Must(uuid.NewV7())
-	ghost := f.repo.SeedMember(f.orgID, ghostAccount, models.MembershipActive, owner.ID)
+	ghost := f.repo.SeedMember(f.orgID, ghostAccount, ent.MembershipActive, owner.ID)
 	f.repo.SeedSoftDeletedUser(ghostAccount)
 
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+ghost.String()), "").
@@ -420,7 +420,7 @@ func TestAMembershipWhoseAccountIsDeletedIsNotListed(t *testing.T) {
 
 	viewer := f.repo.SeedShippedRole(f.orgID, authz.RoleViewer)
 	ghostAccount := uuid.Must(uuid.NewV7())
-	f.repo.SeedMember(f.orgID, ghostAccount, models.MembershipActive, viewer)
+	f.repo.SeedMember(f.orgID, ghostAccount, ent.MembershipActive, viewer)
 	f.repo.SeedSoftDeletedUser(ghostAccount)
 
 	var list struct {
@@ -479,7 +479,7 @@ func TestARoleInUseCannotBeDeleted(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	role := f.repo.SeedRole(f.orgID, "auditor", string(authz.PermMembersRead))
-	holder := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, role)
+	holder := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, role)
 
 	res := f.call(t, http.MethodDelete, f.orgPath("/roles/"+role.String()), "").
 		expect(t, http.StatusConflict)
@@ -523,7 +523,7 @@ func TestAMembershipFromAnotherOrganizationCannotBeTouched(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	foreign := f.repo.SeedOrganization("globex", "Globex")
-	foreignMember := f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), models.MembershipActive)
+	foreignMember := f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive)
 
 	f.call(t, http.MethodDelete, f.orgPath("/members/"+foreignMember.String()), "").
 		expect(t, http.StatusNotFound)
@@ -621,7 +621,7 @@ func TestAFailedInvitationMailStillCreatesTheMembership(t *testing.T) {
 
 	orgID := repo.SeedOrganization("acme", "Acme")
 	owner := repo.SeedShippedRole(orgID, authz.RoleOwner)
-	repo.SeedMember(orgID, session.User.ID, models.MembershipActive, owner)
+	repo.SeedMember(orgID, session.User.ID, ent.MembershipActive, owner)
 	viewer := repo.SeedShippedRole(orgID, authz.RoleViewer)
 
 	body := fmt.Sprintf(`{"email":"nobody@example.com","role_ids":[%q]}`, viewer)

@@ -39,6 +39,9 @@ func (MembershipRole) Edges() []ent.Edge {
 
 func (MembershipRole) Indexes() []ent.Index {
 	return []ent.Index{
+		// Assigning the same role twice is a constraint violation rather than a
+		// duplicate grant, which is what lets the API treat a repeated request as
+		// idempotent.
 		index.Fields("membership_id", "role_id").Unique().StorageKey("idx_membership_role"),
 	}
 }
@@ -75,7 +78,9 @@ func (RolePermission) Indexes() []ent.Index {
 	}
 }
 
-// InvitationRole is the role set an invitation promises.
+// InvitationRole is the role set an invitation promises. The roles have to
+// survive from the offer to the membership without being re-chosen at
+// acceptance — the person accepting must not pick what they are accepting.
 type InvitationRole struct {
 	ent.Schema
 }

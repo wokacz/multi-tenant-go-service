@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 type snapshotBody struct {
@@ -203,7 +203,7 @@ func TestTheSnapshotOmitsOrganizationsThatGrantNothing(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleViewer)
 
 	suspended := f.repo.SeedOrganization("beta", "Beta")
-	f.repo.SeedMember(suspended, f.userID, models.MembershipSuspended,
+	f.repo.SeedMember(suspended, f.userID, ent.MembershipSuspended,
 		f.repo.SeedShippedRole(suspended, authz.RoleOwner))
 
 	snapshot := f.snapshot(t)
@@ -213,7 +213,7 @@ func TestTheSnapshotOmitsOrganizationsThatGrantNothing(t *testing.T) {
 			continue
 		}
 
-		if entry.Status != string(models.MembershipSuspended) {
+		if entry.Status != string(ent.MembershipSuspended) {
 			t.Errorf("status = %q, want suspended", entry.Status)
 		}
 
@@ -233,7 +233,7 @@ func TestTheSnapshotIsScopedToTheCaller(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	foreign := f.repo.SeedOrganization("globex", "Globex")
-	f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), models.MembershipActive,
+	f.repo.SeedMember(foreign, uuid.Must(uuid.NewV7()), ent.MembershipActive,
 		f.repo.SeedShippedRole(foreign, authz.RoleOwner))
 
 	snapshot := f.snapshot(t)

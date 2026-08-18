@@ -24,8 +24,9 @@ func (Invitation) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("organization_id", uuid.UUID{}),
 
-		// Kept even though the token identifies the invitation: accepting compares it
-		// against the account's address, which is the narrower rule chosen in D4.
+		// Kept even though the token identifies the invitation: accepting compares
+		// it against the account's address, so a forwarded token cannot be spent
+		// by a different mailbox.
 		field.String("email").MaxLen(255).NotEmpty(),
 
 		field.String("token_hash").MaxLen(64).NotEmpty().Sensitive(),

@@ -9,11 +9,8 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// User is the first schema, and it is here to prove the pipeline rather than to
-// finish the model: the remaining twelve and every edge between them are stage 2.
-//
-// Column for column against models.User, because the acceptance test for stage 2 is
-// that Atlas finds nothing to change against the migration already in migrations/.
+// User is the account schema. Mixin Model gives id / timestamps; SoftDelete
+// adds deleted_at and is_protected.
 type User struct {
 	ent.Schema
 }

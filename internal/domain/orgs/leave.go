@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // Leave takes the caller out of one of their organizations.
@@ -39,7 +39,7 @@ func (s *Service) Leave(ctx context.Context, userID, membershipID uuid.UUID) err
 		// ActionMemberLeft, not ActionMemberRemoved: the row disappears the same
 		// way, and the history should still say which of the two happened.
 		return s.repo.RemoveMember(ctx, membership.Organization.ID, membershipID,
-			models.ActionMemberLeft, RefuseLastOwnerLoss(true))
+			ent.ActionMemberLeft, RefuseLastOwnerLoss(true))
 	}
 
 	return ErrNotFound

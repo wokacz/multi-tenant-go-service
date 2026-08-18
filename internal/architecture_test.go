@@ -27,23 +27,20 @@ func TestHumaStaysInsideTheAPIPackage(t *testing.T) {
 	forbidImport(t, internalRoot, apiRoot, "huma")
 }
 
-// TestGormDoesNotAppear is the destination of the migration off that ORM.
+// TestGormDoesNotAppear keeps the previous ORM from returning.
 //
 // Repositories translate driver errors into domain errors, which is what lets
 // internal/api map user.ErrNotFound onto a 404 without knowing that a database
-// was involved. An import of that library anywhere under internal/ means some
-// error is crossing that boundary untranslated — or that the dependency came
-// back after it was removed.
+// was involved. An import of that library anywhere under internal/ means the
+// dependency came back after it was removed.
 func TestGormDoesNotAppear(t *testing.T) {
 	forbidImport(t, internalRoot, "", "gorm.io")
 }
 
-// TestEntStaysInsideTheStore keeps the replacement ORM from spreading.
+// TestEntStaysInsideTheStore keeps the query-builder import from spreading.
 //
-// Generated ent types are a persistence detail. If one reaches the domain, the domain
-// changes shape — and then the tests that were supposed to prove "behaves exactly as
-// before" are themselves rewritten, which proves nothing. The repositories map
-// ent entities onto internal/store/models, and that boundary is this test.
+// Files outside internal/store may import the generated types
+// (internal/store/ent) but must not import entgo.io itself.
 func TestEntStaysInsideTheStore(t *testing.T) {
 	forbidImport(t, internalRoot, storeRoot, "entgo.io")
 }

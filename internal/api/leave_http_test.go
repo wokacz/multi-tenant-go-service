@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // leavePath is the self-service route. It names the membership, not the
@@ -78,7 +78,7 @@ func TestLeavingTwiceIsNotFound(t *testing.T) {
 func TestLeavingSomebodyElsesMembershipIsNotFound(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
-	other := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive)
+	other := f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive)
 
 	f.call(t, http.MethodDelete, leavePath(other), "").
 		expect(t, http.StatusNotFound)
@@ -133,7 +133,7 @@ func TestAnOwnerCanLeaveOnceThereIsAnother(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	owner := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, owner)
+	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, owner)
 
 	f.call(t, http.MethodDelete, leavePath(f.membership), "").
 		expect(t, http.StatusNoContent)
@@ -150,7 +150,7 @@ func TestLeavingIsRecordedAsLeaving(t *testing.T) {
 	f := newAuthzFixture(t, authz.RoleOwner)
 
 	second := f.repo.SeedShippedRole(f.orgID, authz.RoleOwner)
-	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), models.MembershipActive, second)
+	f.repo.SeedMember(f.orgID, uuid.Must(uuid.NewV7()), ent.MembershipActive, second)
 
 	f.call(t, http.MethodDelete, leavePath(f.membership), "").
 		expect(t, http.StatusNoContent)
@@ -172,9 +172,9 @@ func TestLeavingIsRecordedAsLeaving(t *testing.T) {
 
 	newest := body.Events[0]
 
-	if newest.Action != string(models.ActionMemberLeft) {
+	if newest.Action != string(ent.ActionMemberLeft) {
 		t.Errorf("action = %q, want %q — a departure is not a removal",
-			newest.Action, models.ActionMemberLeft)
+			newest.Action, ent.ActionMemberLeft)
 	}
 
 	if newest.Actor.ID != f.userID {

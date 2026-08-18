@@ -13,9 +13,10 @@ Zależności idą **do środka**. Warstwa zewnętrzna wie o wewnętrznej, nigdy 
 | Języki       | `internal/i18n`     | negocjacja `Accept-Language`, katalogi komunikatów             |
 
 ```
-internal/api ──▶ internal/domain ──▶ internal/store/models
+internal/api ──▶ internal/domain
                         ▲
-internal/store/repositories ─┘   (implementuje interfejsy domeny)
+internal/store/repositories ─┘   (implementuje interfejsy domeny;
+                                   typy to wygenerowane ent.User, ent.Organization, …)
 ```
 
 ## Dwie granice pilnowane testem, nie recenzją
@@ -43,8 +44,8 @@ internal/store/repositories/user.go       ← implementuje, z asercją
                                             var _ user.Repository = (*User)(nil)
 ```
 
-Dzięki temu store zależy od domeny, nigdy odwrotnie, a interfejs wymienia wyłącznie to, czego domena naprawdę używa —
-nie wszystko, co store potrafi.
+Interfejs nadal należy do domeny. Typy na tym interfejsie to wygenerowane `ent.User`, `ent.Organization` i reszta —
+nie ma drugiej paczki struktur. Klient zapytań i import `entgo.io` zostają w `internal/store`.
 
 Nowy moduł powtarza ten sam układ: `internal/domain/<rzecz>/repository.go` plus
 `internal/store/repositories/<rzecz>.go`. Krok po kroku:
@@ -67,9 +68,9 @@ internal/
 │   ├── authz/      katalog uprawnień i decyzja autoryzacyjna
 │   ├── orgs/       organizacje, członkostwa, role
 │   └── user/       konta, hasła, urządzenia, drugi składnik
-└── store/          trwałość            ← tylko tu żyje ent
+└── store/          trwałość            ← tylko tu żyje import entgo.io
     ├── ent/schema/ schemat (źródło prawdy dla bazy)
-    ├── models/     struktury domeny; repozytoria mapują na nie encje
+    ├── ent/        wygenerowane typy — to są modele
     └── repositories/
         └── memory/ fake in-memory, wspólny dla wszystkich testów
 ```

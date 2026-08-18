@@ -23,7 +23,6 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/rolepermission"
 	entuser "github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/usersystemrole"
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
 // Orgs implements orgs.Repository and orgs.Directory.
@@ -52,8 +51,8 @@ func translateOrgError(op string, err error) error {
 		return orgs.ErrNotFound
 	case isUniqueViolation(err):
 		return orgs.ErrRoleKeyTaken
-	case errors.Is(err, models.ErrProtected),
-		errors.Is(err, models.ErrRoleIsSystem),
+	case errors.Is(err, ent.ErrProtected),
+		errors.Is(err, ent.ErrRoleIsSystem),
 		errors.Is(err, orgs.ErrRoleProtected),
 		errors.Is(err, orgs.ErrAlreadyMember),
 		errors.Is(err, orgs.ErrLastOwner),
@@ -64,13 +63,13 @@ func translateOrgError(op string, err error) error {
 	}
 }
 
-func (r *Orgs) Organization(ctx context.Context, orgID uuid.UUID) (*models.Organization, error) {
+func (r *Orgs) Organization(ctx context.Context, orgID uuid.UUID) (*ent.Organization, error) {
 	row, err := r.db.Ent().Organization.Get(ctx, orgID)
 	if err != nil {
 		return nil, translateOrgError("organization", err)
 	}
 
-	out := organizationModel(row)
+	out := *row
 
 	return &out, nil
 }
@@ -94,9 +93,9 @@ func (r *Orgs) UpdateOrganization(ctx context.Context, orgID uuid.UUID, name str
 			return orgs.ErrNotFound
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionOrganizationUpdated,
+			Action:         ent.ActionOrganizationUpdated,
 			Detail:         name,
 		})
 	})
@@ -122,9 +121,9 @@ func (r *Orgs) DeleteOrganization(ctx context.Context, orgID uuid.UUID) error {
 			return err
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionOrganizationDeleted,
+			Action:         ent.ActionOrganizationDeleted,
 			Detail:         org.Slug,
 		})
 	})
@@ -170,7 +169,7 @@ type memberRow struct {
 	UserID   uuid.UUID
 	Name     string
 	Email    string
-	Status   models.MembershipStatus
+	Status   ent.MembershipStatus
 	JoinedAt *time.Time
 }
 
@@ -197,8 +196,8 @@ type memberPage struct {
 // HasUser() only asks whether the foreign key points at a users row. The
 // interceptor that hides retired rows runs on User queries, not on that
 // EXISTS, so a deleted account still satisfies HasUser — and WithUser then
-// returns nil. DeletedAtIsNil is the same predicate the GORM join wrote as
-// "u.deleted_at IS NULL".
+// returns nil. HasUserWith(DeletedAtIsNil()) is the predicate that actually
+// means the account is still there.
 func liveUser() predicate.Membership {
 	return membership.HasUserWith(entuser.DeletedAtIsNil())
 }
@@ -229,7 +228,7 @@ func (r *Orgs) memberRows(
 			UserID:   row.UserID,
 			Name:     u.Name,
 			Email:    u.Email,
-			Status:   models.MembershipStatus(row.Status),
+			Status:   row.Status,
 			JoinedAt: row.JoinedAt,
 		})
 	}
@@ -304,10 +303,10 @@ func (r *Orgs) AddMember(
 	invitedBy uuid.UUID,
 	at time.Time,
 ) (*orgs.Member, error) {
-	m := &models.Membership{
+	m := &ent.Membership{
 		OrganizationID: orgID,
 		UserID:         userID,
-		Status:         models.MembershipActive,
+		Status:         ent.MembershipActive,
 	}
 
 	if invitedBy != uuid.Nil {
@@ -328,7 +327,7 @@ func (r *Orgs) AddMember(
 		created, err := tx.Membership.Create().
 			SetOrganizationID(m.OrganizationID).
 			SetUserID(m.UserID).
-			SetStatus(membership.Status(m.Status)).
+			SetStatus(m.Status).
 			SetNillableInvitedBy(m.InvitedBy).
 			SetNillableJoinedAt(m.JoinedAt).
 			Save(ctx)
@@ -354,10 +353,10 @@ func (r *Orgs) AddMember(
 			return err
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
 			SubjectID:      &userID,
-			Action:         models.ActionMemberJoined,
+			Action:         ent.ActionMemberJoined,
 		})
 	})
 	if err != nil {
@@ -370,13 +369,13 @@ func (r *Orgs) AddMember(
 func (r *Orgs) SetMemberStatus(
 	ctx context.Context,
 	orgID, memberID uuid.UUID,
-	status models.MembershipStatus,
+	status ent.MembershipStatus,
 	at time.Time,
 	guard orgs.OwnerGuard,
 ) error {
-	action := models.ActionMemberSuspended
+	action := ent.ActionMemberSuspended
 	if status.GrantsPermissions() {
-		action = models.ActionMemberReinstated
+		action = ent.ActionMemberReinstated
 	}
 
 	err := r.withTx(ctx, func(tx *ent.Tx) error {
@@ -386,7 +385,7 @@ func (r *Orgs) SetMemberStatus(
 
 		update := tx.Membership.Update().
 			Where(membership.ID(memberID), membership.OrganizationID(orgID)).
-			SetStatus(membership.Status(status))
+			SetStatus(status)
 
 		// Reinstating somebody who never accepted stamps the join date; one who
 		// already has one keeps it, so "joined three years ago" is not rewritten to
@@ -412,7 +411,7 @@ func (r *Orgs) SetMemberStatus(
 			return orgs.ErrNotFound
 		}
 
-		return recordAboutMemberEnt(ctx, tx, orgID, memberID, &models.AuthzEvent{
+		return recordAboutMemberEnt(ctx, tx, orgID, memberID, &ent.AuthzEvent{
 			OrganizationID: &orgID,
 			Action:         action,
 			Detail:         string(status),
@@ -425,7 +424,7 @@ func (r *Orgs) SetMemberStatus(
 func (r *Orgs) RemoveMember(
 	ctx context.Context,
 	orgID, memberID uuid.UUID,
-	action models.AuthzAction,
+	action string,
 	guard orgs.OwnerGuard,
 ) error {
 	err := r.withTx(ctx, func(tx *ent.Tx) error {
@@ -437,7 +436,7 @@ func (r *Orgs) RemoveMember(
 		// attribute the entry to. This does not look the member up through users:
 		// a membership whose account is gone is still a row that has to be
 		// removable, and every other method reports that row as not found.
-		event := &models.AuthzEvent{OrganizationID: &orgID, Action: action}
+		event := &ent.AuthzEvent{OrganizationID: &orgID, Action: action}
 		if err := recordAboutMemberEnt(ctx, tx, orgID, memberID, event); err != nil {
 			return err
 		}
@@ -491,9 +490,9 @@ func (r *Orgs) ReplaceMemberRoles(
 			return err
 		}
 
-		return recordAboutMemberEnt(ctx, tx, orgID, memberID, &models.AuthzEvent{
+		return recordAboutMemberEnt(ctx, tx, orgID, memberID, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionMemberRolesChanged,
+			Action:         ent.ActionMemberRolesChanged,
 		})
 	})
 
@@ -536,9 +535,9 @@ func (r *Orgs) Roles(ctx context.Context, orgID uuid.UUID, limit, offset int) ([
 		return nil, fmt.Errorf("store: roles: %w", err)
 	}
 
-	rows := make([]models.Role, 0, len(found))
+	rows := make([]ent.Role, 0, len(found))
 	for _, row := range found {
-		rows = append(rows, roleModel(row))
+		rows = append(rows, *row)
 	}
 
 	return r.decorateRoles(ctx, rows)
@@ -552,7 +551,7 @@ func (r *Orgs) Role(ctx context.Context, orgID, roleID uuid.UUID) (*orgs.Role, e
 		return nil, translateOrgError("role", err)
 	}
 
-	decorated, err := r.decorateRoles(ctx, []models.Role{roleModel(row)})
+	decorated, err := r.decorateRoles(ctx, []ent.Role{*row})
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +561,7 @@ func (r *Orgs) Role(ctx context.Context, orgID, roleID uuid.UUID) (*orgs.Role, e
 
 // decorateRoles attaches permissions and holder counts with two queries rather
 // than two per role.
-func (r *Orgs) decorateRoles(ctx context.Context, rows []models.Role) ([]orgs.Role, error) {
+func (r *Orgs) decorateRoles(ctx context.Context, rows []ent.Role) ([]orgs.Role, error) {
 	out := make([]orgs.Role, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, orgs.Role{Role: row, Permissions: []authz.Permission{}})
@@ -621,7 +620,7 @@ func (r *Orgs) decorateRoles(ctx context.Context, rows []models.Role) ([]orgs.Ro
 func (r *Orgs) CreateRole(
 	ctx context.Context,
 	orgID uuid.UUID,
-	roleRow *models.Role,
+	roleRow *ent.Role,
 	permissions []authz.Permission,
 ) (*orgs.Role, error) {
 	roleRow.OrganizationID = orgID
@@ -650,9 +649,9 @@ func (r *Orgs) CreateRole(
 			return err
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionRoleCreated,
+			Action:         ent.ActionRoleCreated,
 			RoleID:         &roleRow.ID,
 			Detail:         roleRow.Key,
 		})
@@ -681,9 +680,9 @@ func (r *Orgs) UpdateRole(ctx context.Context, orgID, roleID uuid.UUID, name, de
 			return orgs.ErrNotFound
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionRoleUpdated,
+			Action:         ent.ActionRoleUpdated,
 			RoleID:         &roleID,
 			Detail:         name,
 		})
@@ -713,7 +712,7 @@ func (r *Orgs) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard or
 			return err
 		}
 
-		loaded := roleModel(row)
+		loaded := *row
 		if err := loaded.RefuseDelete(); err != nil {
 			return err
 		}
@@ -732,9 +731,9 @@ func (r *Orgs) DeleteRole(ctx context.Context, orgID, roleID uuid.UUID, guard or
 		// Recorded before the delete: the role id is captured while the row is
 		// still there, and the key with it, so an entry about a role that no
 		// longer exists still says which one.
-		if err := recordEnt(ctx, tx, &models.AuthzEvent{
+		if err := recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionRoleDeleted,
+			Action:         ent.ActionRoleDeleted,
 			RoleID:         &roleID,
 			Detail:         row.Key,
 		}); err != nil {
@@ -774,9 +773,9 @@ func (r *Orgs) ReplaceRolePermissions(
 			return err
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &orgID,
-			Action:         models.ActionRolePermissionsChanged,
+			Action:         ent.ActionRolePermissionsChanged,
 			RoleID:         &roleID,
 			Detail:         fmt.Sprintf("%d permissions", len(permissions)),
 		})
@@ -852,8 +851,8 @@ func (r *Orgs) MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]orgs
 	for _, row := range found {
 		out = append(out, orgs.Membership{
 			ID:           row.ID,
-			Organization: organizationModel(row.Edges.Organization),
-			Status:       models.MembershipStatus(row.Status),
+			Organization: *row.Edges.Organization,
+			Status:       row.Status,
 			RoleKeys:     keysByMembership[row.ID],
 		})
 	}
@@ -863,7 +862,7 @@ func (r *Orgs) MembershipsForUser(ctx context.Context, userID uuid.UUID) ([]orgs
 
 // --- orgs.Provisioner ---
 
-func (r *Orgs) OrganizationBySlug(ctx context.Context, slug string) (*models.Organization, error) {
+func (r *Orgs) OrganizationBySlug(ctx context.Context, slug string) (*ent.Organization, error) {
 	row, err := r.db.Ent().Organization.Query().
 		Where(organization.Slug(slug)).
 		Only(ctx)
@@ -871,7 +870,7 @@ func (r *Orgs) OrganizationBySlug(ctx context.Context, slug string) (*models.Org
 		return nil, translateOrgError("organization by slug", err)
 	}
 
-	out := organizationModel(row)
+	out := *row
 
 	return &out, nil
 }
@@ -885,9 +884,9 @@ func (r *Orgs) OrganizationBySlug(ctx context.Context, slug string) (*models.Org
 // grows; the alternative is a role list nobody can inspect or copy.
 func (r *Orgs) CreateOrganization(
 	ctx context.Context,
-	org *models.Organization,
+	org *ent.Organization,
 	roles []authz.RoleDefinition,
-) (*models.Organization, error) {
+) (*ent.Organization, error) {
 	err := r.withTx(ctx, func(tx *ent.Tx) error {
 		create := tx.Organization.Create().
 			SetSlug(org.Slug).
@@ -928,9 +927,9 @@ func (r *Orgs) CreateOrganization(
 			}
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			OrganizationID: &org.ID,
-			Action:         models.ActionOrganizationCreated,
+			Action:         ent.ActionOrganizationCreated,
 			Detail:         org.Slug,
 		})
 	})
@@ -1003,7 +1002,7 @@ func (r *Orgs) AllOrganizations(
 
 	for rows.Next() {
 		var (
-			org       models.Organization
+			org       ent.Organization
 			deletedAt sql.NullTime
 			owners    int
 		)
@@ -1067,9 +1066,9 @@ func (r *Orgs) GrantSystemRole(
 			return err
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			SubjectID: &userID,
-			Action:    models.ActionSystemRoleGranted,
+			Action:    ent.ActionSystemRoleGranted,
 			Detail:    string(key),
 		})
 	})
@@ -1099,9 +1098,9 @@ func (r *Orgs) RevokeSystemRole(ctx context.Context, userID uuid.UUID, key authz
 			return nil
 		}
 
-		return recordEnt(ctx, tx, &models.AuthzEvent{
+		return recordEnt(ctx, tx, &ent.AuthzEvent{
 			SubjectID: &userID,
-			Action:    models.ActionSystemRoleRevoked,
+			Action:    ent.ActionSystemRoleRevoked,
 			Detail:    string(key),
 		})
 	})
@@ -1143,7 +1142,7 @@ func (r *Orgs) RoleByKey(ctx context.Context, orgID uuid.UUID, key string) (*org
 		return nil, translateOrgError("role by key", err)
 	}
 
-	decorated, err := r.decorateRoles(ctx, []models.Role{roleModel(row)})
+	decorated, err := r.decorateRoles(ctx, []ent.Role{*row})
 	if err != nil {
 		return nil, err
 	}
@@ -1269,7 +1268,7 @@ func recordAboutMemberEnt(
 	ctx context.Context,
 	tx *ent.Tx,
 	orgID, memberID uuid.UUID,
-	event *models.AuthzEvent,
+	event *ent.AuthzEvent,
 ) error {
 	if audit.ActorFrom(ctx).IsZero() {
 		return nil
@@ -1286,20 +1285,4 @@ func recordAboutMemberEnt(
 	event.SubjectID = &subject
 
 	return recordEnt(ctx, tx, event)
-}
-
-func roleModel(row *ent.Role) models.Role {
-	out := models.Role{
-		OrganizationID: row.OrganizationID,
-		Key:            row.Key,
-		Name:           row.Name,
-		Description:    row.Description,
-		IsSystem:       row.IsSystem,
-	}
-
-	out.ID = row.ID
-	out.CreatedAt = row.CreatedAt
-	out.UpdatedAt = row.UpdatedAt
-
-	return out
 }

@@ -181,10 +181,9 @@ tasks:
         go run ./cmd/entmigrate {{.NAME}}
       - atlas migrate hash --dir "file://migrations"
 
-  # Migration to ent (see ENT.md). The dump is the "before" picture: the ent schema
-  # is correct when the database it produces is byte-identical to this file, which is
-  # a stronger statement than an empty Atlas diff — the diff can be empty because two
-  # things are equally wrong.
+  # Dump the schema of a freshly migrated throwaway database. schema:compare diffs
+  # this against the dump the ent schema produces; that is a stronger statement than
+  # an empty Atlas diff — the diff can be empty because two things are equally wrong.
   schema:dump:
     desc: Dump the schema of a freshly migrated throwaway database
     vars:

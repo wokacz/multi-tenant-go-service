@@ -20,7 +20,7 @@ t.Fatalf("attempts = %d, want %d — nakładające się próby zostały zgubione
 | Poziom                     | Gdzie                                                         | Potrzebuje bazy |
 |----------------------------|---------------------------------------------------------------|-----------------|
 | strukturalny / kontraktowy | `internal/architecture_test.go`, `internal/api/authz_test.go` | nie             |
-| modelowy                   | `internal/store/models/*_test.go`                             | nie             |
+| modelowy                   | `internal/store/ent/rules_test.go`                            | nie             |
 | domenowy                   | `internal/domain/*/…_test.go` (fake)                          | nie             |
 | HTTP                       | `internal/api/*_http_test.go` (pełny router)                  | nie             |
 | SQL                        | `internal/store/repositories/*_postgres_test.go`              | **tak**         |
@@ -131,7 +131,7 @@ type replaceResetErrorRepo struct {
 err error
 }
 
-func (r *replaceResetErrorRepo) ReplacePasswordReset(context.Context, *models.PasswordReset) error {
+func (r *replaceResetErrorRepo) ReplacePasswordReset(context.Context, *ent.PasswordReset) error {
 return r.err
 }
 ```

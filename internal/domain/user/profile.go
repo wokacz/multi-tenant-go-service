@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
 
 // UpdateProfile changes the two things an account owner may change about
@@ -28,7 +28,7 @@ import (
 // mode in the store to get wrong. Two concurrent edits therefore end with the
 // second one's values, which is what "last writer wins" means and is fine for a
 // profile: nothing here is a decision anybody else depends on.
-func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, name, locale *string) (*models.User, error) {
+func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, name, locale *string) (*ent.User, error) {
 	current, err := s.repo.ByID(ctx, userID)
 	if err != nil {
 		return nil, err
