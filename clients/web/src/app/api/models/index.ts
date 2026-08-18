@@ -58,6 +58,17 @@ export interface BeginEmailChangeRequest {
   password: string;
 }
 
+export interface ChangePasswordRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Current password */
+  current_password: string;
+  /** New password */
+  password: string;
+  /** New password again */
+  password_confirm: string;
+}
+
 export interface ConfirmEmailChangeRequest {
   /** A URL to the JSON Schema for this object. */
   readonly $schema?: string;

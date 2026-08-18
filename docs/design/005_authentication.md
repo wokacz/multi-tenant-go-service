@@ -73,8 +73,12 @@ od „wygasły" od „zły podpis" pozwoliłoby badać weryfikator własność p
 
 ## Epoka sesji
 
-`users.session_epoch` to licznik kopiowany do tokenu przy wydaniu. Reset hasła i zawieszenie konta zwiększają go w tej
-samej transakcji, w której zapisują zmianę.
+`users.session_epoch` to licznik kopiowany do tokenu przy wydaniu. Reset hasła, zmiana hasła w sesji i zawieszenie konta
+zwiększają go w tej samej instrukcji, w której zapisują zmianę — nie ma chwili, w której nowe hasło już obowiązuje, a
+tokeny wydane pod starym jeszcze działają. `DELETE /v1/me/sessions` podbija samą epokę i nic więcej.
+
+Inkrementacja jest **wyrażeniem SQL**, nie odczytem i zapisem: dwie równoległe zmiany, które odczytają 4, obie zapisałyby
+5, a token wydany pod 4 przeżyłby jedną z nich.
 
 Token wydany wcześniej ma starą epokę, więc przy kolejnym żądaniu odpada — mimo poprawnego podpisu i ważnego `exp`. Daje
 to unieważnianie **bez listy odwołań**, której trzeba by pilnować i czyścić.
@@ -83,14 +87,44 @@ to unieważnianie **bez listy odwołań**, której trzeba by pilnować i czyści
 
 | Zdarzenie            | Skutek                                                  |
 |----------------------|---------------------------------------------------------|
-| Reset hasła          | padają **wszystkie** sesje konta (epoka +1)             |
-| Zawieszenie konta    | padają wszystkie sesje, a nowe logowanie jest odrzucane |
-| Odwołanie urządzenia | padają sesje **tego urządzenia**                        |
-| Wygaśnięcie          | pada pojedynczy token po `AUTH_TOKEN_TTL`               |
-| Zmiana adresu        | **nic** — patrz [niżej](#zmiana-adresu-wymaga-dowodu-z-nowej-skrzynki) |
+| Reset hasła            | padają **wszystkie** sesje konta (epoka +1)             |
+| Zmiana hasła w sesji   | to samo — łącznie z sesją, która o zmianę poprosiła     |
+| „Wyloguj wszędzie"     | to samo, bez ruszania hasła                             |
+| Zawieszenie konta      | padają wszystkie sesje, a nowe logowanie jest odrzucane |
+| Odwołanie urządzenia   | padają sesje **tego urządzenia**                        |
+| Wygaśnięcie            | pada pojedynczy token po `AUTH_TOKEN_TTL`               |
+| Zmiana adresu          | **nic** — patrz [niżej](#zmiana-adresu-wymaga-dowodu-z-nowej-skrzynki) |
+| Zmiana `name`/`locale` | **nic** — to nie są dane uwierzytelniające              |
 
-Nie ma osobnego „wylogowania". `DELETE /v1/me/devices/{id}` na własnym urządzeniu robi dokładnie to i działa
-natychmiast.
+## Zmiana hasła i „wyloguj wszędzie"
+
+| Operacja           | Ścieżka                | Wymaga                    |
+|--------------------|------------------------|---------------------------|
+| zmiana hasła       | `POST /v1/me/password` | **aktualnego hasła**      |
+| wyloguj wszędzie   | `DELETE /v1/me/sessions` | tylko tokenu            |
+
+Do niedawna hasło można było zmienić **tylko przez reset**, czyli mając dostęp do skrzynki. Podbicie epoki też istniało
+wyłącznie jako efekt uboczny resetu albo zawieszenia — a chęć zakończenia sesji bez zmiany hasła, któremu się dalej ufa,
+jest przypadkiem zwykłym: sesja została otwarta na maszynie, której się już nie ma.
+
+**Aktualne hasło jest wymagane** z tego samego powodu, dla którego wymaga go zmiana adresu i przełącznik drugiego
+składnika: token, który wyciekł z przeglądarki, nie może wystarczyć do zmiany, która **odcina właściciela od własnego
+konta**.
+
+**Sesja wołającego też pada.** To wynika z podbicia epoki i jest zamierzone, nie ograniczeniem. Kto zmienia hasło, albo
+sądzi, że ktoś je znał — wtedy powinny paść wszystkie sesje — albo nie, i wtedy ponowne zalogowanie kosztuje jeden ekran.
+Utrzymanie tej sesji wymagałoby **wydania tokenu w tym miejscu**, a token wydaje ten endpoint, który rozstrzyga, czy
+potrzebny jest drugi składnik.
+
+**Nie ma reguły „nowe hasło musi różnić się od starego".** Kosztuje drugie porównanie bcrypt i nic nie chroni: kto wpisze
+to samo hasło, właśnie dowiódł, że je zna, a epoka i tak kończy pozostałe sesje — czyli to, po co przyszedł.
+
+**Urządzenia zostają.** `DELETE /v1/me/sessions` kończy sesje; prawo urządzenia do trzymania sesji odbiera
+`DELETE /v1/me/devices/{id}`. Pod tą ścieżką **nie ma czego listować** — sesje to tokeny, a `session_epoch` jest jedynym
+stanem, jaki po nich zostaje.
+
+`POST /v1/me/password` dzieli budżet limitera z resetem hasła: aktualne hasło jest sekretem, który da się tu zgadywać
+uwierzytelnionym tokenem.
 
 ## Co sprawdza `requireBearer`
 

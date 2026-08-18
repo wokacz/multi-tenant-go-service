@@ -137,6 +137,40 @@ func (r *User) UpdateProfile(ctx context.Context, userID uuid.UUID, name, locale
 	return nil
 }
 
+func (r *User) SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	return r.bumpEpoch(ctx, "set password", userID, map[string]any{
+		"password_hash": passwordHash,
+	})
+}
+
+func (r *User) BumpSessionEpoch(ctx context.Context, userID uuid.UUID) error {
+	return r.bumpEpoch(ctx, "bump session epoch", userID, map[string]any{})
+}
+
+// bumpEpoch applies updates and moves session_epoch in the same statement.
+//
+// The increment is an expression rather than a read and a write: two concurrent
+// changes that both read 4 would both write 5, and a token issued under 4 would
+// survive one of them.
+func (r *User) bumpEpoch(ctx context.Context, op string, userID uuid.UUID, updates map[string]any) error {
+	updates["session_epoch"] = gorm.Expr("session_epoch + 1")
+
+	res := r.db.WithContext(ctx).
+		Session(&gorm.Session{SkipHooks: true}).
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		Updates(updates)
+	if res.Error != nil {
+		return fmt.Errorf("store: %s: %w", op, res.Error)
+	}
+
+	if res.RowsAffected == 0 {
+		return user.ErrNotFound
+	}
+
+	return nil
+}
+
 func (r *User) SetSuspended(ctx context.Context, userID uuid.UUID, at *time.Time) error {
 	updates := map[string]any{"suspended_at": at}
 	if at != nil {

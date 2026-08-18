@@ -70,6 +70,7 @@ zawartości.
 | `user.ErrInvalidEmailCode`                                                                  | 401    | `invalid_email_code`                            |
 | `user.ErrEmailTaken`                                                                        | 409    | `email_taken` (tylko przy zmianie adresu)       |
 | `user.ErrSameEmail`, `ErrEmailInvalid`                                                      | 422    | `same_email`, `invalid_email`                   |
+| `user.ErrLocaleUnsupported`                                                                 | 422    | `unsupported_locale`                            |
 | `authz.ErrUnknownPermission`, `ErrWrongScope`                                               | 422    | `unknown_permission`, `wrong_scope`             |
 | `orgs.ErrLastOwner`, `ErrRoleInUse`, `ErrRoleKeyTaken`, `ErrAlreadyMember`, `ErrSlugTaken` | 409    | odpowiedni kod                                  |
 | `models.ErrProtected`                                                                      | 409    | `record_protected`                              |
@@ -110,6 +111,19 @@ User.Locale  →  Accept-Language  →  en
 Zapisanie fallbacku dla kogoś, kto nie wyraził wyboru, zamienia zgadnięcie w trwałą decyzję i na zawsze wyłącza
 negocjację per żądanie. `Catalog.Match` odróżnia „nie poprosił" od „poprosił o coś, czego nie mamy"; `Catalog.Negotiate`
 zawsze odpowiada, bo odpowiedź trzeba w czymś napisać.
+
+**Trzecia funkcja: `Catalog.Resolve`** — dla języka **wybranego świadomie**, przez `PATCH /v1/me`. Jak `Match` zgłasza
+brak zamiast schodzić do fallbacku: zapamiętanie angielskiego dla kogoś, kto poprosił o niemiecki, dałoby mu na stałe
+język, o który nigdy nie prosił, więc taka prośba kończy się `422 unsupported_locale`. `Resolve` **normalizuje** też tag —
+`pl-PL` zapisuje się jako `pl`, żeby w kolumnie była jedna pisownia na język, a nie tyle, ile przeglądarek.
+
+Puste `locale` w `PATCH /v1/me` to wartość znacząca: „nie mam preferencji, negocjuj per żądanie". Dlatego pola żądania są
+wskaźnikami — bez tego nie da się odróżnić „nie wspominam o tym polu" od „ustaw je na puste", a raz wybranego języka nie
+dałoby się oddać przeglądarce.
+
+Katalog żyje **przy krawędzi**, nie w `internal/domain`: rejestracja rozstrzyga język z nagłówka w handlerze i zmiana
+profilu robi to samo. Domena dostaje już rozstrzygnięty tag, a `user.ErrLocaleUnsupported` jest tylko słownikiem, w
+którym handler zgłasza odmowę.
 
 Parsowanie `Accept-Language` idzie przez `golang.org/x/text/language`. Ręczny parser myli wagi `q` i nie wie, że `pl-PL`
 ma trafić do katalogu `pl`.

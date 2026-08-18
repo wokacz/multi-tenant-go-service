@@ -122,6 +122,36 @@ components:
         - new_email
         - password
       type: object
+    ChangePasswordRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/ChangePasswordRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        current_password:
+          description: Current password
+          maxLength: 72
+          minLength: 1
+          type: string
+        password:
+          description: New password
+          maxLength: 72
+          minLength: 12
+          type: string
+        password_confirm:
+          description: New password again
+          maxLength: 72
+          minLength: 12
+          type: string
+      required:
+        - current_password
+        - password
+        - password_confirm
+      type: object
     ConfirmEmailChangeRequest:
       additionalProperties: false
       properties:
@@ -1930,6 +1960,54 @@ paths:
       summary: List the caller's organizations
       tags:
         - organizations
+  /v1/me/password:
+    post:
+      description: "Requires the current password. Until now the only way to change a password was to forget it and go through POST /v1/password-resets, which needs access to the mailbox. Every token issued for the account stops working, this request's own included, so the client has to sign in again — the same thing a reset already did. Trusted devices are untouched: this ends sessions, and DELETE /v1/me/devices/{id} is what ends a device."
+      operationId: change-password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Change the caller's own password
+      tags:
+        - auth
   /v1/me/permissions:
     get:
       description: "The snapshot a client uses to decide what to render. Self-service: no permission is required and none can take it away. It is a hint, not a decision — every request is authorized again on the server, so a client holding a stale snapshot receives a 403 and should refresh. Carries an ETag; send it back as If-None-Match to get a 304."
@@ -1976,6 +2054,36 @@ paths:
       summary: What the caller may do, everywhere
       tags:
         - organizations
+  /v1/me/sessions:
+    delete:
+      description: "Invalidates every token issued for the account, including the one making the request. For somebody who thinks a session is open on a machine they no longer have — which is not a reason to change a password they still trust. There is nothing to list at this path: sessions are tokens, and the account's session epoch is the only state behind them. Trusted devices are a separate list at GET /v1/me/devices."
+      operationId: sign-out-everywhere
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Not Found
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Document"
+          description: Internal Server Error
+      security:
+        - bearer: []
+      summary: Sign out of every session
+      tags:
+        - auth
   /v1/me/two-factor:
     put:
       description: Requires the current password as well as the token. Enabling also trusts the calling device, so an account whose address no longer receives mail is not locked out by its own setting; every other device will be asked for a code on its next sign-in.

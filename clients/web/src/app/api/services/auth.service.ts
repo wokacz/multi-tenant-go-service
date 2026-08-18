@@ -24,6 +24,7 @@ import {
   BeginEmailChangeRequest,
   RequestOptions,
   ConfirmEmailChangeRequest,
+  ChangePasswordRequest,
   SetTwoFactorRequest,
   RequestPasswordResetRequest,
   ConfirmPasswordResetRequest,
@@ -124,6 +125,82 @@ export class AuthService {
 
     return this.httpClient.request('post', url, {
       body: confirmEmailChangeRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  changePassword(
+    changePasswordRequest: ChangePasswordRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<any>;
+  changePassword(
+    changePasswordRequest: ChangePasswordRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  changePassword(
+    changePasswordRequest: ChangePasswordRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Requires the current password. Until now the only way to change a password was to forget it and go through POST /v1/password-resets, which needs access to the mailbox. Every token issued for the account stops working, this request's own included, so the client has to sign in again — the same thing a reset already did. Trusted devices are untouched: this ends sessions, and DELETE /v1/me/devices/{id} is what ends a device. */
+  changePassword(
+    changePasswordRequest: ChangePasswordRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/password`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: changePasswordRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  signOutEverywhere(observe?: 'body', options?: RequestOptions<'json'>): Observable<any>;
+  signOutEverywhere(
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<any>>;
+  signOutEverywhere(
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<any>>;
+  /** Invalidates every token issued for the account, including the one making the request. For somebody who thinks a session is open on a machine they no longer have — which is not a reason to change a password they still trust. There is nothing to list at this path: sessions are tokens, and the account's session epoch is the only state behind them. Trusted devices are a separate list at GET /v1/me/devices. */
+  signOutEverywhere(
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me/sessions`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+
+    return this.httpClient.request('delete', url, {
       observe,
       headers,
       reportProgress: options?.reportProgress,

@@ -115,6 +115,19 @@ type Repository interface {
 	// account back to negotiating per request.
 	UpdateProfile(ctx context.Context, userID uuid.UUID, name, locale string) error
 
+	// SetPassword writes a new hash and bumps the session epoch in one statement,
+	// so there is no instant where the new password is in force and tokens issued
+	// under the old one still work.
+	SetPassword(ctx context.Context, userID uuid.UUID, passwordHash string) error
+
+	// BumpSessionEpoch invalidates every token already issued for the account.
+	//
+	// It is the whole of "sign out everywhere": sessions are JWTs, so there is no
+	// list of them to walk — the epoch in the token is compared against the column
+	// on every authenticated request, and moving the column is what makes tokens
+	// already handed out stop working.
+	BumpSessionEpoch(ctx context.Context, userID uuid.UUID) error
+
 	// SetSuspended blocks or unblocks an account. Suspending also bumps the
 	// session epoch, so tokens already issued stop working on the next request
 	// rather than at expiry.

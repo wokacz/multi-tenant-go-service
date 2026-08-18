@@ -166,6 +166,35 @@ func (m *Users) UpdateProfile(_ context.Context, userID uuid.UUID, name, locale 
 	return nil
 }
 
+func (m *Users) SetPassword(_ context.Context, userID uuid.UUID, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok || u.IsDeleted() {
+		return user.ErrNotFound
+	}
+
+	u.PasswordHash = passwordHash
+	u.SessionEpoch++
+
+	return nil
+}
+
+func (m *Users) BumpSessionEpoch(_ context.Context, userID uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok || u.IsDeleted() {
+		return user.ErrNotFound
+	}
+
+	u.SessionEpoch++
+
+	return nil
+}
+
 func (m *Users) SetSuspended(_ context.Context, userID uuid.UUID, at *time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

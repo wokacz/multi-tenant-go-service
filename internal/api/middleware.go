@@ -265,6 +265,13 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 		// per-code attempt cap.
 		case r.Method == http.MethodPost && r.URL.Path == v1.Prefix+"/me/email":
 			lim = s.registerLimit
+
+		// Changing a password takes the current one, which makes this an
+		// authenticated guessing surface: a token with a wrong password attached
+		// still gets an answer. It shares the reset budget rather than getting a
+		// fourth knob, because both are "prove a secret to move the password".
+		case r.Method == http.MethodPost && r.URL.Path == v1.Prefix+"/me/password":
+			lim = s.resetLimit
 		}
 
 		if lim != nil && !lim.Allow(s.remoteIP(r)) {

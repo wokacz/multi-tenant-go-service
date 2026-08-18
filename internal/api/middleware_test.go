@@ -128,6 +128,7 @@ func TestRateLimitAppliesToEveryCostlyRoute(t *testing.T) {
 		"/v1/password-resets/confirm",
 		"/v1/orgs/018f0000-0000-7000-8000-000000000000/members",
 		"/v1/me/email",
+		"/v1/me/password",
 	}
 
 	for _, path := range limited {

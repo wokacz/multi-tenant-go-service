@@ -56,6 +56,8 @@ var selfServiceOperations = map[string]bool{
 	"list-my-invitations":   true,
 	"accept-invitation":     true,
 	"begin-email-change":    true,
+	"change-password":       true,
+	"sign-out-everywhere":   true,
 	"confirm-email-change":  true,
 	"decline-invitation":    true,
 
