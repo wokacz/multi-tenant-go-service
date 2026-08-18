@@ -148,6 +148,12 @@ func Error(ctx context.Context, err error) error {
 	// 422 with a code of its own rather than a bare validation failure: the client
 	// asked for a language this build does not ship, and the fix is to pick another
 	// one — which is a different instruction from "that field is malformed".
+	// Normally unreachable over HTTP: the schema's minItems, maxItems and
+	// uniqueItems refuse those shapes first, with a message naming the field. This
+	// is what a repeated address that differs only in case comes back as.
+	case errors.Is(err, orgs.ErrInvalidInvitationBatch):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidBatch)
+
 	case errors.Is(err, user.ErrLocaleUnsupported):
 		return newDocument(locale, http.StatusUnprocessableEntity, CodeUnsupportedLocale)
 

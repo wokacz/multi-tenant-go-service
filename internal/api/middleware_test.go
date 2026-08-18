@@ -129,6 +129,8 @@ func TestRateLimitAppliesToEveryCostlyRoute(t *testing.T) {
 		"/v1/orgs/018f0000-0000-7000-8000-000000000000/members",
 		"/v1/me/email",
 		"/v1/me/password",
+		"/v1/orgs/018f0000-0000-7000-8000-000000000000/invitations",
+		"/v1/orgs/018f0000-0000-7000-8000-000000000000/invitations/018f0000-0000-7000-8000-000000000001/reissue",
 	}
 
 	for _, path := range limited {
@@ -139,6 +141,7 @@ func TestRateLimitAppliesToEveryCostlyRoute(t *testing.T) {
 				cfg.RegisterPerMinute = perMinute
 				cfg.LoginPerMinute = perMinute
 				cfg.ResetPerMinute = perMinute
+				cfg.InvitePerMinute = perMinute
 			})
 
 			body := `{"name":"Ada","email":"ada@example.com","password":"twelve-chars",` +

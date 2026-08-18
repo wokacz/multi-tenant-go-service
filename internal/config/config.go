@@ -72,6 +72,17 @@ type Config struct {
 	LoginPerMinute    int
 	ResetPerMinute    int
 
+	// InvitePerMinute caps the routes that mail an address the caller named:
+	// inviting members and reissuing an invitation.
+	//
+	// It is separate from RegisterPerMinute and higher than it because the two are
+	// not the same act. Registration is anonymous and each request costs a bcrypt
+	// hash; inviting needs a token, a permission in an organization, and mails
+	// nobody who was not named by somebody trusted with members.invite. Sharing
+	// the budget meant onboarding a team from one office address stopped at the
+	// fifth person, and the fix was a number, not a bucket.
+	InvitePerMinute int
+
 	// MaxRequestBytes bounds the request body so a client cannot pin memory
 	// with an unbounded JSON document.
 	MaxRequestBytes int64
@@ -185,6 +196,7 @@ func Load() (*Config, error) {
 		RegisterPerMinute: getInt("REGISTER_PER_MINUTE", 5),
 		LoginPerMinute:    getInt("LOGIN_PER_MINUTE", 5),
 		ResetPerMinute:    getInt("RESET_PER_MINUTE", 5),
+		InvitePerMinute:   getInt("INVITE_PER_MINUTE", 30),
 		MaxRequestBytes:   int64(getInt("MAX_REQUEST_BYTES", 1<<20)),
 
 		ReadHeaderTimeout: 5 * time.Second,
@@ -311,6 +323,10 @@ func (c *Config) validate() []error {
 
 	if c.ResetPerMinute < 0 {
 		errs = append(errs, fmt.Errorf("config: RESET_PER_MINUTE must be >= 0, got %d", c.ResetPerMinute))
+	}
+
+	if c.InvitePerMinute < 0 {
+		errs = append(errs, fmt.Errorf("config: INVITE_PER_MINUTE must be >= 0, got %d", c.InvitePerMinute))
 	}
 
 	if c.MaxRequestBytes < 1024 {

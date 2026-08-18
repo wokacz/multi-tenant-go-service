@@ -28,6 +28,8 @@ import {
   UpdateOrganizationRequest,
   ListAuditOutputBody,
   ListInvitationsOutputBody,
+  InviteMembersRequest,
+  InviteMembersOutputBody,
   InvitationResponse,
   ListMembersOutputBody,
   AddMemberRequest,
@@ -407,6 +409,58 @@ export class OrganizationsService {
     });
   }
 
+  inviteMembers(
+    orgID: string,
+    inviteMembersRequest: InviteMembersRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<InviteMembersOutputBody>;
+  inviteMembers(
+    orgID: string,
+    inviteMembersRequest: InviteMembersRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<InviteMembersOutputBody>>;
+  inviteMembers(
+    orgID: string,
+    inviteMembersRequest: InviteMembersRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<InviteMembersOutputBody>>;
+  /** One request, one role set, up to 50 addresses. It exists because onboarding a team one request at a time ran into the rate limit, and because each of those requests was identical apart from the address. Requires members.invite, and every role named must be one the caller could grant themselves. Every address gets its own outcome rather than the batch failing on the first refusal: invited, or already_member for somebody who is in the organization or has an offer outstanding. An address that is not registered anywhere is still invited, so this cannot be used to discover who has an account. Match the results by address, not by position. */
+  inviteMembers(
+    orgID: string,
+    inviteMembersRequest: InviteMembersRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/orgs/${orgID}/invitations`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Advertise the response content type declared in the spec
+    if (!headers.has('Accept')) {
+      headers = headers.set('Accept', 'application/json');
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('post', url, {
+      body: inviteMembersRequest,
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
   withdrawInvitation(
     orgID: string,
     invitationID: string,
@@ -519,7 +573,7 @@ export class OrganizationsService {
     observe?: 'events',
     options?: RequestOptions<'json'>,
   ): Observable<HttpEvent<ListMembersOutputBody>>;
-  /** Everyone in the organization, including invitations and suspensions, with the roles each holds. Requires members.read. */
+  /** Everyone in the organization, suspensions included, with the roles each holds. Invitations are not members and are listed at GET /v1/orgs/{orgID}/invitations. Requires members.read. */
   listMembers(
     orgID: string,
     limit?: number,

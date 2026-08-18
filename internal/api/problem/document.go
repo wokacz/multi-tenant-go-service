@@ -59,6 +59,7 @@ const (
 	CodeRoleKeyTaken        = "role_key_taken"
 	CodeSlugTaken           = "slug_taken"
 	CodeAlreadyMember       = "already_member"
+	CodeInvalidBatch        = "invalid_invitation_batch"
 	CodeRecordProtected     = "record_protected"
 	CodeInvalidName         = "invalid_name"
 	CodeInvalidEmail        = "invalid_email"

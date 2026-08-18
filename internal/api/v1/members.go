@@ -24,8 +24,8 @@ import (
 // checking that the account is actually in this organization.
 type MemberResponse struct {
 	ID       uuid.UUID             `json:"id" format:"uuid" doc:"Membership id, used to address this person here"`
-	UserID   *uuid.UUID            `json:"user_id,omitempty" format:"uuid" doc:"The account behind the membership. Absent while the invitation is outstanding, so listing members cannot tell a registered address from an unknown one."`
-	Name     string                `json:"name,omitempty" doc:"Display name. Absent until the invitation is accepted."`
+	UserID   *uuid.UUID            `json:"user_id,omitempty" format:"uuid" doc:"The account behind the membership. Always present now that an invitation is not a membership; the field stays optional so clients written against the older contract keep working."`
+	Name     string                `json:"name,omitempty" doc:"Display name"`
 	Email    string                `json:"email" format:"email" doc:"Email address"`
 	Status   string                `json:"status" enum:"active,suspended" doc:"Whether the membership grants anything"`
 	JoinedAt *time.Time            `json:"joined_at,omitempty" doc:"When the membership first became active"`
@@ -127,8 +127,9 @@ func registerMembers(api huma.API, service *orgs.Service, mailer mail.Sender, lo
 		Method:      http.MethodGet,
 		Path:        Prefix + "/orgs/{orgID}/members",
 		Summary:     "List members",
-		Description: "Everyone in the organization, including invitations and " +
-			"suspensions, with the roles each holds. Requires members.read.",
+		Description: "Everyone in the organization, suspensions included, with the " +
+			"roles each holds. Invitations are not members and are listed at " +
+			"GET /v1/orgs/{orgID}/invitations. Requires members.read.",
 		Tags:     []string{"organizations"},
 		Security: bearer(),
 		Errors:   orgErrors(),
@@ -150,6 +151,27 @@ func registerMembers(api huma.API, service *orgs.Service, mailer mail.Sender, lo
 		DefaultStatus: http.StatusCreated,
 		Errors:        append(orgErrors(), http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests),
 	}, h.add)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "invite-members",
+		Method:      http.MethodPost,
+		Path:        Prefix + "/orgs/{orgID}/invitations",
+		Summary:     "Invite several members at once",
+		Description: "One request, one role set, up to 50 addresses. It exists " +
+			"because onboarding a team one request at a time ran into the rate " +
+			"limit, and because each of those requests was identical apart from the " +
+			"address. Requires members.invite, and every role named must be one the " +
+			"caller could grant themselves. " +
+			"Every address gets its own outcome rather than the batch failing on the " +
+			"first refusal: invited, or already_member for somebody who is in the " +
+			"organization or has an offer outstanding. An address that is not " +
+			"registered anywhere is still invited, so this cannot be used to " +
+			"discover who has an account. Match the results by address, not by " +
+			"position.",
+		Tags:     []string{"organizations"},
+		Security: bearer(),
+		Errors:   append(orgErrors(), http.StatusUnprocessableEntity, http.StatusTooManyRequests),
+	}, h.inviteMany)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "update-member-status",
@@ -283,6 +305,76 @@ func (h *memberHandlers) add(ctx context.Context, in *AddMemberInput) (*Invitati
 	}
 
 	return &InvitationOutput{Body: newInvitationResponse(invitation)}, nil
+}
+
+// InviteMembersRequest is one role set and a list of addresses.
+//
+// The schema does the counting: minItems, maxItems and uniqueItems mean an empty
+// list, an over-long one and a repeated address are refused at the edge with a
+// message naming the field. The service repeats the checks because it has to
+// normalise first — Ada@example.com and ada@example.com are one address, and
+// uniqueItems cannot see that.
+type InviteMembersRequest struct {
+	Emails  []string    `json:"emails" minItems:"1" maxItems:"50" uniqueItems:"true" format:"email" doc:"Addresses to invite. An existing account is not required."`
+	RoleIDs []uuid.UUID `json:"role_ids" doc:"Roles to grant every one of them. Each must be a role the caller could grant themselves."`
+}
+
+type InviteMembersInput struct {
+	OrgID uuid.UUID `path:"orgID" format:"uuid" doc:"Organization id"`
+	Body  InviteMembersRequest
+}
+
+// InviteResultResponse is one address's answer.
+type InviteResultResponse struct {
+	Email  string `json:"email" format:"email" doc:"The address, normalised"`
+	Status string `json:"status" enum:"invited,already_member" doc:"What happened to this one"`
+}
+
+type InviteMembersOutput struct {
+	Body struct {
+		Results []InviteResultResponse `json:"results"`
+	}
+}
+
+func (h *memberHandlers) inviteMany(ctx context.Context, in *InviteMembersInput) (*InviteMembersOutput, error) {
+	grant, err := grantFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	outcomes, err := h.orgs.InviteMany(ctx, grant, in.Body.Emails, in.Body.RoleIDs)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	out := &InviteMembersOutput{}
+	out.Body.Results = make([]InviteResultResponse, 0, len(outcomes))
+
+	for i := range outcomes {
+		outcome := &outcomes[i]
+
+		status := "already_member"
+		if outcome.Invitation != nil {
+			status = "invited"
+
+			// One message per invitation, each with its own token. A failure to
+			// send is logged and does not fail the request: the row exists, and
+			// the invitation can be reissued.
+			if h.mail != nil {
+				if err := h.mail.SendInvitation(ctx, outcome.Invitation.Email,
+					outcome.Invitation.Organization.Name, outcome.Token,
+					outcome.Invitation.ExpiresAt); err != nil {
+					logger(h.log).ErrorContext(ctx, "invitation mail failed", "error", err)
+				}
+			}
+		}
+
+		out.Body.Results = append(out.Body.Results, InviteResultResponse{
+			Email: outcome.Email, Status: status,
+		})
+	}
+
+	return out, nil
 }
 
 func (h *memberHandlers) setStatus(ctx context.Context, in *UpdateMemberStatusInput) (*MemberOutput, error) {

@@ -249,15 +249,24 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 			r.URL.Path == v1.Prefix+"/password-resets/confirm"):
 			lim = s.resetLimit
 
-		// Inviting a member emails an arbitrary address, so it shares the
-		// registration budget: both are a way to send mail to an address the
-		// caller named, and a fourth knob nobody tunes is worse than a shared
-		// one.
+		// Inviting mails an address the caller named, which is the same shape of
+		// abuse as registration — but not the same act, and it no longer shares
+		// registration's budget. Sharing it meant onboarding a team from one
+		// office address stopped at the fifth person, while the reason for the
+		// shared bucket had already gone: add-member stopped being an oracle for
+		// which addresses are registered when invitations grew a token of their
+		// own.
 		//
-		// Matched by shape rather than equality: the path carries an
-		// organization id, so there is no literal to compare against.
-		case r.Method == http.MethodPost && isMembersPath(r.URL.Path):
-			lim = s.registerLimit
+		// Reissuing is on the same budget because it does the same thing: a new
+		// token to the same address. It was not limited at all before, which is
+		// the more interesting half of this — the switch matches literal paths,
+		// and nothing fails when a mailing route is simply missing from it.
+		//
+		// Matched by shape rather than equality: the paths carry an organization
+		// id, so there is no literal to compare against.
+		case r.Method == http.MethodPost && (isMembersPath(r.URL.Path) ||
+			isBulkInvitePath(r.URL.Path) || isReissuePath(r.URL.Path)):
+			lim = s.inviteLimit
 
 		// Asking to change an address emails one the caller named, which is the
 		// same shape of abuse and shares the same budget. The confirmation step
@@ -283,6 +292,35 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 	})
 }
 
+// isBulkInvitePath reports whether the path is
+// /v1/orgs/{something}/invitations — the bulk invite.
+//
+// One request costs one token however many addresses it carries, so the real
+// bound is INVITE_PER_MINUTE times the batch cap. That is stated rather than
+// hidden: the limiter is chi middleware and runs before the body is read, so it
+// cannot charge per address without parsing the request twice. A per-organization
+// mail quota is the honest fix and is not this.
+func isBulkInvitePath(path string) bool {
+	return orgSubPath(path, "/invitations") != ""
+}
+
+// isReissuePath reports whether the path is
+// /v1/orgs/{something}/invitations/{something}/reissue.
+func isReissuePath(path string) bool {
+	const prefix = v1.Prefix + "/orgs/"
+	const suffix = "/reissue"
+
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		return false
+	}
+
+	middle := path[len(prefix) : len(path)-len(suffix)]
+	// {orgID}/invitations/{invitationID}
+	parts := strings.Split(middle, "/")
+
+	return len(parts) == 3 && parts[0] != "" && parts[1] == "invitations" && parts[2] != ""
+}
+
 // isMembersPath reports whether the path is /v1/orgs/{something}/members.
 //
 // The switch above works on literal paths, which is why every organization
@@ -290,18 +328,27 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 // default test configuration disables the limiter, so nothing else would
 // notice. TestRateLimitAppliesToEveryCostlyRoute is what does.
 func isMembersPath(path string) bool {
+	return orgSubPath(path, "/members") != ""
+}
+
+// orgSubPath returns the organization id in /v1/orgs/{orgID}{suffix}, or "" when
+// the path is not that shape.
+//
+// Exactly one segment before the suffix, so /orgs/x/members/y/roles does not match
+// by accident.
+func orgSubPath(path, suffix string) string {
 	const prefix = v1.Prefix + "/orgs/"
-	const suffix = "/members"
 
 	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
-		return false
+		return ""
 	}
 
-	// Exactly one segment between the two, so /orgs/x/members/y/roles does not
-	// match by accident.
 	middle := path[len(prefix) : len(path)-len(suffix)]
+	if middle == "" || strings.Contains(middle, "/") {
+		return ""
+	}
 
-	return middle != "" && !strings.Contains(middle, "/")
+	return middle
 }
 
 // unauthorized answers with the challenge RFC 7235 requires on a 401. Without

@@ -39,6 +39,7 @@
   "error.role_in_use": "rola jest wciąż przypisana członkom",
   "error.role_key_taken": "rola o tym kluczu już istnieje",
   "error.slug_taken": "organizacja o tym identyfikatorze już istnieje",
+  "error.invalid_invitation_batch": "lista jest pusta, za długa albo powtarza ten sam adres",
   "error.already_member": "konto już należy do tej organizacji",
   "error.record_protected": "ten rekord jest chroniony przed usunięciem",
   "error.invalid_name": "nazwa jest pusta lub za długa",

@@ -351,6 +351,8 @@ czyli dokładnie to, co token miał zlikwidować. Token istnieje w tym procesie 
 
 | Operacja  | Ścieżka                                                       | Uprawnienie      |
 |-----------|---------------------------------------------------------------|------------------|
+| zaproszenie | `POST /v1/orgs/{orgID}/members`                             | `members.invite` |
+| zaproszenie zbiorcze | `POST /v1/orgs/{orgID}/invitations`                | `members.invite` |
 | lista     | `GET /v1/orgs/{orgID}/invitations`                            | `members.read`   |
 | ponowne wysłanie | `POST /v1/orgs/{orgID}/invitations/{id}/reissue`        | `members.invite` |
 | wycofanie | `DELETE /v1/orgs/{orgID}/invitations/{id}`                    | `members.remove` |
@@ -358,6 +360,44 @@ czyli dokładnie to, co token miał zlikwidować. Token istnieje w tym procesie 
 Te trzy istnieją, bo zaproszenie **wypadło z listy członków**. Dopóki było wierszem `memberships`, administrator widział
 je i wycofywał przez `remove-member`; usunięcie go stamtąd bez dania niczego w zamian zostawiłoby ofertę, której nikt nie
 widzi i nie może odwołać.
+
+### Zaproszenie zbiorcze
+
+`POST /v1/orgs/{orgID}/invitations` — jeden zestaw ról, do **50** adresów, jedno żądanie.
+
+Powstało z dwóch powodów: onboarding zespołu po jednym żądaniu na osobę wywracał się na limiterze, a każde z tych żądań
+różniło się wyłącznie adresem.
+
+**Każdy adres ma własny wynik** (`invited` albo `already_member`), a nie cała paczka jeden status. Administrator, który
+wkleja dwunastu kolegów, z których dwóch już jest w organizacji, chce wysłanych dziesięciu zaproszeń — „wszystko albo
+nic" kazałoby mu szukać tych dwóch bisekcją. **Nie ma transakcji wokół paczki** i to jest sens listy wyników.
+
+Wyniki dopasowuje się **po adresie, nie po pozycji**.
+
+Role są sprawdzane **raz, przed czymkolwiek zapisanym**: są te same dla wszystkich adresów, więc próba nadania więcej,
+niż wołający ma, jest odmową całego żądania, a nie pięćdziesięcioma identycznymi odmowami.
+
+Implementacja woła `Invite` w pętli, zamiast wstawiać zbiorczo: każde zaproszenie potrzebuje **własnego losowego
+tokenu**, własnego wiersza i własnego wpisu w audycie, a wstawka zbiorcza musiałaby odtworzyć wszystkie trzy rzeczy.
+
+Nieznany adres jest zapraszany tak samo jak znany — ta operacja też nie jest oraklem rejestracji.
+
+### Limiter: własny budżet
+
+Zaproszenia mają `INVITE_PER_MINUTE` (domyślnie 30) zamiast dzielić `REGISTER_PER_MINUTE` (5). Wspólny budżet miał sens,
+gdy `add-member` był oraklem rejestracji; po przejściu na tokeny uzasadnienie zostało tylko takie, że „to też wysyłka
+maila", a liczba została ta sama i onboarding zespołu z jednego biurowego adresu kończył się na piątej osobie.
+
+Na tym samym budżecie jest **ponowne wysłanie** — robi to samo, czyli nowy token na ten sam adres. Wcześniej nie było
+limitowane **wcale**, i to jest ciekawsza połowa tej zmiany: switch limitera dopasowuje ścieżki **literalnie**, więc
+trasa wysyłająca maile po prostu w nim nie występowała i nic tego nie zgłaszało.
+`TestRateLimitAppliesToEveryCostlyRoute` wymienia teraz obie.
+
+**Znane ograniczenie, zapisane świadomie:** jedno żądanie to jeden token limitera, niezależnie od długości listy, więc
+realna granica to `INVITE_PER_MINUTE` × 50 adresów. Limiter jest middleware chi i działa **przed** odczytaniem ciała,
+więc nie umie policzyć adresów bez parsowania żądania dwa razy. Uczciwym rozwiązaniem jest limit wysyłki **per
+organizacja**, a nie kubełek per IP — tym bardziej że na trasie uwierzytelnionej IP jest słabszym przybliżeniem sprawcy
+niż na anonimowej.
 
 **Ponowne wysłanie wymienia token** i przesuwa wygaśnięcie. Nie „wysyła tego samego jeszcze raz" — to utrzymywałoby
 wyciekniętą wiadomość ważną kolejny tydzień — i nie tworzy drugiego zaproszenia, bo zderzyłoby się z unikatem

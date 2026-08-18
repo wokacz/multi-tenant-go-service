@@ -52,6 +52,20 @@ type capturingMailer struct {
 	inviteExpires   time.Time
 	emailChangeTo   string
 	emailChangeCode string
+
+	// invitations is every invitation message, in order.
+	//
+	// The single fields above keep only the last one, which was enough while one
+	// request sent one message. A batch sends several, and "the last one" cannot
+	// show that each invitee got a token of their own — which is the property that
+	// stops one of them accepting as another.
+	invitations []sentInvitation
+}
+
+type sentInvitation struct {
+	email string
+	org   string
+	token string
 }
 
 func (c *capturingMailer) SendPasswordReset(_ context.Context, to, code string) error {
@@ -74,6 +88,7 @@ func (c *capturingMailer) SendEmailChange(_ context.Context, to, code string) er
 
 func (c *capturingMailer) SendInvitation(_ context.Context, to, orgName, token string, expiresAt time.Time) error {
 	c.inviteTo, c.inviteOrg, c.inviteToken, c.inviteExpires = to, orgName, token, expiresAt
+	c.invitations = append(c.invitations, sentInvitation{email: to, org: orgName, token: token})
 
 	return nil
 }

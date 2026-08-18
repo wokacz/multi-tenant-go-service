@@ -90,6 +90,7 @@ func probesFor(f *authzFixture, roleID uuid.UUID) map[string]probe {
 		"delete-role":          {http.MethodDelete, role, ""},
 
 		"list-invitations":    {http.MethodGet, org + "/invitations", ""},
+		"invite-members":      {http.MethodPost, org + "/invitations", `{"emails":["nobody@example.com"],"role_ids":[]}`},
 		"reissue-invitation":  {http.MethodPost, invitation + "/reissue", ""},
 		"withdraw-invitation": {http.MethodDelete, invitation, ""},
 

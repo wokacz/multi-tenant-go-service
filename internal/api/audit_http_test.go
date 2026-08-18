@@ -109,7 +109,10 @@ var mutatingProbes = map[string]models.AuthzAction{
 	"set-role-permissions": models.ActionRolePermissionsChanged,
 	"delete-role":          models.ActionRoleDeleted,
 	"reissue-invitation":   models.ActionMemberInvited,
-	"withdraw-invitation":  models.ActionMemberInvitationWithdrawn,
+	// The batch records one entry per address, the same as inviting one at a time —
+	// which is the point of it reusing Invite rather than a bulk insert.
+	"invite-members":      models.ActionMemberInvited,
+	"withdraw-invitation": models.ActionMemberInvitationWithdrawn,
 }
 
 var readOnlyProbes = []string{
@@ -264,6 +267,7 @@ func auditProbes(
 		"update-organization":  {http.MethodPatch, org, `{"name":"Renamed"}`},
 		"delete-organization":  {http.MethodDelete, org, ""},
 		"add-member":           {http.MethodPost, org + "/members", `{"email":"` + outsider + `","role_ids":[]}`},
+		"invite-members":       {http.MethodPost, org + "/invitations", `{"emails":["batch@example.com"],"role_ids":[]}`},
 		"update-member-status": {http.MethodPatch, member, `{"status":"active"}`},
 		"remove-member":        {http.MethodDelete, member, ""},
 		"set-member-roles":     {http.MethodPut, member + "/roles", `{"role_ids":[]}`},

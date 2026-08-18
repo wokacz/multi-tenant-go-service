@@ -218,6 +218,28 @@ export interface InvitationTokenRequest {
   token: string;
 }
 
+export interface InviteMembersOutputBody {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  results: Array<InviteResultResponse>;
+}
+
+export interface InviteMembersRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** Addresses to invite. An existing account is not required. */
+  emails: Array<string>;
+  /** Roles to grant every one of them. Each must be a role the caller could grant themselves. */
+  role_ids: Array<string>;
+}
+
+export interface InviteResultResponse {
+  /** The address, normalised */
+  email: string;
+  /** What happened to this one */
+  status: 'invited' | 'already_member';
+}
+
 export interface ListAuditOutputBody {
   /** A URL to the JSON Schema for this object. */
   readonly $schema?: string;
@@ -314,13 +336,13 @@ export interface MemberResponse {
   id: string;
   /** When the membership first became active */
   joined_at?: Date;
-  /** Display name. Absent until the invitation is accepted. */
+  /** Display name */
   name?: string;
   /** Roles held in this organization */
   roles: Array<RoleSummaryResponse>;
   /** Whether the membership grants anything */
   status: 'active' | 'suspended';
-  /** The account behind the membership. Absent while the invitation is outstanding, so listing members cannot tell a registered address from an unknown one. */
+  /** The account behind the membership. Always present now that an invitation is not a membership; the field stays optional so clients written against the older contract keep working. */
   user_id?: string;
 }
 

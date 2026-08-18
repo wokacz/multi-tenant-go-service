@@ -39,6 +39,7 @@
   "error.role_in_use": "the role is still assigned to members",
   "error.role_key_taken": "a role with that key already exists",
   "error.slug_taken": "an organization with that handle already exists",
+  "error.invalid_invitation_batch": "the list is empty, too long, or names the same address twice",
   "error.already_member": "already a member of this organization",
   "error.record_protected": "this record is protected from deletion",
   "error.invalid_name": "name is empty or too long",

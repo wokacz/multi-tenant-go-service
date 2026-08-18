@@ -79,6 +79,7 @@ type Server struct {
 	registerLimit *limiter
 	loginLimit    *limiter
 	resetLimit    *limiter
+	inviteLimit   *limiter
 }
 
 // NewServer wires the router, the middleware chain and the huma adapter. It
@@ -96,6 +97,7 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 		registerLimit: newLimiter(cfg.RegisterPerMinute),
 		loginLimit:    newLimiter(cfg.LoginPerMinute),
 		resetLimit:    newLimiter(cfg.ResetPerMinute),
+		inviteLimit:   newLimiter(cfg.InvitePerMinute),
 	}
 
 	router := chi.NewMux()
