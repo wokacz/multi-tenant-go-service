@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -776,5 +777,55 @@ func TestSetPasswordAndBumpEpochMoveTheEpochByOne(t *testing.T) {
 
 	if err := repo.BumpSessionEpoch(ctx, uuid.Must(uuid.NewV7())); !errors.Is(err, user.ErrNotFound) {
 		t.Errorf("BumpSessionEpoch() on an unknown id = %v, want ErrNotFound", err)
+	}
+}
+
+// TestFailEmailChangeUnderConcurrency is the reason FailEmailChange is one statement,
+// and the reason this test exists in a file that already has its twin for the reset.
+//
+// The port to ent moved that SET list into a builder modifier, which is exactly the
+// kind of change that quietly turns one statement into read-modify-write. If it ever
+// does, several goroutines read the same attempt count, write the same attempt count,
+// and a three-attempt cap stops capping — leaving a six-digit code guessable forever.
+func TestFailEmailChangeUnderConcurrency(t *testing.T) {
+	const (
+		maxAttempts = 3
+		racers      = 8
+	)
+
+	repo := repositories.NewUser(testDB(t))
+	ctx := context.Background()
+	u := newUser(t, repo)
+
+	change := &models.EmailChange{
+		UserID:    u.ID,
+		NewEmail:  "moved+" + uuid.Must(uuid.NewV7()).String() + "@example.com",
+		CodeHash:  "hash-" + uuid.Must(uuid.NewV7()).String(),
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}
+	if err := repo.ReplaceEmailChange(ctx, change); err != nil {
+		t.Fatalf("ReplaceEmailChange() = %v", err)
+	}
+
+	var wg sync.WaitGroup
+
+	for range racers {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			if err := repo.FailEmailChange(ctx, change.ID, maxAttempts, time.Now().UTC()); err != nil {
+				t.Errorf("FailEmailChange() = %v", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// However the eight interleaved, the code has to be spent: the cap is three.
+	if _, err := repo.ActiveEmailChange(ctx, u.ID, time.Now().UTC()); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("the code survived %d concurrent wrong guesses against a cap of %d: %v",
+			racers, maxAttempts, err)
 	}
 }
