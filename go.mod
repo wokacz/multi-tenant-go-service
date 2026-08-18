@@ -3,7 +3,7 @@ module github.com/wokacz/multi-tenant-go-service
 go 1.26.6
 
 require (
-	ariga.io/atlas v0.36.2-0.20250730182955-2c6300d0a3e1
+	ariga.io/atlas v1.3.0
 	entgo.io/ent v0.14.6
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/go-chi/chi/v5 v5.3.1
