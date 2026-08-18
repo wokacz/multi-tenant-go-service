@@ -38,7 +38,7 @@ func translateOrgError(op string, err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, gorm.ErrRecordNotFound):
+	case errors.Is(err, gorm.ErrRecordNotFound), isNotFound(err):
 		return orgs.ErrNotFound
 	case errors.Is(err, gorm.ErrDuplicatedKey):
 		return orgs.ErrRoleKeyTaken

@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/models"
 )
 
@@ -47,6 +48,38 @@ func record(ctx context.Context, tx *gorm.DB, event *models.AuthzEvent) error {
 	}
 
 	if err := tx.Create(event).Error; err != nil {
+		return fmt.Errorf("store: record authz event: %w", err)
+	}
+
+	return nil
+}
+
+// recordEnt is record for an ent transaction. Same rules: no actor, no row; the
+// write shares the transaction that is making the change. It exists because the
+// invitation methods moved off GORM and the audit row still has to land with them.
+func recordEnt(ctx context.Context, tx *ent.Tx, event *models.AuthzEvent) error {
+	actor := audit.ActorFrom(ctx)
+	if actor.IsZero() {
+		return nil
+	}
+
+	ip := event.IP
+	if ip == "" {
+		ip = "0.0.0.0"
+	}
+
+	_, err := tx.AuthzEvent.Create().
+		SetActorID(actor.ID).
+		SetIP(ip).
+		SetUserAgent(truncateUserAgent(actor.UserAgent)).
+		SetAction(string(event.Action)).
+		SetNillableOrganizationID(event.OrganizationID).
+		SetNillableSubjectID(event.SubjectID).
+		SetNillableRoleID(event.RoleID).
+		SetPermissionKey(event.PermissionKey).
+		SetDetail(event.Detail).
+		Save(ctx)
+	if err != nil {
 		return fmt.Errorf("store: record authz event: %w", err)
 	}
 

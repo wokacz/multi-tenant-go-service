@@ -47,6 +47,10 @@ func (r *User) withTx(ctx context.Context, fn func(tx *ent.Tx) error) error {
 	return withEntTx(ctx, r.db.Ent(), fn)
 }
 
+func (r *Orgs) withTx(ctx context.Context, fn func(tx *ent.Tx) error) error {
+	return withEntTx(ctx, r.db.Ent(), fn)
+}
+
 // userIDIs is the predicate for one account.
 //
 // Named rather than inlined because entuser.ID reads as "the id field" at a call site
