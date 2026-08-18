@@ -37,6 +37,11 @@ type DB struct {
 	// GORM — one set of connections, one set of limits — which is what lets the
 	// repositories move over one file at a time instead of all at once. See ENT.md.
 	ent *ent.Client
+
+	// entTrace wraps the ent driver's statements in spans. Instrument binds
+	// telemetry onto it after open, so OpenPostgres does not need to know whether
+	// this process is exporting anything.
+	entTrace *tracedDriver
 }
 
 // OpenPostgres connects, configures the pool and verifies the connection is
@@ -101,10 +106,12 @@ func OpenPostgres(ctx context.Context, cfg *config.Config, log *slog.Logger) (*D
 	// dialling again: a second pool would double the connection count, and the two
 	// halves of a repository being migrated would sit in different transactions
 	// without anything saying so.
+	entTrace := newTracedDriver(entsql.OpenDB(dialect.Postgres, sqlDB))
 	db := &DB{
-		DB:  gormDB,
-		sql: sqlDB,
-		ent: ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, sqlDB))),
+		DB:       gormDB,
+		sql:      sqlDB,
+		ent:      ent.NewClient(ent.Driver(entTrace)),
+		entTrace: entTrace,
 	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, cfg.DBConnectTimeout)

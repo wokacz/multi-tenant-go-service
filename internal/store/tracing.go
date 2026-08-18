@@ -44,6 +44,13 @@ func Instrument(db *DB, tel *telemetry.Telemetry) error {
 
 	i := &gormInstrumentation{tel: tel}
 
+	// The ent client is already wrapped; this is what makes the wrapper emit spans
+	// rather than pass through. GORM still uses the callbacks below until those
+	// repositories move.
+	if db.entTrace != nil {
+		db.entTrace.bind(tel)
+	}
+
 	// Each of GORM's processors has its own callback chain, and a statement only
 	// passes through the one matching what it is doing.
 	if err := registerPair(db.Callback().Create(), "gorm:create", "create", i.start("INSERT"), i.finish); err != nil {

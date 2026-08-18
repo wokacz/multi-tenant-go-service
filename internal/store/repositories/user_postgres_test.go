@@ -730,6 +730,51 @@ func TestUpdateProfileWritesBothColumns(t *testing.T) {
 	}
 }
 
+// TestDeletingAnAccountRevokesItsDevices is why Delete loads the row instead of
+// issuing a bulk delete. Soft delete does not fire the FK cascade, so without an
+// explicit revoke the devices stay trusted and usable after the account is gone —
+// which is the opposite of what deleting the account is for.
+func TestDeletingAnAccountRevokesItsDevices(t *testing.T) {
+	repo := repositories.NewUser(testDB(t))
+	ctx := context.Background()
+	u := newUser(t, repo)
+
+	trusted := time.Now().UTC()
+	d := &models.Device{
+		UserID:      u.ID,
+		Fingerprint: uuid.Must(uuid.NewV7()).String(),
+		TrustedAt:   &trusted,
+	}
+	if err := repo.CreateDevice(ctx, d); err != nil {
+		t.Fatalf("CreateDevice() = %v", err)
+	}
+
+	if err := repo.Delete(ctx, u.ID); err != nil {
+		t.Fatalf("Delete() = %v", err)
+	}
+
+	if _, err := repo.ByID(ctx, u.ID); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("ByID() after Delete = %v, want ErrNotFound", err)
+	}
+
+	if _, err := repo.ActiveDevice(ctx, u.ID, d.ID); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("ActiveDevice() after deleting the account = %v, want ErrNotFound", err)
+	}
+
+	listed, err := repo.Devices(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("Devices() = %v", err)
+	}
+
+	if len(listed) != 1 || !listed[0].IsRevoked() {
+		t.Errorf("Devices() after deleting the account = %+v, want the one device revoked", listed)
+	}
+
+	if err := repo.Delete(ctx, uuid.Must(uuid.NewV7())); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("Delete() on an unknown id = %v, want ErrNotFound", err)
+	}
+}
+
 // TestSetPasswordAndBumpEpochMoveTheEpochByOne pins the increment as an expression.
 //
 // Read-modify-write would be indistinguishable here with one caller and wrong with
