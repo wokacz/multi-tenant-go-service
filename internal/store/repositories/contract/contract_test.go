@@ -1165,7 +1165,7 @@ func TestAnInvitationToADeletedOrganizationCannotBeAccepted(t *testing.T) {
 		orgID := b.newOrg(t)
 		userID, email := b.newAccount(t)
 
-		invitation, err := b.repo.InviteMember(t.Context(), orgID, email, "token-for-a-doomed-org",
+		invitation, err := b.repo.InviteMember(t.Context(), orgID, email, freshToken("doomed-org"),
 			nil, uuid.Nil, time.Now().UTC().Add(time.Hour), time.Now().UTC())
 		if err != nil {
 			t.Fatalf("InviteMember() = _, %v", err)

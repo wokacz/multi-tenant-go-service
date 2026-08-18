@@ -214,22 +214,9 @@ func (m *AuthzEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *AuthzEventMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[authzevent.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *AuthzEventMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[authzevent.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *AuthzEventMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, authzevent.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -263,22 +250,9 @@ func (m *AuthzEventMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *AuthzEventMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[authzevent.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *AuthzEventMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[authzevent.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *AuthzEventMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, authzevent.FieldUpdatedAt)
 }
 
 // SetOrganizationID sets the "organization_id" field.
@@ -928,12 +902,6 @@ func (m *AuthzEventMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *AuthzEventMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(authzevent.FieldCreatedAt) {
-		fields = append(fields, authzevent.FieldCreatedAt)
-	}
-	if m.FieldCleared(authzevent.FieldUpdatedAt) {
-		fields = append(fields, authzevent.FieldUpdatedAt)
-	}
 	if m.FieldCleared(authzevent.FieldOrganizationID) {
 		fields = append(fields, authzevent.FieldOrganizationID)
 	}
@@ -966,12 +934,6 @@ func (m *AuthzEventMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *AuthzEventMutation) ClearField(name string) error {
 	switch name {
-	case authzevent.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case authzevent.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case authzevent.FieldOrganizationID:
 		m.ClearOrganizationID()
 		return nil
@@ -1244,22 +1206,9 @@ func (m *DeviceMutation) OldCreatedAt(ctx context.Context) (v time.Time, err err
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *DeviceMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[device.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *DeviceMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[device.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *DeviceMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, device.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1293,22 +1242,9 @@ func (m *DeviceMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err err
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *DeviceMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[device.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *DeviceMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[device.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *DeviceMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, device.FieldUpdatedAt)
 }
 
 // SetUserID sets the "user_id" field.
@@ -1989,12 +1925,6 @@ func (m *DeviceMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *DeviceMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(device.FieldCreatedAt) {
-		fields = append(fields, device.FieldCreatedAt)
-	}
-	if m.FieldCleared(device.FieldUpdatedAt) {
-		fields = append(fields, device.FieldUpdatedAt)
-	}
 	if m.FieldCleared(device.FieldLabel) {
 		fields = append(fields, device.FieldLabel)
 	}
@@ -2027,12 +1957,6 @@ func (m *DeviceMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *DeviceMutation) ClearField(name string) error {
 	switch name {
-	case device.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case device.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case device.FieldLabel:
 		m.ClearLabel()
 		return nil
@@ -2352,22 +2276,9 @@ func (m *EmailChangeMutation) OldCreatedAt(ctx context.Context) (v time.Time, er
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *EmailChangeMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[emailchange.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *EmailChangeMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[emailchange.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *EmailChangeMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, emailchange.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -2401,22 +2312,9 @@ func (m *EmailChangeMutation) OldUpdatedAt(ctx context.Context) (v time.Time, er
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *EmailChangeMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[emailchange.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *EmailChangeMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[emailchange.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *EmailChangeMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, emailchange.FieldUpdatedAt)
 }
 
 // SetUserID sets the "user_id" field.
@@ -2913,12 +2811,6 @@ func (m *EmailChangeMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *EmailChangeMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(emailchange.FieldCreatedAt) {
-		fields = append(fields, emailchange.FieldCreatedAt)
-	}
-	if m.FieldCleared(emailchange.FieldUpdatedAt) {
-		fields = append(fields, emailchange.FieldUpdatedAt)
-	}
 	if m.FieldCleared(emailchange.FieldConsumedAt) {
 		fields = append(fields, emailchange.FieldConsumedAt)
 	}
@@ -2936,12 +2828,6 @@ func (m *EmailChangeMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *EmailChangeMutation) ClearField(name string) error {
 	switch name {
-	case emailchange.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case emailchange.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case emailchange.FieldConsumedAt:
 		m.ClearConsumedAt()
 		return nil
@@ -3214,22 +3100,9 @@ func (m *InvitationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *InvitationMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[invitation.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *InvitationMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[invitation.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *InvitationMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, invitation.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -3263,22 +3136,9 @@ func (m *InvitationMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *InvitationMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[invitation.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *InvitationMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[invitation.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *InvitationMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, invitation.FieldUpdatedAt)
 }
 
 // SetOrganizationID sets the "organization_id" field.
@@ -3807,12 +3667,6 @@ func (m *InvitationMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *InvitationMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(invitation.FieldCreatedAt) {
-		fields = append(fields, invitation.FieldCreatedAt)
-	}
-	if m.FieldCleared(invitation.FieldUpdatedAt) {
-		fields = append(fields, invitation.FieldUpdatedAt)
-	}
 	if m.FieldCleared(invitation.FieldInvitedBy) {
 		fields = append(fields, invitation.FieldInvitedBy)
 	}
@@ -3833,12 +3687,6 @@ func (m *InvitationMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *InvitationMutation) ClearField(name string) error {
 	switch name {
-	case invitation.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case invitation.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case invitation.FieldInvitedBy:
 		m.ClearInvitedBy()
 		return nil
@@ -4136,22 +3984,9 @@ func (m *InvitationRoleMutation) OldCreatedAt(ctx context.Context) (v time.Time,
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *InvitationRoleMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[invitationrole.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *InvitationRoleMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[invitationrole.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *InvitationRoleMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, invitationrole.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -4185,22 +4020,9 @@ func (m *InvitationRoleMutation) OldUpdatedAt(ctx context.Context) (v time.Time,
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *InvitationRoleMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[invitationrole.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *InvitationRoleMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[invitationrole.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *InvitationRoleMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, invitationrole.FieldUpdatedAt)
 }
 
 // SetInvitationID sets the "invitation_id" field.
@@ -4475,14 +4297,7 @@ func (m *InvitationRoleMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *InvitationRoleMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(invitationrole.FieldCreatedAt) {
-		fields = append(fields, invitationrole.FieldCreatedAt)
-	}
-	if m.FieldCleared(invitationrole.FieldUpdatedAt) {
-		fields = append(fields, invitationrole.FieldUpdatedAt)
-	}
-	return fields
+	return nil
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -4495,14 +4310,6 @@ func (m *InvitationRoleMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *InvitationRoleMutation) ClearField(name string) error {
-	switch name {
-	case invitationrole.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case invitationrole.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
-	}
 	return fmt.Errorf("unknown InvitationRole nullable field %s", name)
 }
 
@@ -4774,22 +4581,9 @@ func (m *LoginEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *LoginEventMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[loginevent.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *LoginEventMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[loginevent.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *LoginEventMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, loginevent.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -4823,22 +4617,9 @@ func (m *LoginEventMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *LoginEventMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[loginevent.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *LoginEventMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[loginevent.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *LoginEventMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, loginevent.FieldUpdatedAt)
 }
 
 // SetUserID sets the "user_id" field.
@@ -5326,12 +5107,6 @@ func (m *LoginEventMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *LoginEventMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(loginevent.FieldCreatedAt) {
-		fields = append(fields, loginevent.FieldCreatedAt)
-	}
-	if m.FieldCleared(loginevent.FieldUpdatedAt) {
-		fields = append(fields, loginevent.FieldUpdatedAt)
-	}
 	if m.FieldCleared(loginevent.FieldDeviceID) {
 		fields = append(fields, loginevent.FieldDeviceID)
 	}
@@ -5355,12 +5130,6 @@ func (m *LoginEventMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *LoginEventMutation) ClearField(name string) error {
 	switch name {
-	case loginevent.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case loginevent.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case loginevent.FieldDeviceID:
 		m.ClearDeviceID()
 		return nil
@@ -5639,22 +5408,9 @@ func (m *MembershipMutation) OldCreatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *MembershipMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[membership.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *MembershipMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[membership.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *MembershipMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, membership.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -5688,22 +5444,9 @@ func (m *MembershipMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *MembershipMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[membership.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *MembershipMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[membership.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *MembershipMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, membership.FieldUpdatedAt)
 }
 
 // SetUserID sets the "user_id" field.
@@ -6209,12 +5952,6 @@ func (m *MembershipMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *MembershipMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(membership.FieldCreatedAt) {
-		fields = append(fields, membership.FieldCreatedAt)
-	}
-	if m.FieldCleared(membership.FieldUpdatedAt) {
-		fields = append(fields, membership.FieldUpdatedAt)
-	}
 	if m.FieldCleared(membership.FieldInvitedBy) {
 		fields = append(fields, membership.FieldInvitedBy)
 	}
@@ -6235,12 +5972,6 @@ func (m *MembershipMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *MembershipMutation) ClearField(name string) error {
 	switch name {
-	case membership.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case membership.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case membership.FieldInvitedBy:
 		m.ClearInvitedBy()
 		return nil
@@ -6554,22 +6285,9 @@ func (m *MembershipRoleMutation) OldCreatedAt(ctx context.Context) (v time.Time,
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *MembershipRoleMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[membershiprole.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *MembershipRoleMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[membershiprole.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *MembershipRoleMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, membershiprole.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -6603,22 +6321,9 @@ func (m *MembershipRoleMutation) OldUpdatedAt(ctx context.Context) (v time.Time,
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *MembershipRoleMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[membershiprole.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *MembershipRoleMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[membershiprole.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *MembershipRoleMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, membershiprole.FieldUpdatedAt)
 }
 
 // SetMembershipID sets the "membership_id" field.
@@ -6957,12 +6662,6 @@ func (m *MembershipRoleMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *MembershipRoleMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(membershiprole.FieldCreatedAt) {
-		fields = append(fields, membershiprole.FieldCreatedAt)
-	}
-	if m.FieldCleared(membershiprole.FieldUpdatedAt) {
-		fields = append(fields, membershiprole.FieldUpdatedAt)
-	}
 	if m.FieldCleared(membershiprole.FieldGrantedBy) {
 		fields = append(fields, membershiprole.FieldGrantedBy)
 	}
@@ -6980,12 +6679,6 @@ func (m *MembershipRoleMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *MembershipRoleMutation) ClearField(name string) error {
 	switch name {
-	case membershiprole.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case membershiprole.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case membershiprole.FieldGrantedBy:
 		m.ClearGrantedBy()
 		return nil
@@ -7270,22 +6963,9 @@ func (m *OrganizationMutation) OldCreatedAt(ctx context.Context) (v time.Time, e
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *OrganizationMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[organization.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *OrganizationMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[organization.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *OrganizationMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, organization.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -7319,22 +6999,9 @@ func (m *OrganizationMutation) OldUpdatedAt(ctx context.Context) (v time.Time, e
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *OrganizationMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[organization.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *OrganizationMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[organization.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *OrganizationMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, organization.FieldUpdatedAt)
 }
 
 // SetDeletedAt sets the "deleted_at" field.
@@ -7417,22 +7084,9 @@ func (m *OrganizationMutation) OldIsProtected(ctx context.Context) (v bool, err 
 	return oldValue.IsProtected, nil
 }
 
-// ClearIsProtected clears the value of the "is_protected" field.
-func (m *OrganizationMutation) ClearIsProtected() {
-	m.is_protected = nil
-	m.clearedFields[organization.FieldIsProtected] = struct{}{}
-}
-
-// IsProtectedCleared returns if the "is_protected" field was cleared in this mutation.
-func (m *OrganizationMutation) IsProtectedCleared() bool {
-	_, ok := m.clearedFields[organization.FieldIsProtected]
-	return ok
-}
-
 // ResetIsProtected resets all changes to the "is_protected" field.
 func (m *OrganizationMutation) ResetIsProtected() {
 	m.is_protected = nil
-	delete(m.clearedFields, organization.FieldIsProtected)
 }
 
 // SetSlug sets the "slug" field.
@@ -7844,17 +7498,8 @@ func (m *OrganizationMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *OrganizationMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(organization.FieldCreatedAt) {
-		fields = append(fields, organization.FieldCreatedAt)
-	}
-	if m.FieldCleared(organization.FieldUpdatedAt) {
-		fields = append(fields, organization.FieldUpdatedAt)
-	}
 	if m.FieldCleared(organization.FieldDeletedAt) {
 		fields = append(fields, organization.FieldDeletedAt)
-	}
-	if m.FieldCleared(organization.FieldIsProtected) {
-		fields = append(fields, organization.FieldIsProtected)
 	}
 	return fields
 }
@@ -7870,17 +7515,8 @@ func (m *OrganizationMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *OrganizationMutation) ClearField(name string) error {
 	switch name {
-	case organization.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case organization.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case organization.FieldDeletedAt:
 		m.ClearDeletedAt()
-		return nil
-	case organization.FieldIsProtected:
-		m.ClearIsProtected()
 		return nil
 	}
 	return fmt.Errorf("unknown Organization nullable field %s", name)
@@ -8204,22 +7840,9 @@ func (m *PasswordResetMutation) OldCreatedAt(ctx context.Context) (v time.Time, 
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *PasswordResetMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[passwordreset.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *PasswordResetMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[passwordreset.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *PasswordResetMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, passwordreset.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -8253,22 +7876,9 @@ func (m *PasswordResetMutation) OldUpdatedAt(ctx context.Context) (v time.Time, 
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *PasswordResetMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[passwordreset.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *PasswordResetMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[passwordreset.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *PasswordResetMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, passwordreset.FieldUpdatedAt)
 }
 
 // SetUserID sets the "user_id" field.
@@ -8715,12 +8325,6 @@ func (m *PasswordResetMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *PasswordResetMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(passwordreset.FieldCreatedAt) {
-		fields = append(fields, passwordreset.FieldCreatedAt)
-	}
-	if m.FieldCleared(passwordreset.FieldUpdatedAt) {
-		fields = append(fields, passwordreset.FieldUpdatedAt)
-	}
 	if m.FieldCleared(passwordreset.FieldConsumedAt) {
 		fields = append(fields, passwordreset.FieldConsumedAt)
 	}
@@ -8738,12 +8342,6 @@ func (m *PasswordResetMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *PasswordResetMutation) ClearField(name string) error {
 	switch name {
-	case passwordreset.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case passwordreset.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case passwordreset.FieldConsumedAt:
 		m.ClearConsumedAt()
 		return nil
@@ -9018,22 +8616,9 @@ func (m *RoleMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *RoleMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[role.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *RoleMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[role.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *RoleMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, role.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -9067,22 +8652,9 @@ func (m *RoleMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *RoleMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[role.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *RoleMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[role.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *RoleMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, role.FieldUpdatedAt)
 }
 
 // SetOrganizationID sets the "organization_id" field.
@@ -9656,12 +9228,6 @@ func (m *RoleMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *RoleMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(role.FieldCreatedAt) {
-		fields = append(fields, role.FieldCreatedAt)
-	}
-	if m.FieldCleared(role.FieldUpdatedAt) {
-		fields = append(fields, role.FieldUpdatedAt)
-	}
 	if m.FieldCleared(role.FieldDescription) {
 		fields = append(fields, role.FieldDescription)
 	}
@@ -9679,12 +9245,6 @@ func (m *RoleMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *RoleMutation) ClearField(name string) error {
 	switch name {
-	case role.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case role.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case role.FieldDescription:
 		m.ClearDescription()
 		return nil
@@ -10027,22 +9587,9 @@ func (m *RolePermissionMutation) OldCreatedAt(ctx context.Context) (v time.Time,
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *RolePermissionMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[rolepermission.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *RolePermissionMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[rolepermission.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *RolePermissionMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, rolepermission.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -10076,22 +9623,9 @@ func (m *RolePermissionMutation) OldUpdatedAt(ctx context.Context) (v time.Time,
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *RolePermissionMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[rolepermission.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *RolePermissionMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[rolepermission.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *RolePermissionMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, rolepermission.FieldUpdatedAt)
 }
 
 // SetRoleID sets the "role_id" field.
@@ -10339,14 +9873,7 @@ func (m *RolePermissionMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *RolePermissionMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(rolepermission.FieldCreatedAt) {
-		fields = append(fields, rolepermission.FieldCreatedAt)
-	}
-	if m.FieldCleared(rolepermission.FieldUpdatedAt) {
-		fields = append(fields, rolepermission.FieldUpdatedAt)
-	}
-	return fields
+	return nil
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -10359,14 +9886,6 @@ func (m *RolePermissionMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *RolePermissionMutation) ClearField(name string) error {
-	switch name {
-	case rolepermission.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case rolepermission.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
-	}
 	return fmt.Errorf("unknown RolePermission nullable field %s", name)
 }
 
@@ -10622,22 +10141,9 @@ func (m *TwoFactorChallengeMutation) OldCreatedAt(ctx context.Context) (v time.T
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *TwoFactorChallengeMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[twofactorchallenge.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *TwoFactorChallengeMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[twofactorchallenge.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *TwoFactorChallengeMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, twofactorchallenge.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -10671,22 +10177,9 @@ func (m *TwoFactorChallengeMutation) OldUpdatedAt(ctx context.Context) (v time.T
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *TwoFactorChallengeMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[twofactorchallenge.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *TwoFactorChallengeMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[twofactorchallenge.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *TwoFactorChallengeMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, twofactorchallenge.FieldUpdatedAt)
 }
 
 // SetUserID sets the "user_id" field.
@@ -11210,12 +10703,6 @@ func (m *TwoFactorChallengeMutation) AddField(name string, value ent.Value) erro
 // mutation.
 func (m *TwoFactorChallengeMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(twofactorchallenge.FieldCreatedAt) {
-		fields = append(fields, twofactorchallenge.FieldCreatedAt)
-	}
-	if m.FieldCleared(twofactorchallenge.FieldUpdatedAt) {
-		fields = append(fields, twofactorchallenge.FieldUpdatedAt)
-	}
 	if m.FieldCleared(twofactorchallenge.FieldConsumedAt) {
 		fields = append(fields, twofactorchallenge.FieldConsumedAt)
 	}
@@ -11233,12 +10720,6 @@ func (m *TwoFactorChallengeMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *TwoFactorChallengeMutation) ClearField(name string) error {
 	switch name {
-	case twofactorchallenge.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case twofactorchallenge.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case twofactorchallenge.FieldConsumedAt:
 		m.ClearConsumedAt()
 		return nil
@@ -11550,22 +11031,9 @@ func (m *UserMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *UserMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[user.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *UserMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[user.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *UserMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, user.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -11599,22 +11067,9 @@ func (m *UserMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *UserMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[user.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *UserMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[user.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *UserMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, user.FieldUpdatedAt)
 }
 
 // SetDeletedAt sets the "deleted_at" field.
@@ -11697,22 +11152,9 @@ func (m *UserMutation) OldIsProtected(ctx context.Context) (v bool, err error) {
 	return oldValue.IsProtected, nil
 }
 
-// ClearIsProtected clears the value of the "is_protected" field.
-func (m *UserMutation) ClearIsProtected() {
-	m.is_protected = nil
-	m.clearedFields[user.FieldIsProtected] = struct{}{}
-}
-
-// IsProtectedCleared returns if the "is_protected" field was cleared in this mutation.
-func (m *UserMutation) IsProtectedCleared() bool {
-	_, ok := m.clearedFields[user.FieldIsProtected]
-	return ok
-}
-
 // ResetIsProtected resets all changes to the "is_protected" field.
 func (m *UserMutation) ResetIsProtected() {
 	m.is_protected = nil
-	delete(m.clearedFields, user.FieldIsProtected)
 }
 
 // SetName sets the "name" field.
@@ -12651,17 +12093,8 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *UserMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(user.FieldCreatedAt) {
-		fields = append(fields, user.FieldCreatedAt)
-	}
-	if m.FieldCleared(user.FieldUpdatedAt) {
-		fields = append(fields, user.FieldUpdatedAt)
-	}
 	if m.FieldCleared(user.FieldDeletedAt) {
 		fields = append(fields, user.FieldDeletedAt)
-	}
-	if m.FieldCleared(user.FieldIsProtected) {
-		fields = append(fields, user.FieldIsProtected)
 	}
 	if m.FieldCleared(user.FieldLocale) {
 		fields = append(fields, user.FieldLocale)
@@ -12683,17 +12116,8 @@ func (m *UserMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *UserMutation) ClearField(name string) error {
 	switch name {
-	case user.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case user.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case user.FieldDeletedAt:
 		m.ClearDeletedAt()
-		return nil
-	case user.FieldIsProtected:
-		m.ClearIsProtected()
 		return nil
 	case user.FieldLocale:
 		m.ClearLocale()
@@ -13139,22 +12563,9 @@ func (m *UserSystemRoleMutation) OldCreatedAt(ctx context.Context) (v time.Time,
 	return oldValue.CreatedAt, nil
 }
 
-// ClearCreatedAt clears the value of the "created_at" field.
-func (m *UserSystemRoleMutation) ClearCreatedAt() {
-	m.created_at = nil
-	m.clearedFields[usersystemrole.FieldCreatedAt] = struct{}{}
-}
-
-// CreatedAtCleared returns if the "created_at" field was cleared in this mutation.
-func (m *UserSystemRoleMutation) CreatedAtCleared() bool {
-	_, ok := m.clearedFields[usersystemrole.FieldCreatedAt]
-	return ok
-}
-
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *UserSystemRoleMutation) ResetCreatedAt() {
 	m.created_at = nil
-	delete(m.clearedFields, usersystemrole.FieldCreatedAt)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -13188,22 +12599,9 @@ func (m *UserSystemRoleMutation) OldUpdatedAt(ctx context.Context) (v time.Time,
 	return oldValue.UpdatedAt, nil
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (m *UserSystemRoleMutation) ClearUpdatedAt() {
-	m.updated_at = nil
-	m.clearedFields[usersystemrole.FieldUpdatedAt] = struct{}{}
-}
-
-// UpdatedAtCleared returns if the "updated_at" field was cleared in this mutation.
-func (m *UserSystemRoleMutation) UpdatedAtCleared() bool {
-	_, ok := m.clearedFields[usersystemrole.FieldUpdatedAt]
-	return ok
-}
-
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *UserSystemRoleMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-	delete(m.clearedFields, usersystemrole.FieldUpdatedAt)
 }
 
 // SetUserID sets the "user_id" field.
@@ -13515,12 +12913,6 @@ func (m *UserSystemRoleMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *UserSystemRoleMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(usersystemrole.FieldCreatedAt) {
-		fields = append(fields, usersystemrole.FieldCreatedAt)
-	}
-	if m.FieldCleared(usersystemrole.FieldUpdatedAt) {
-		fields = append(fields, usersystemrole.FieldUpdatedAt)
-	}
 	if m.FieldCleared(usersystemrole.FieldGrantedBy) {
 		fields = append(fields, usersystemrole.FieldGrantedBy)
 	}
@@ -13538,12 +12930,6 @@ func (m *UserSystemRoleMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *UserSystemRoleMutation) ClearField(name string) error {
 	switch name {
-	case usersystemrole.FieldCreatedAt:
-		m.ClearCreatedAt()
-		return nil
-	case usersystemrole.FieldUpdatedAt:
-		m.ClearUpdatedAt()
-		return nil
 	case usersystemrole.FieldGrantedBy:
 		m.ClearGrantedBy()
 		return nil

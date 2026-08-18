@@ -191,6 +191,12 @@ func (_c *MembershipCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *MembershipCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Membership.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Membership.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "Membership.user_id"`)}
 	}
@@ -381,12 +387,6 @@ func (u *MembershipUpsert) UpdateUpdatedAt() *MembershipUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *MembershipUpsert) ClearUpdatedAt() *MembershipUpsert {
-	u.SetNull(membership.FieldUpdatedAt)
-	return u
-}
-
 // SetUserID sets the "user_id" field.
 func (u *MembershipUpsert) SetUserID(v uuid.UUID) *MembershipUpsert {
 	u.Set(membership.FieldUserID, v)
@@ -521,13 +521,6 @@ func (u *MembershipUpsertOne) SetUpdatedAt(v time.Time) *MembershipUpsertOne {
 func (u *MembershipUpsertOne) UpdateUpdatedAt() *MembershipUpsertOne {
 	return u.Update(func(s *MembershipUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *MembershipUpsertOne) ClearUpdatedAt() *MembershipUpsertOne {
-	return u.Update(func(s *MembershipUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -844,13 +837,6 @@ func (u *MembershipUpsertBulk) SetUpdatedAt(v time.Time) *MembershipUpsertBulk {
 func (u *MembershipUpsertBulk) UpdateUpdatedAt() *MembershipUpsertBulk {
 	return u.Update(func(s *MembershipUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *MembershipUpsertBulk) ClearUpdatedAt() *MembershipUpsertBulk {
-	return u.Update(func(s *MembershipUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

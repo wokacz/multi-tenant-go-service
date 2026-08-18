@@ -141,6 +141,12 @@ func (_c *InvitationRoleCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *InvitationRoleCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "InvitationRole.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "InvitationRole.updated_at"`)}
+	}
 	if _, ok := _c.mutation.InvitationID(); !ok {
 		return &ValidationError{Name: "invitation_id", err: errors.New(`ent: missing required field "InvitationRole.invitation_id"`)}
 	}
@@ -295,12 +301,6 @@ func (u *InvitationRoleUpsert) UpdateUpdatedAt() *InvitationRoleUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *InvitationRoleUpsert) ClearUpdatedAt() *InvitationRoleUpsert {
-	u.SetNull(invitationrole.FieldUpdatedAt)
-	return u
-}
-
 // SetInvitationID sets the "invitation_id" field.
 func (u *InvitationRoleUpsert) SetInvitationID(v uuid.UUID) *InvitationRoleUpsert {
 	u.Set(invitationrole.FieldInvitationID, v)
@@ -387,13 +387,6 @@ func (u *InvitationRoleUpsertOne) SetUpdatedAt(v time.Time) *InvitationRoleUpser
 func (u *InvitationRoleUpsertOne) UpdateUpdatedAt() *InvitationRoleUpsertOne {
 	return u.Update(func(s *InvitationRoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *InvitationRoleUpsertOne) ClearUpdatedAt() *InvitationRoleUpsertOne {
-	return u.Update(func(s *InvitationRoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -654,13 +647,6 @@ func (u *InvitationRoleUpsertBulk) SetUpdatedAt(v time.Time) *InvitationRoleUpse
 func (u *InvitationRoleUpsertBulk) UpdateUpdatedAt() *InvitationRoleUpsertBulk {
 	return u.Update(func(s *InvitationRoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *InvitationRoleUpsertBulk) ClearUpdatedAt() *InvitationRoleUpsertBulk {
-	return u.Update(func(s *InvitationRoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

@@ -219,6 +219,12 @@ func (_c *AuthzEventCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *AuthzEventCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "AuthzEvent.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "AuthzEvent.updated_at"`)}
+	}
 	if _, ok := _c.mutation.ActorID(); !ok {
 		return &ValidationError{Name: "actor_id", err: errors.New(`ent: missing required field "AuthzEvent.actor_id"`)}
 	}
@@ -389,12 +395,6 @@ func (u *AuthzEventUpsert) SetUpdatedAt(v time.Time) *AuthzEventUpsert {
 // UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
 func (u *AuthzEventUpsert) UpdateUpdatedAt() *AuthzEventUpsert {
 	u.SetExcluded(authzevent.FieldUpdatedAt)
-	return u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *AuthzEventUpsert) ClearUpdatedAt() *AuthzEventUpsert {
-	u.SetNull(authzevent.FieldUpdatedAt)
 	return u
 }
 
@@ -604,13 +604,6 @@ func (u *AuthzEventUpsertOne) SetUpdatedAt(v time.Time) *AuthzEventUpsertOne {
 func (u *AuthzEventUpsertOne) UpdateUpdatedAt() *AuthzEventUpsertOne {
 	return u.Update(func(s *AuthzEventUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *AuthzEventUpsertOne) ClearUpdatedAt() *AuthzEventUpsertOne {
-	return u.Update(func(s *AuthzEventUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -1011,13 +1004,6 @@ func (u *AuthzEventUpsertBulk) SetUpdatedAt(v time.Time) *AuthzEventUpsertBulk {
 func (u *AuthzEventUpsertBulk) UpdateUpdatedAt() *AuthzEventUpsertBulk {
 	return u.Update(func(s *AuthzEventUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *AuthzEventUpsertBulk) ClearUpdatedAt() *AuthzEventUpsertBulk {
-	return u.Update(func(s *AuthzEventUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

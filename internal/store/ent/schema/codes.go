@@ -2,8 +2,6 @@ package schema
 
 import (
 	"entgo.io/ent"
-	"entgo.io/ent/dialect/entsql"
-	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -18,17 +16,13 @@ import (
 // codeFields is the shape all three share.
 func codeFields() []ent.Field {
 	return []ent.Field{
-		field.String("code_hash").MaxLen(64).SchemaType(varchar(64)).NotEmpty().Sensitive(),
+		field.String("code_hash").MaxLen(64).NotEmpty().Sensitive(),
 		field.Time("expires_at"),
 
 		// The counter moves in a single conditional UPDATE, never read-modify-write:
 		// concurrent guesses would otherwise all read the same value and write the
 		// same value, and a five-attempt cap would stop capping.
-		//
-		// No Default: the column has none today, and the rows are always created with
-		// the counter written explicitly. A default here would be a column change
-		// dressed up as a port.
-		field.Int("attempts"),
+		field.Int("attempts").Default(0),
 
 		field.Time("consumed_at").Optional().Nillable(),
 	}
@@ -58,10 +52,6 @@ func (PasswordReset) Indexes() []ent.Index {
 	}
 }
 
-func (PasswordReset) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "password_resets"}}
-}
-
 // EmailChange is a code emailed to the address an account wants to move to.
 type EmailChange struct {
 	ent.Schema
@@ -72,7 +62,7 @@ func (EmailChange) Mixin() []ent.Mixin { return []ent.Mixin{Model{}} }
 func (EmailChange) Fields() []ent.Field {
 	return append([]ent.Field{
 		field.UUID("user_id", uuid.UUID{}),
-		field.String("new_email").MaxLen(255).SchemaType(varchar(255)).NotEmpty(),
+		field.String("new_email").MaxLen(255).NotEmpty(),
 	}, codeFields()...)
 }
 
@@ -87,10 +77,6 @@ func (EmailChange) Indexes() []ent.Index {
 		index.Fields("user_id").StorageKey("idx_email_changes_user_id"),
 		index.Fields("expires_at").StorageKey("idx_email_changes_expires_at"),
 	}
-}
-
-func (EmailChange) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "email_changes"}}
 }
 
 // TwoFactorChallenge is a code emailed during a sign-in from an untrusted device.
@@ -123,8 +109,4 @@ func (TwoFactorChallenge) Indexes() []ent.Index {
 		index.Fields("device_id").StorageKey("idx_two_factor_challenges_device_id"),
 		index.Fields("expires_at").StorageKey("idx_two_factor_challenges_expires_at"),
 	}
-}
-
-func (TwoFactorChallenge) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "two_factor_challenges"}}
 }

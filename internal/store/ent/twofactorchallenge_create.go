@@ -84,6 +84,14 @@ func (_c *TwoFactorChallengeCreate) SetAttempts(v int) *TwoFactorChallengeCreate
 	return _c
 }
 
+// SetNillableAttempts sets the "attempts" field if the given value is not nil.
+func (_c *TwoFactorChallengeCreate) SetNillableAttempts(v *int) *TwoFactorChallengeCreate {
+	if v != nil {
+		_c.SetAttempts(*v)
+	}
+	return _c
+}
+
 // SetConsumedAt sets the "consumed_at" field.
 func (_c *TwoFactorChallengeCreate) SetConsumedAt(v time.Time) *TwoFactorChallengeCreate {
 	_c.mutation.SetConsumedAt(v)
@@ -165,6 +173,10 @@ func (_c *TwoFactorChallengeCreate) defaults() {
 		v := twofactorchallenge.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Attempts(); !ok {
+		v := twofactorchallenge.DefaultAttempts
+		_c.mutation.SetAttempts(v)
+	}
 	if _, ok := _c.mutation.ID(); !ok {
 		v := twofactorchallenge.DefaultID()
 		_c.mutation.SetID(v)
@@ -173,6 +185,12 @@ func (_c *TwoFactorChallengeCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *TwoFactorChallengeCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "TwoFactorChallenge.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "TwoFactorChallenge.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "TwoFactorChallenge.user_id"`)}
 	}
@@ -357,12 +375,6 @@ func (u *TwoFactorChallengeUpsert) UpdateUpdatedAt() *TwoFactorChallengeUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *TwoFactorChallengeUpsert) ClearUpdatedAt() *TwoFactorChallengeUpsert {
-	u.SetNull(twofactorchallenge.FieldUpdatedAt)
-	return u
-}
-
 // SetUserID sets the "user_id" field.
 func (u *TwoFactorChallengeUpsert) SetUserID(v uuid.UUID) *TwoFactorChallengeUpsert {
 	u.Set(twofactorchallenge.FieldUserID, v)
@@ -509,13 +521,6 @@ func (u *TwoFactorChallengeUpsertOne) SetUpdatedAt(v time.Time) *TwoFactorChalle
 func (u *TwoFactorChallengeUpsertOne) UpdateUpdatedAt() *TwoFactorChallengeUpsertOne {
 	return u.Update(func(s *TwoFactorChallengeUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *TwoFactorChallengeUpsertOne) ClearUpdatedAt() *TwoFactorChallengeUpsertOne {
-	return u.Update(func(s *TwoFactorChallengeUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -846,13 +851,6 @@ func (u *TwoFactorChallengeUpsertBulk) SetUpdatedAt(v time.Time) *TwoFactorChall
 func (u *TwoFactorChallengeUpsertBulk) UpdateUpdatedAt() *TwoFactorChallengeUpsertBulk {
 	return u.Update(func(s *TwoFactorChallengeUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *TwoFactorChallengeUpsertBulk) ClearUpdatedAt() *TwoFactorChallengeUpsertBulk {
-	return u.Update(func(s *TwoFactorChallengeUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

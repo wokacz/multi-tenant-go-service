@@ -12,17 +12,17 @@ var (
 	// AuthzEventsColumns holds the columns for the "authz_events" table.
 	AuthzEventsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "organization_id", Type: field.TypeUUID, Nullable: true},
 		{Name: "actor_id", Type: field.TypeUUID},
 		{Name: "subject_id", Type: field.TypeUUID, Nullable: true},
-		{Name: "action", Type: field.TypeString, Size: 40, SchemaType: map[string]string{"postgres": "character varying(40)"}},
+		{Name: "action", Type: field.TypeString, Size: 40},
 		{Name: "role_id", Type: field.TypeUUID, Nullable: true},
-		{Name: "permission_key", Type: field.TypeString, Nullable: true, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "permission_key", Type: field.TypeString, Nullable: true, Size: 100},
 		{Name: "ip", Type: field.TypeString, SchemaType: map[string]string{"postgres": "inet"}},
-		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512, SchemaType: map[string]string{"postgres": "character varying(512)"}},
-		{Name: "detail", Type: field.TypeString, Nullable: true, Size: 500, SchemaType: map[string]string{"postgres": "character varying(500)"}},
+		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512},
+		{Name: "detail", Type: field.TypeString, Nullable: true, Size: 500},
 	}
 	// AuthzEventsTable holds the schema information for the "authz_events" table.
 	AuthzEventsTable = &schema.Table{
@@ -50,11 +50,11 @@ var (
 	// DevicesColumns holds the columns for the "devices" table.
 	DevicesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "fingerprint", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
-		{Name: "label", Type: field.TypeString, Nullable: true, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
-		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512, SchemaType: map[string]string{"postgres": "character varying(512)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "fingerprint", Type: field.TypeString, Size: 64},
+		{Name: "label", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512},
 		{Name: "last_seen_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_ip", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "inet"}},
 		{Name: "trusted_at", Type: field.TypeTime, Nullable: true},
@@ -90,12 +90,12 @@ var (
 	// EmailChangesColumns holds the columns for the "email_changes" table.
 	EmailChangesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "new_email", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
-		{Name: "code_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "new_email", Type: field.TypeString, Size: 255},
+		{Name: "code_hash", Type: field.TypeString, Size: 64},
 		{Name: "expires_at", Type: field.TypeTime},
-		{Name: "attempts", Type: field.TypeInt},
+		{Name: "attempts", Type: field.TypeInt, Default: 0},
 		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "user_id", Type: field.TypeUUID},
 	}
@@ -128,10 +128,10 @@ var (
 	// InvitationsColumns holds the columns for the "invitations" table.
 	InvitationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "email", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
-		{Name: "token_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "email", Type: field.TypeString, Size: 255},
+		{Name: "token_hash", Type: field.TypeString, Size: 64},
 		{Name: "invited_by", Type: field.TypeUUID, Nullable: true},
 		{Name: "expires_at", Type: field.TypeTime},
 		{Name: "accepted_at", Type: field.TypeTime, Nullable: true},
@@ -171,8 +171,8 @@ var (
 	// InvitationRolesColumns holds the columns for the "invitation_roles" table.
 	InvitationRolesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "invitation_id", Type: field.TypeUUID},
 		{Name: "role_id", Type: field.TypeUUID},
 	}
@@ -206,13 +206,13 @@ var (
 	// LoginEventsColumns holds the columns for the "login_events" table.
 	LoginEventsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "device_id", Type: field.TypeUUID, Nullable: true},
 		{Name: "ip", Type: field.TypeString, SchemaType: map[string]string{"postgres": "inet"}},
-		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512, SchemaType: map[string]string{"postgres": "character varying(512)"}},
-		{Name: "outcome", Type: field.TypeEnum, Enums: []string{"success", "bad_password", "mfa_failed", "locked"}, SchemaType: map[string]string{"postgres": "character varying(20)"}},
-		{Name: "country", Type: field.TypeString, Nullable: true, Size: 2, SchemaType: map[string]string{"postgres": "character varying(2)"}},
+		{Name: "user_agent", Type: field.TypeString, Nullable: true, Size: 512},
+		{Name: "outcome", Type: field.TypeEnum, Enums: []string{"success", "bad_password", "mfa_failed", "locked"}},
+		{Name: "country", Type: field.TypeString, Nullable: true, Size: 2},
 		{Name: "user_id", Type: field.TypeUUID},
 	}
 	// LoginEventsTable holds the schema information for the "login_events" table.
@@ -249,9 +249,9 @@ var (
 	// MembershipsColumns holds the columns for the "memberships" table.
 	MembershipsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "suspended"}, SchemaType: map[string]string{"postgres": "character varying(20)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "suspended"}},
 		{Name: "invited_by", Type: field.TypeUUID, Nullable: true},
 		{Name: "joined_at", Type: field.TypeTime, Nullable: true},
 		{Name: "organization_id", Type: field.TypeUUID},
@@ -287,8 +287,8 @@ var (
 	// MembershipRolesColumns holds the columns for the "membership_roles" table.
 	MembershipRolesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "granted_by", Type: field.TypeUUID, Nullable: true},
 		{Name: "membership_id", Type: field.TypeUUID},
 		{Name: "role_id", Type: field.TypeUUID},
@@ -323,12 +323,12 @@ var (
 	// OrganizationsColumns holds the columns for the "organizations" table.
 	OrganizationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
-		{Name: "is_protected", Type: field.TypeBool, Nullable: true},
-		{Name: "slug", Type: field.TypeString, Size: 63, SchemaType: map[string]string{"postgres": "character varying(63)"}},
-		{Name: "name", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "is_protected", Type: field.TypeBool, Default: false},
+		{Name: "slug", Type: field.TypeString, Size: 63},
+		{Name: "name", Type: field.TypeString, Size: 100},
 	}
 	// OrganizationsTable holds the schema information for the "organizations" table.
 	OrganizationsTable = &schema.Table{
@@ -354,11 +354,11 @@ var (
 	// PasswordResetsColumns holds the columns for the "password_resets" table.
 	PasswordResetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "code_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "code_hash", Type: field.TypeString, Size: 64},
 		{Name: "expires_at", Type: field.TypeTime},
-		{Name: "attempts", Type: field.TypeInt},
+		{Name: "attempts", Type: field.TypeInt, Default: 0},
 		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "user_id", Type: field.TypeUUID},
 	}
@@ -391,11 +391,11 @@ var (
 	// RolesColumns holds the columns for the "roles" table.
 	RolesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "key", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
-		{Name: "name", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
-		{Name: "description", Type: field.TypeString, Nullable: true, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "key", Type: field.TypeString, Size: 64},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "description", Type: field.TypeString, Nullable: true, Size: 255},
 		{Name: "is_system", Type: field.TypeBool, Default: false},
 		{Name: "organization_id", Type: field.TypeUUID},
 	}
@@ -423,9 +423,9 @@ var (
 	// RolePermissionsColumns holds the columns for the "role_permissions" table.
 	RolePermissionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "permission_key", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "permission_key", Type: field.TypeString, Size: 100},
 		{Name: "role_id", Type: field.TypeUUID},
 	}
 	// RolePermissionsTable holds the schema information for the "role_permissions" table.
@@ -452,11 +452,11 @@ var (
 	// TwoFactorChallengesColumns holds the columns for the "two_factor_challenges" table.
 	TwoFactorChallengesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "code_hash", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "code_hash", Type: field.TypeString, Size: 64},
 		{Name: "expires_at", Type: field.TypeTime},
-		{Name: "attempts", Type: field.TypeInt},
+		{Name: "attempts", Type: field.TypeInt, Default: 0},
 		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "device_id", Type: field.TypeUUID},
 		{Name: "user_id", Type: field.TypeUUID},
@@ -501,14 +501,14 @@ var (
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
-		{Name: "is_protected", Type: field.TypeBool, Nullable: true},
-		{Name: "name", Type: field.TypeString, Size: 100, SchemaType: map[string]string{"postgres": "character varying(100)"}},
-		{Name: "email", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
-		{Name: "password_hash", Type: field.TypeString, Size: 255, SchemaType: map[string]string{"postgres": "character varying(255)"}},
-		{Name: "locale", Type: field.TypeString, Nullable: true, Size: 10, SchemaType: map[string]string{"postgres": "character varying(10)"}},
+		{Name: "is_protected", Type: field.TypeBool, Default: false},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "email", Type: field.TypeString, Size: 255},
+		{Name: "password_hash", Type: field.TypeString, Size: 255},
+		{Name: "locale", Type: field.TypeString, Nullable: true, Size: 10},
 		{Name: "session_epoch", Type: field.TypeInt, Default: 0},
 		{Name: "two_factor_enabled", Type: field.TypeBool, Default: false},
 		{Name: "suspended_at", Type: field.TypeTime, Nullable: true},
@@ -537,9 +537,9 @@ var (
 	// UserSystemRolesColumns holds the columns for the "user_system_roles" table.
 	UserSystemRolesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "created_at", Type: field.TypeTime, Nullable: true},
-		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
-		{Name: "role_key", Type: field.TypeString, Size: 64, SchemaType: map[string]string{"postgres": "character varying(64)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "role_key", Type: field.TypeString, Size: 64},
 		{Name: "granted_by", Type: field.TypeUUID, Nullable: true},
 		{Name: "user_id", Type: field.TypeUUID},
 	}
@@ -585,26 +585,11 @@ var (
 )
 
 func init() {
-	AuthzEventsTable.Annotation = &entsql.Annotation{
-		Table: "authz_events",
-	}
 	DevicesTable.ForeignKeys[0].RefTable = UsersTable
-	DevicesTable.Annotation = &entsql.Annotation{
-		Table: "devices",
-	}
 	EmailChangesTable.ForeignKeys[0].RefTable = UsersTable
-	EmailChangesTable.Annotation = &entsql.Annotation{
-		Table: "email_changes",
-	}
 	InvitationsTable.ForeignKeys[0].RefTable = OrganizationsTable
-	InvitationsTable.Annotation = &entsql.Annotation{
-		Table: "invitations",
-	}
 	InvitationRolesTable.ForeignKeys[0].RefTable = InvitationsTable
 	InvitationRolesTable.ForeignKeys[1].RefTable = RolesTable
-	InvitationRolesTable.Annotation = &entsql.Annotation{
-		Table: "invitation_roles",
-	}
 	LoginEventsTable.ForeignKeys[0].RefTable = UsersTable
 	LoginEventsTable.Annotation = &entsql.Annotation{
 		Table: "login_events",
@@ -622,34 +607,13 @@ func init() {
 	}
 	MembershipRolesTable.ForeignKeys[0].RefTable = MembershipsTable
 	MembershipRolesTable.ForeignKeys[1].RefTable = RolesTable
-	MembershipRolesTable.Annotation = &entsql.Annotation{
-		Table: "membership_roles",
-	}
-	OrganizationsTable.Annotation = &entsql.Annotation{
-		Table: "organizations",
-	}
 	PasswordResetsTable.ForeignKeys[0].RefTable = UsersTable
-	PasswordResetsTable.Annotation = &entsql.Annotation{
-		Table: "password_resets",
-	}
 	RolesTable.ForeignKeys[0].RefTable = OrganizationsTable
-	RolesTable.Annotation = &entsql.Annotation{
-		Table: "roles",
-	}
 	RolePermissionsTable.ForeignKeys[0].RefTable = RolesTable
-	RolePermissionsTable.Annotation = &entsql.Annotation{
-		Table: "role_permissions",
-	}
 	TwoFactorChallengesTable.ForeignKeys[0].RefTable = DevicesTable
 	TwoFactorChallengesTable.ForeignKeys[1].RefTable = UsersTable
-	TwoFactorChallengesTable.Annotation = &entsql.Annotation{
-		Table: "two_factor_challenges",
-	}
 	UsersTable.Annotation = &entsql.Annotation{
 		Table: "users",
 	}
 	UserSystemRolesTable.ForeignKeys[0].RefTable = UsersTable
-	UserSystemRolesTable.Annotation = &entsql.Annotation{
-		Table: "user_system_roles",
-	}
 }

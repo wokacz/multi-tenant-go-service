@@ -149,6 +149,12 @@ func (_c *UserSystemRoleCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *UserSystemRoleCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "UserSystemRole.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "UserSystemRole.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "UserSystemRole.user_id"`)}
 	}
@@ -296,12 +302,6 @@ func (u *UserSystemRoleUpsert) UpdateUpdatedAt() *UserSystemRoleUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *UserSystemRoleUpsert) ClearUpdatedAt() *UserSystemRoleUpsert {
-	u.SetNull(usersystemrole.FieldUpdatedAt)
-	return u
-}
-
 // SetUserID sets the "user_id" field.
 func (u *UserSystemRoleUpsert) SetUserID(v uuid.UUID) *UserSystemRoleUpsert {
 	u.Set(usersystemrole.FieldUserID, v)
@@ -406,13 +406,6 @@ func (u *UserSystemRoleUpsertOne) SetUpdatedAt(v time.Time) *UserSystemRoleUpser
 func (u *UserSystemRoleUpsertOne) UpdateUpdatedAt() *UserSystemRoleUpsertOne {
 	return u.Update(func(s *UserSystemRoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *UserSystemRoleUpsertOne) ClearUpdatedAt() *UserSystemRoleUpsertOne {
-	return u.Update(func(s *UserSystemRoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -694,13 +687,6 @@ func (u *UserSystemRoleUpsertBulk) SetUpdatedAt(v time.Time) *UserSystemRoleUpse
 func (u *UserSystemRoleUpsertBulk) UpdateUpdatedAt() *UserSystemRoleUpsertBulk {
 	return u.Update(func(s *UserSystemRoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *UserSystemRoleUpsertBulk) ClearUpdatedAt() *UserSystemRoleUpsertBulk {
-	return u.Update(func(s *UserSystemRoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

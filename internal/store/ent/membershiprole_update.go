@@ -38,12 +38,6 @@ func (_u *MembershipRoleUpdate) SetUpdatedAt(v time.Time) *MembershipRoleUpdate 
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *MembershipRoleUpdate) ClearUpdatedAt() *MembershipRoleUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetMembershipID sets the "membership_id" field.
 func (_u *MembershipRoleUpdate) SetMembershipID(v uuid.UUID) *MembershipRoleUpdate {
 	_u.mutation.SetMembershipID(v)
@@ -149,7 +143,7 @@ func (_u *MembershipRoleUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *MembershipRoleUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := membershiprole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -184,14 +178,8 @@ func (_u *MembershipRoleUpdate) sqlSave(ctx context.Context) (_node int, err err
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(membershiprole.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(membershiprole.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(membershiprole.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.GrantedBy(); ok {
 		_spec.SetField(membershiprole.FieldGrantedBy, field.TypeUUID, value)
@@ -282,12 +270,6 @@ type MembershipRoleUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MembershipRoleUpdateOne) SetUpdatedAt(v time.Time) *MembershipRoleUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *MembershipRoleUpdateOne) ClearUpdatedAt() *MembershipRoleUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -409,7 +391,7 @@ func (_u *MembershipRoleUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *MembershipRoleUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := membershiprole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -461,14 +443,8 @@ func (_u *MembershipRoleUpdateOne) sqlSave(ctx context.Context) (_node *Membersh
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(membershiprole.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(membershiprole.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(membershiprole.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.GrantedBy(); ok {
 		_spec.SetField(membershiprole.FieldGrantedBy, field.TypeUUID, value)

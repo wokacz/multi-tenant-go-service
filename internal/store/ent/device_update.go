@@ -38,12 +38,6 @@ func (_u *DeviceUpdate) SetUpdatedAt(v time.Time) *DeviceUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *DeviceUpdate) ClearUpdatedAt() *DeviceUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetUserID sets the "user_id" field.
 func (_u *DeviceUpdate) SetUserID(v uuid.UUID) *DeviceUpdate {
 	_u.mutation.SetUserID(v)
@@ -274,7 +268,7 @@ func (_u *DeviceUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *DeviceUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := device.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -321,14 +315,8 @@ func (_u *DeviceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(device.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(device.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(device.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Fingerprint(); ok {
 		_spec.SetField(device.FieldFingerprint, field.TypeString, value)
@@ -468,12 +456,6 @@ type DeviceUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *DeviceUpdateOne) SetUpdatedAt(v time.Time) *DeviceUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *DeviceUpdateOne) ClearUpdatedAt() *DeviceUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -720,7 +702,7 @@ func (_u *DeviceUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *DeviceUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := device.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -784,14 +766,8 @@ func (_u *DeviceUpdateOne) sqlSave(ctx context.Context) (_node *Device, err erro
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(device.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(device.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(device.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Fingerprint(); ok {
 		_spec.SetField(device.FieldFingerprint, field.TypeString, value)

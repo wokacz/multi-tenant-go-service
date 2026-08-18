@@ -38,12 +38,6 @@ func (_u *TwoFactorChallengeUpdate) SetUpdatedAt(v time.Time) *TwoFactorChalleng
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *TwoFactorChallengeUpdate) ClearUpdatedAt() *TwoFactorChallengeUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetUserID sets the "user_id" field.
 func (_u *TwoFactorChallengeUpdate) SetUserID(v uuid.UUID) *TwoFactorChallengeUpdate {
 	_u.mutation.SetUserID(v)
@@ -198,7 +192,7 @@ func (_u *TwoFactorChallengeUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *TwoFactorChallengeUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := twofactorchallenge.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -238,14 +232,8 @@ func (_u *TwoFactorChallengeUpdate) sqlSave(ctx context.Context) (_node int, err
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(twofactorchallenge.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(twofactorchallenge.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(twofactorchallenge.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CodeHash(); ok {
 		_spec.SetField(twofactorchallenge.FieldCodeHash, field.TypeString, value)
@@ -348,12 +336,6 @@ type TwoFactorChallengeUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *TwoFactorChallengeUpdateOne) SetUpdatedAt(v time.Time) *TwoFactorChallengeUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *TwoFactorChallengeUpdateOne) ClearUpdatedAt() *TwoFactorChallengeUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -524,7 +506,7 @@ func (_u *TwoFactorChallengeUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *TwoFactorChallengeUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := twofactorchallenge.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -581,14 +563,8 @@ func (_u *TwoFactorChallengeUpdateOne) sqlSave(ctx context.Context) (_node *TwoF
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(twofactorchallenge.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(twofactorchallenge.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(twofactorchallenge.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CodeHash(); ok {
 		_spec.SetField(twofactorchallenge.FieldCodeHash, field.TypeString, value)

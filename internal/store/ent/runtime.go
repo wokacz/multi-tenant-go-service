@@ -173,6 +173,10 @@ func init() {
 			return nil
 		}
 	}()
+	// emailchangeDescAttempts is the schema descriptor for attempts field.
+	emailchangeDescAttempts := emailchangeFields[4].Descriptor()
+	// emailchange.DefaultAttempts holds the default value on creation for the attempts field.
+	emailchange.DefaultAttempts = emailchangeDescAttempts.Default.(int)
 	// emailchangeDescID is the schema descriptor for id field.
 	emailchangeDescID := emailchangeMixinFields0[0].Descriptor()
 	// emailchange.DefaultID holds the default value on creation for the id field.
@@ -319,6 +323,8 @@ func init() {
 	organizationMixin := schema.Organization{}.Mixin()
 	organizationMixinFields0 := organizationMixin[0].Fields()
 	_ = organizationMixinFields0
+	organizationMixinFields1 := organizationMixin[1].Fields()
+	_ = organizationMixinFields1
 	organizationFields := schema.Organization{}.Fields()
 	_ = organizationFields
 	// organizationDescCreatedAt is the schema descriptor for created_at field.
@@ -331,6 +337,10 @@ func init() {
 	organization.DefaultUpdatedAt = organizationDescUpdatedAt.Default.(func() time.Time)
 	// organization.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	organization.UpdateDefaultUpdatedAt = organizationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// organizationDescIsProtected is the schema descriptor for is_protected field.
+	organizationDescIsProtected := organizationMixinFields1[1].Descriptor()
+	// organization.DefaultIsProtected holds the default value on creation for the is_protected field.
+	organization.DefaultIsProtected = organizationDescIsProtected.Default.(bool)
 	// organizationDescSlug is the schema descriptor for slug field.
 	organizationDescSlug := organizationFields[0].Descriptor()
 	// organization.SlugValidator is a validator for the "slug" field. It is called by the builders before save.
@@ -404,6 +414,10 @@ func init() {
 			return nil
 		}
 	}()
+	// passwordresetDescAttempts is the schema descriptor for attempts field.
+	passwordresetDescAttempts := passwordresetFields[3].Descriptor()
+	// passwordreset.DefaultAttempts holds the default value on creation for the attempts field.
+	passwordreset.DefaultAttempts = passwordresetDescAttempts.Default.(int)
 	// passwordresetDescID is the schema descriptor for id field.
 	passwordresetDescID := passwordresetMixinFields0[0].Descriptor()
 	// passwordreset.DefaultID holds the default value on creation for the id field.
@@ -541,6 +555,10 @@ func init() {
 			return nil
 		}
 	}()
+	// twofactorchallengeDescAttempts is the schema descriptor for attempts field.
+	twofactorchallengeDescAttempts := twofactorchallengeFields[4].Descriptor()
+	// twofactorchallenge.DefaultAttempts holds the default value on creation for the attempts field.
+	twofactorchallenge.DefaultAttempts = twofactorchallengeDescAttempts.Default.(int)
 	// twofactorchallengeDescID is the schema descriptor for id field.
 	twofactorchallengeDescID := twofactorchallengeMixinFields0[0].Descriptor()
 	// twofactorchallenge.DefaultID holds the default value on creation for the id field.
@@ -548,6 +566,8 @@ func init() {
 	userMixin := schema.User{}.Mixin()
 	userMixinFields0 := userMixin[0].Fields()
 	_ = userMixinFields0
+	userMixinFields1 := userMixin[1].Fields()
+	_ = userMixinFields1
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescCreatedAt is the schema descriptor for created_at field.
@@ -560,6 +580,10 @@ func init() {
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// userDescIsProtected is the schema descriptor for is_protected field.
+	userDescIsProtected := userMixinFields1[1].Descriptor()
+	// user.DefaultIsProtected holds the default value on creation for the is_protected field.
+	user.DefaultIsProtected = userDescIsProtected.Default.(bool)
 	// userDescName is the schema descriptor for name field.
 	userDescName := userFields[0].Descriptor()
 	// user.NameValidator is a validator for the "name" field. It is called by the builders before save.

@@ -39,12 +39,6 @@ func (_u *OrganizationUpdate) SetUpdatedAt(v time.Time) *OrganizationUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *OrganizationUpdate) ClearUpdatedAt() *OrganizationUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (_u *OrganizationUpdate) SetDeletedAt(v time.Time) *OrganizationUpdate {
 	_u.mutation.SetDeletedAt(v)
@@ -76,12 +70,6 @@ func (_u *OrganizationUpdate) SetNillableIsProtected(v *bool) *OrganizationUpdat
 	if v != nil {
 		_u.SetIsProtected(*v)
 	}
-	return _u
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (_u *OrganizationUpdate) ClearIsProtected() *OrganizationUpdate {
-	_u.mutation.ClearIsProtected()
 	return _u
 }
 
@@ -242,7 +230,7 @@ func (_u *OrganizationUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *OrganizationUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := organization.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -276,14 +264,8 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(organization.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(organization.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(organization.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.DeletedAt(); ok {
 		_spec.SetField(organization.FieldDeletedAt, field.TypeTime, value)
@@ -293,9 +275,6 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.IsProtected(); ok {
 		_spec.SetField(organization.FieldIsProtected, field.TypeBool, value)
-	}
-	if _u.mutation.IsProtectedCleared() {
-		_spec.ClearField(organization.FieldIsProtected, field.TypeBool)
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(organization.FieldName, field.TypeString, value)
@@ -463,12 +442,6 @@ func (_u *OrganizationUpdateOne) SetUpdatedAt(v time.Time) *OrganizationUpdateOn
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *OrganizationUpdateOne) ClearUpdatedAt() *OrganizationUpdateOne {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (_u *OrganizationUpdateOne) SetDeletedAt(v time.Time) *OrganizationUpdateOne {
 	_u.mutation.SetDeletedAt(v)
@@ -500,12 +473,6 @@ func (_u *OrganizationUpdateOne) SetNillableIsProtected(v *bool) *OrganizationUp
 	if v != nil {
 		_u.SetIsProtected(*v)
 	}
-	return _u
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (_u *OrganizationUpdateOne) ClearIsProtected() *OrganizationUpdateOne {
-	_u.mutation.ClearIsProtected()
 	return _u
 }
 
@@ -679,7 +646,7 @@ func (_u *OrganizationUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *OrganizationUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := organization.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -730,14 +697,8 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(organization.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(organization.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(organization.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.DeletedAt(); ok {
 		_spec.SetField(organization.FieldDeletedAt, field.TypeTime, value)
@@ -747,9 +708,6 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 	}
 	if value, ok := _u.mutation.IsProtected(); ok {
 		_spec.SetField(organization.FieldIsProtected, field.TypeBool, value)
-	}
-	if _u.mutation.IsProtectedCleared() {
-		_spec.ClearField(organization.FieldIsProtected, field.TypeBool)
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(organization.FieldName, field.TypeString, value)

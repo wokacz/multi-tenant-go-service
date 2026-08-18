@@ -137,6 +137,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultIsProtected holds the default value on creation for the "is_protected" field.
+	DefaultIsProtected bool
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
 	// EmailValidator is a validator for the "email" field. It is called by the builders before save.

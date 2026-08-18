@@ -126,16 +126,6 @@ func CreatedAtLTE(v time.Time) predicate.Organization {
 	return predicate.Organization(sql.FieldLTE(FieldCreatedAt, v))
 }
 
-// CreatedAtIsNil applies the IsNil predicate on the "created_at" field.
-func CreatedAtIsNil() predicate.Organization {
-	return predicate.Organization(sql.FieldIsNull(FieldCreatedAt))
-}
-
-// CreatedAtNotNil applies the NotNil predicate on the "created_at" field.
-func CreatedAtNotNil() predicate.Organization {
-	return predicate.Organization(sql.FieldNotNull(FieldCreatedAt))
-}
-
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
 func UpdatedAtEQ(v time.Time) predicate.Organization {
 	return predicate.Organization(sql.FieldEQ(FieldUpdatedAt, v))
@@ -174,16 +164,6 @@ func UpdatedAtLT(v time.Time) predicate.Organization {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.Organization {
 	return predicate.Organization(sql.FieldLTE(FieldUpdatedAt, v))
-}
-
-// UpdatedAtIsNil applies the IsNil predicate on the "updated_at" field.
-func UpdatedAtIsNil() predicate.Organization {
-	return predicate.Organization(sql.FieldIsNull(FieldUpdatedAt))
-}
-
-// UpdatedAtNotNil applies the NotNil predicate on the "updated_at" field.
-func UpdatedAtNotNil() predicate.Organization {
-	return predicate.Organization(sql.FieldNotNull(FieldUpdatedAt))
 }
 
 // DeletedAtEQ applies the EQ predicate on the "deleted_at" field.
@@ -244,16 +224,6 @@ func IsProtectedEQ(v bool) predicate.Organization {
 // IsProtectedNEQ applies the NEQ predicate on the "is_protected" field.
 func IsProtectedNEQ(v bool) predicate.Organization {
 	return predicate.Organization(sql.FieldNEQ(FieldIsProtected, v))
-}
-
-// IsProtectedIsNil applies the IsNil predicate on the "is_protected" field.
-func IsProtectedIsNil() predicate.Organization {
-	return predicate.Organization(sql.FieldIsNull(FieldIsProtected))
-}
-
-// IsProtectedNotNil applies the NotNil predicate on the "is_protected" field.
-func IsProtectedNotNil() predicate.Organization {
-	return predicate.Organization(sql.FieldNotNull(FieldIsProtected))
 }
 
 // SlugEQ applies the EQ predicate on the "slug" field.

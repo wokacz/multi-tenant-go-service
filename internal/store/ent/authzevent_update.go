@@ -36,12 +36,6 @@ func (_u *AuthzEventUpdate) SetUpdatedAt(v time.Time) *AuthzEventUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *AuthzEventUpdate) ClearUpdatedAt() *AuthzEventUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetOrganizationID sets the "organization_id" field.
 func (_u *AuthzEventUpdate) SetOrganizationID(v uuid.UUID) *AuthzEventUpdate {
 	_u.mutation.SetOrganizationID(v)
@@ -239,7 +233,7 @@ func (_u *AuthzEventUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *AuthzEventUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := authzevent.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -288,14 +282,8 @@ func (_u *AuthzEventUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(authzevent.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authzevent.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(authzevent.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.OrganizationID(); ok {
 		_spec.SetField(authzevent.FieldOrganizationID, field.TypeUUID, value)
@@ -367,12 +355,6 @@ type AuthzEventUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AuthzEventUpdateOne) SetUpdatedAt(v time.Time) *AuthzEventUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *AuthzEventUpdateOne) ClearUpdatedAt() *AuthzEventUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -586,7 +568,7 @@ func (_u *AuthzEventUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *AuthzEventUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := authzevent.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -652,14 +634,8 @@ func (_u *AuthzEventUpdateOne) sqlSave(ctx context.Context) (_node *AuthzEvent, 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(authzevent.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(authzevent.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(authzevent.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.OrganizationID(); ok {
 		_spec.SetField(authzevent.FieldOrganizationID, field.TypeUUID, value)

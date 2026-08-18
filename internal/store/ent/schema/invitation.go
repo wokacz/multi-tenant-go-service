@@ -3,7 +3,6 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -27,9 +26,9 @@ func (Invitation) Fields() []ent.Field {
 
 		// Kept even though the token identifies the invitation: accepting compares it
 		// against the account's address, which is the narrower rule chosen in D4.
-		field.String("email").MaxLen(255).SchemaType(varchar(255)).NotEmpty(),
+		field.String("email").MaxLen(255).NotEmpty(),
 
-		field.String("token_hash").MaxLen(64).SchemaType(varchar(64)).NotEmpty().Sensitive(),
+		field.String("token_hash").MaxLen(64).NotEmpty().Sensitive(),
 		field.UUID("invited_by", uuid.UUID{}).Optional().Nillable(),
 		field.Time("expires_at"),
 		field.Time("accepted_at").Optional().Nillable(),
@@ -51,8 +50,4 @@ func (Invitation) Indexes() []ent.Index {
 		index.Fields("token_hash").Unique().StorageKey("idx_invitations_token_hash"),
 		index.Fields("expires_at").StorageKey("idx_invitations_expires_at"),
 	}
-}
-
-func (Invitation) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "invitations"}}
 }

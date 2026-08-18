@@ -121,16 +121,6 @@ func CreatedAtLTE(v time.Time) predicate.UserSystemRole {
 	return predicate.UserSystemRole(sql.FieldLTE(FieldCreatedAt, v))
 }
 
-// CreatedAtIsNil applies the IsNil predicate on the "created_at" field.
-func CreatedAtIsNil() predicate.UserSystemRole {
-	return predicate.UserSystemRole(sql.FieldIsNull(FieldCreatedAt))
-}
-
-// CreatedAtNotNil applies the NotNil predicate on the "created_at" field.
-func CreatedAtNotNil() predicate.UserSystemRole {
-	return predicate.UserSystemRole(sql.FieldNotNull(FieldCreatedAt))
-}
-
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
 func UpdatedAtEQ(v time.Time) predicate.UserSystemRole {
 	return predicate.UserSystemRole(sql.FieldEQ(FieldUpdatedAt, v))
@@ -169,16 +159,6 @@ func UpdatedAtLT(v time.Time) predicate.UserSystemRole {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.UserSystemRole {
 	return predicate.UserSystemRole(sql.FieldLTE(FieldUpdatedAt, v))
-}
-
-// UpdatedAtIsNil applies the IsNil predicate on the "updated_at" field.
-func UpdatedAtIsNil() predicate.UserSystemRole {
-	return predicate.UserSystemRole(sql.FieldIsNull(FieldUpdatedAt))
-}
-
-// UpdatedAtNotNil applies the NotNil predicate on the "updated_at" field.
-func UpdatedAtNotNil() predicate.UserSystemRole {
-	return predicate.UserSystemRole(sql.FieldNotNull(FieldUpdatedAt))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.

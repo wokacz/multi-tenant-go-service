@@ -26,17 +26,14 @@ func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("name").
 			MaxLen(100).
-			SchemaType(varchar(100)).
 			NotEmpty(),
 
 		field.String("email").
 			MaxLen(255).
-			SchemaType(varchar(255)).
 			NotEmpty(),
 
 		field.String("password_hash").
 			MaxLen(255).
-			SchemaType(varchar(255)).
 			NotEmpty().
 			Sensitive(),
 
@@ -45,7 +42,6 @@ func (User) Fields() []ent.Field {
 		// guess into a permanent decision.
 		field.String("locale").
 			MaxLen(10).
-			SchemaType(varchar(10)).
 			Optional(),
 
 		field.Int("session_epoch").

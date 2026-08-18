@@ -95,9 +95,7 @@ tasks:
     cmds:
       - go mod tidy
       - go mod verify
-      # The loader is a separate module and would otherwise drift unnoticed. Same for
-      # the ent generator.
-      - go mod tidy -C loader
+      # The ent generator is a separate module and would otherwise drift unnoticed.
       - go mod tidy -C tools/entgen
 
   ent:generate:
@@ -112,7 +110,7 @@ tasks:
     # go/packages, which has to resolve it inside the module that owns it.
     cmds:
       - go build -C tools/entgen -o "$(pwd)/bin/entgen" entgo.io/ent/cmd/ent
-      - ./bin/entgen generate --feature sql/lock,sql/upsert,sql/modifier ./internal/store/ent/schema
+      - ./bin/entgen generate --feature sql/lock,sql/upsert,sql/modifier,sql/versioned-migration ./internal/store/ent/schema
 
   ent:check:
     desc: Fail if the committed ent client is out of date
@@ -157,14 +155,31 @@ tasks:
   migrate:
     desc: Apply pending migrations
     cmds:
-      - atlas migrate apply --env local --url "{{.DB_URL}}"
+      - atlas migrate apply --dir "file://migrations" --url "{{.DB_URL}}"
 
   migrate:diff:
-    desc: Generate a migration from changes to the GORM models (NAME=... required)
+    desc: Generate a migration from changes to the ent schema (NAME=... required)
     requires:
       vars: [NAME]
+    vars:
+      PORT: '{{.PORT | default "55442"}}'
+      NAME_DB: mtgs-atlas-dev
+    # ent computes the difference: it replays migrations/ onto a throwaway database to
+    # learn the current state, compares that with the schema, and Atlas renders the SQL.
+    # Replaying rather than reading a live database is what keeps the result independent
+    # of which machine generated it.
     cmds:
-      - atlas migrate diff {{.NAME}} --env local
+      - task: ent:generate
+      - defer: docker rm -f {{.NAME_DB}} >/dev/null 2>&1 || true
+      - docker rm -f {{.NAME_DB}} >/dev/null 2>&1 || true
+      - docker run -d --name {{.NAME_DB}} -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres
+        -e POSTGRES_DB=dev -p 127.0.0.1:{{.PORT}}:5432 postgres:18 >/dev/null
+      - until docker exec {{.NAME_DB}} pg_isready -U postgres -d dev >/dev/null 2>&1; do sleep 1; done
+      - sleep 1
+      - until docker exec {{.NAME_DB}} pg_isready -U postgres -d dev >/dev/null 2>&1; do sleep 1; done
+      - ATLAS_DEV_URL="postgres://postgres:postgres@localhost:{{.PORT}}/dev?sslmode=disable&search_path=public"
+        go run ./cmd/entmigrate {{.NAME}}
+      - atlas migrate hash --dir "file://migrations"
 
   # Migration to ent (see ENT.md). The dump is the "before" picture: the ent schema
   # is correct when the database it produces is byte-identical to this file, which is
@@ -223,11 +238,14 @@ tasks:
       - sleep 1
       - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
       - DATABASE_URL="postgres://postgres:postgres@localhost:{{.PORT}}/postgres?sslmode=disable"
-        go run ./internal/store/ent/migrate/apply.go
+        go run ./cmd/entmigrate -apply
       - docker exec {{.NAME}} pg_dump -U postgres -d postgres --schema-only --no-owner
         | grep -v -E '^\\(un)?restrict |^-- Dumped (from|by)' > {{.OUT}}
       - 'echo "wrote {{.OUT}}"'
 
+  # Still worth having after the migration off GORM: it catches a migration edited by
+  # hand, or a schema change somebody generated against the wrong branch. It is the
+  # schema's openapi:check, except that it needs Docker and so is not in `task check`.
   schema:compare:
     desc: Diff the ent schema against the one the migrations produce
     # Normalised before comparing, because two of the three ways these dumps differ
@@ -249,7 +267,7 @@ tasks:
   migrate:status:
     desc: Show which migrations have been applied
     cmds:
-      - atlas migrate status --env local --url "{{.DB_URL}}"
+      - atlas migrate status --dir "file://migrations" --url "{{.DB_URL}}"
 
   # Compose. The root compose.yml is an include pointer, so these run from the
   # repository root like every other task. Extra arguments after -- go to
@@ -337,7 +355,7 @@ tasks:
   clean:
     desc: Remove build and coverage artefacts
     cmds:
-      - rm -rf bin coverage.out coverage.html loader/loader
+      - rm -rf bin coverage.out coverage.html schema.baseline.sql schema.ent.sql
 
   web:install:
     desc: Install the web client dependencies

@@ -26,17 +26,17 @@ SET default_table_access_method = heap;
 
 CREATE TABLE public.authz_events (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
     organization_id uuid,
     actor_id uuid NOT NULL,
     subject_id uuid,
-    action character varying(40) NOT NULL,
+    action character varying NOT NULL,
     role_id uuid,
-    permission_key character varying(100),
+    permission_key character varying,
     ip inet NOT NULL,
-    user_agent character varying(512),
-    detail character varying(500)
+    user_agent character varying,
+    detail character varying
 );
 
 
@@ -46,11 +46,11 @@ CREATE TABLE public.authz_events (
 
 CREATE TABLE public.devices (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    fingerprint character varying(64) NOT NULL,
-    label character varying(100),
-    user_agent character varying(512),
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    fingerprint character varying NOT NULL,
+    label character varying,
+    user_agent character varying,
     last_seen_at timestamp with time zone,
     last_ip inet,
     trusted_at timestamp with time zone,
@@ -65,12 +65,12 @@ CREATE TABLE public.devices (
 
 CREATE TABLE public.email_changes (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    new_email character varying(255) NOT NULL,
-    code_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    new_email character varying NOT NULL,
+    code_hash character varying NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    attempts bigint NOT NULL,
+    attempts bigint DEFAULT 0 NOT NULL,
     consumed_at timestamp with time zone,
     user_id uuid NOT NULL
 );
@@ -82,8 +82,8 @@ CREATE TABLE public.email_changes (
 
 CREATE TABLE public.invitation_roles (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
     invitation_id uuid NOT NULL,
     role_id uuid NOT NULL
 );
@@ -95,10 +95,10 @@ CREATE TABLE public.invitation_roles (
 
 CREATE TABLE public.invitations (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    email character varying(255) NOT NULL,
-    token_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    email character varying NOT NULL,
+    token_hash character varying NOT NULL,
     invited_by uuid,
     expires_at timestamp with time zone NOT NULL,
     accepted_at timestamp with time zone,
@@ -112,13 +112,13 @@ CREATE TABLE public.invitations (
 
 CREATE TABLE public.login_events (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
     device_id uuid,
     ip inet NOT NULL,
-    user_agent character varying(512),
-    outcome character varying(20) NOT NULL,
-    country character varying(2),
+    user_agent character varying,
+    outcome character varying NOT NULL,
+    country character varying,
     user_id uuid NOT NULL,
     CONSTRAINT chk_login_events_outcome CHECK (((outcome)::text = ANY (ARRAY[('success'::character varying)::text, ('bad_password'::character varying)::text, ('mfa_failed'::character varying)::text, ('locked'::character varying)::text])))
 );
@@ -130,8 +130,8 @@ CREATE TABLE public.login_events (
 
 CREATE TABLE public.membership_roles (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
     granted_by uuid,
     membership_id uuid NOT NULL,
     role_id uuid NOT NULL
@@ -144,9 +144,9 @@ CREATE TABLE public.membership_roles (
 
 CREATE TABLE public.memberships (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    status character varying(20) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    status character varying NOT NULL,
     invited_by uuid,
     joined_at timestamp with time zone,
     organization_id uuid NOT NULL,
@@ -161,12 +161,12 @@ CREATE TABLE public.memberships (
 
 CREATE TABLE public.organizations (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
     deleted_at timestamp with time zone,
-    is_protected boolean,
-    slug character varying(63) NOT NULL,
-    name character varying(100) NOT NULL
+    is_protected boolean DEFAULT false NOT NULL,
+    slug character varying NOT NULL,
+    name character varying NOT NULL
 );
 
 
@@ -176,11 +176,11 @@ CREATE TABLE public.organizations (
 
 CREATE TABLE public.password_resets (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    code_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    code_hash character varying NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    attempts bigint NOT NULL,
+    attempts bigint DEFAULT 0 NOT NULL,
     consumed_at timestamp with time zone,
     user_id uuid NOT NULL
 );
@@ -192,9 +192,9 @@ CREATE TABLE public.password_resets (
 
 CREATE TABLE public.role_permissions (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    permission_key character varying(100) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    permission_key character varying NOT NULL,
     role_id uuid NOT NULL
 );
 
@@ -205,11 +205,11 @@ CREATE TABLE public.role_permissions (
 
 CREATE TABLE public.roles (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    key character varying(64) NOT NULL,
-    name character varying(100) NOT NULL,
-    description character varying(255),
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    key character varying NOT NULL,
+    name character varying NOT NULL,
+    description character varying,
     is_system boolean DEFAULT false NOT NULL,
     organization_id uuid NOT NULL
 );
@@ -221,11 +221,11 @@ CREATE TABLE public.roles (
 
 CREATE TABLE public.two_factor_challenges (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    code_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    code_hash character varying NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    attempts bigint NOT NULL,
+    attempts bigint DEFAULT 0 NOT NULL,
     consumed_at timestamp with time zone,
     device_id uuid NOT NULL,
     user_id uuid NOT NULL
@@ -238,9 +238,9 @@ CREATE TABLE public.two_factor_challenges (
 
 CREATE TABLE public.user_system_roles (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    role_key character varying(64) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    role_key character varying NOT NULL,
     granted_by uuid,
     user_id uuid NOT NULL
 );
@@ -252,14 +252,14 @@ CREATE TABLE public.user_system_roles (
 
 CREATE TABLE public.users (
     id uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
     deleted_at timestamp with time zone,
-    is_protected boolean,
-    name character varying(100) NOT NULL,
-    email character varying(255) NOT NULL,
-    password_hash character varying(255) NOT NULL,
-    locale character varying(10),
+    is_protected boolean DEFAULT false NOT NULL,
+    name character varying NOT NULL,
+    email character varying NOT NULL,
+    password_hash character varying NOT NULL,
+    locale character varying,
     session_epoch bigint DEFAULT 0 NOT NULL,
     two_factor_enabled boolean DEFAULT false NOT NULL,
     suspended_at timestamp with time zone

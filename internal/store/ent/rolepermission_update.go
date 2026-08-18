@@ -37,12 +37,6 @@ func (_u *RolePermissionUpdate) SetUpdatedAt(v time.Time) *RolePermissionUpdate 
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *RolePermissionUpdate) ClearUpdatedAt() *RolePermissionUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetRoleID sets the "role_id" field.
 func (_u *RolePermissionUpdate) SetRoleID(v uuid.UUID) *RolePermissionUpdate {
 	_u.mutation.SetRoleID(v)
@@ -117,7 +111,7 @@ func (_u *RolePermissionUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *RolePermissionUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := rolepermission.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -154,14 +148,8 @@ func (_u *RolePermissionUpdate) sqlSave(ctx context.Context) (_node int, err err
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(rolepermission.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(rolepermission.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(rolepermission.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.PermissionKey(); ok {
 		_spec.SetField(rolepermission.FieldPermissionKey, field.TypeString, value)
@@ -220,12 +208,6 @@ type RolePermissionUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *RolePermissionUpdateOne) SetUpdatedAt(v time.Time) *RolePermissionUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *RolePermissionUpdateOne) ClearUpdatedAt() *RolePermissionUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -316,7 +298,7 @@ func (_u *RolePermissionUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *RolePermissionUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := rolepermission.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -370,14 +352,8 @@ func (_u *RolePermissionUpdateOne) sqlSave(ctx context.Context) (_node *RolePerm
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(rolepermission.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(rolepermission.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(rolepermission.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.PermissionKey(); ok {
 		_spec.SetField(rolepermission.FieldPermissionKey, field.TypeString, value)

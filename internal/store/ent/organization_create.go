@@ -197,6 +197,10 @@ func (_c *OrganizationCreate) defaults() {
 		v := organization.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.IsProtected(); !ok {
+		v := organization.DefaultIsProtected
+		_c.mutation.SetIsProtected(v)
+	}
 	if _, ok := _c.mutation.ID(); !ok {
 		v := organization.DefaultID()
 		_c.mutation.SetID(v)
@@ -205,6 +209,15 @@ func (_c *OrganizationCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *OrganizationCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Organization.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Organization.updated_at"`)}
+	}
+	if _, ok := _c.mutation.IsProtected(); !ok {
+		return &ValidationError{Name: "is_protected", err: errors.New(`ent: missing required field "Organization.is_protected"`)}
+	}
 	if _, ok := _c.mutation.Slug(); !ok {
 		return &ValidationError{Name: "slug", err: errors.New(`ent: missing required field "Organization.slug"`)}
 	}
@@ -393,12 +406,6 @@ func (u *OrganizationUpsert) UpdateUpdatedAt() *OrganizationUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *OrganizationUpsert) ClearUpdatedAt() *OrganizationUpsert {
-	u.SetNull(organization.FieldUpdatedAt)
-	return u
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (u *OrganizationUpsert) SetDeletedAt(v time.Time) *OrganizationUpsert {
 	u.Set(organization.FieldDeletedAt, v)
@@ -426,12 +433,6 @@ func (u *OrganizationUpsert) SetIsProtected(v bool) *OrganizationUpsert {
 // UpdateIsProtected sets the "is_protected" field to the value that was provided on create.
 func (u *OrganizationUpsert) UpdateIsProtected() *OrganizationUpsert {
 	u.SetExcluded(organization.FieldIsProtected)
-	return u
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (u *OrganizationUpsert) ClearIsProtected() *OrganizationUpsert {
-	u.SetNull(organization.FieldIsProtected)
 	return u
 }
 
@@ -515,13 +516,6 @@ func (u *OrganizationUpsertOne) UpdateUpdatedAt() *OrganizationUpsertOne {
 	})
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *OrganizationUpsertOne) ClearUpdatedAt() *OrganizationUpsertOne {
-	return u.Update(func(s *OrganizationUpsert) {
-		s.ClearUpdatedAt()
-	})
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (u *OrganizationUpsertOne) SetDeletedAt(v time.Time) *OrganizationUpsertOne {
 	return u.Update(func(s *OrganizationUpsert) {
@@ -554,13 +548,6 @@ func (u *OrganizationUpsertOne) SetIsProtected(v bool) *OrganizationUpsertOne {
 func (u *OrganizationUpsertOne) UpdateIsProtected() *OrganizationUpsertOne {
 	return u.Update(func(s *OrganizationUpsert) {
 		s.UpdateIsProtected()
-	})
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (u *OrganizationUpsertOne) ClearIsProtected() *OrganizationUpsertOne {
-	return u.Update(func(s *OrganizationUpsert) {
-		s.ClearIsProtected()
 	})
 }
 
@@ -813,13 +800,6 @@ func (u *OrganizationUpsertBulk) UpdateUpdatedAt() *OrganizationUpsertBulk {
 	})
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *OrganizationUpsertBulk) ClearUpdatedAt() *OrganizationUpsertBulk {
-	return u.Update(func(s *OrganizationUpsert) {
-		s.ClearUpdatedAt()
-	})
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (u *OrganizationUpsertBulk) SetDeletedAt(v time.Time) *OrganizationUpsertBulk {
 	return u.Update(func(s *OrganizationUpsert) {
@@ -852,13 +832,6 @@ func (u *OrganizationUpsertBulk) SetIsProtected(v bool) *OrganizationUpsertBulk 
 func (u *OrganizationUpsertBulk) UpdateIsProtected() *OrganizationUpsertBulk {
 	return u.Update(func(s *OrganizationUpsert) {
 		s.UpdateIsProtected()
-	})
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (u *OrganizationUpsertBulk) ClearIsProtected() *OrganizationUpsertBulk {
-	return u.Update(func(s *OrganizationUpsert) {
-		s.ClearIsProtected()
 	})
 }
 

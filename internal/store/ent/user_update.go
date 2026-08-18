@@ -43,12 +43,6 @@ func (_u *UserUpdate) SetUpdatedAt(v time.Time) *UserUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *UserUpdate) ClearUpdatedAt() *UserUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (_u *UserUpdate) SetDeletedAt(v time.Time) *UserUpdate {
 	_u.mutation.SetDeletedAt(v)
@@ -80,12 +74,6 @@ func (_u *UserUpdate) SetNillableIsProtected(v *bool) *UserUpdate {
 	if v != nil {
 		_u.SetIsProtected(*v)
 	}
-	return _u
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (_u *UserUpdate) ClearIsProtected() *UserUpdate {
-	_u.mutation.ClearIsProtected()
 	return _u
 }
 
@@ -493,7 +481,7 @@ func (_u *UserUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *UserUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := user.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -542,14 +530,8 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(user.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(user.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.DeletedAt(); ok {
 		_spec.SetField(user.FieldDeletedAt, field.TypeTime, value)
@@ -559,9 +541,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.IsProtected(); ok {
 		_spec.SetField(user.FieldIsProtected, field.TypeBool, value)
-	}
-	if _u.mutation.IsProtectedCleared() {
-		_spec.ClearField(user.FieldIsProtected, field.TypeBool)
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(user.FieldName, field.TypeString, value)
@@ -936,12 +915,6 @@ func (_u *UserUpdateOne) SetUpdatedAt(v time.Time) *UserUpdateOne {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *UserUpdateOne) ClearUpdatedAt() *UserUpdateOne {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (_u *UserUpdateOne) SetDeletedAt(v time.Time) *UserUpdateOne {
 	_u.mutation.SetDeletedAt(v)
@@ -973,12 +946,6 @@ func (_u *UserUpdateOne) SetNillableIsProtected(v *bool) *UserUpdateOne {
 	if v != nil {
 		_u.SetIsProtected(*v)
 	}
-	return _u
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (_u *UserUpdateOne) ClearIsProtected() *UserUpdateOne {
-	_u.mutation.ClearIsProtected()
 	return _u
 }
 
@@ -1399,7 +1366,7 @@ func (_u *UserUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *UserUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := user.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -1465,14 +1432,8 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(user.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(user.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.DeletedAt(); ok {
 		_spec.SetField(user.FieldDeletedAt, field.TypeTime, value)
@@ -1482,9 +1443,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.IsProtected(); ok {
 		_spec.SetField(user.FieldIsProtected, field.TypeBool, value)
-	}
-	if _u.mutation.IsProtectedCleared() {
-		_spec.ClearField(user.FieldIsProtected, field.TypeBool)
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(user.FieldName, field.TypeString, value)

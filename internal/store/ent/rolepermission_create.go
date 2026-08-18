@@ -135,6 +135,12 @@ func (_c *RolePermissionCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *RolePermissionCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RolePermission.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "RolePermission.updated_at"`)}
+	}
 	if _, ok := _c.mutation.RoleID(); !ok {
 		return &ValidationError{Name: "role_id", err: errors.New(`ent: missing required field "RolePermission.role_id"`)}
 	}
@@ -278,12 +284,6 @@ func (u *RolePermissionUpsert) UpdateUpdatedAt() *RolePermissionUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *RolePermissionUpsert) ClearUpdatedAt() *RolePermissionUpsert {
-	u.SetNull(rolepermission.FieldUpdatedAt)
-	return u
-}
-
 // SetRoleID sets the "role_id" field.
 func (u *RolePermissionUpsert) SetRoleID(v uuid.UUID) *RolePermissionUpsert {
 	u.Set(rolepermission.FieldRoleID, v)
@@ -370,13 +370,6 @@ func (u *RolePermissionUpsertOne) SetUpdatedAt(v time.Time) *RolePermissionUpser
 func (u *RolePermissionUpsertOne) UpdateUpdatedAt() *RolePermissionUpsertOne {
 	return u.Update(func(s *RolePermissionUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *RolePermissionUpsertOne) ClearUpdatedAt() *RolePermissionUpsertOne {
-	return u.Update(func(s *RolePermissionUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -637,13 +630,6 @@ func (u *RolePermissionUpsertBulk) SetUpdatedAt(v time.Time) *RolePermissionUpse
 func (u *RolePermissionUpsertBulk) UpdateUpdatedAt() *RolePermissionUpsertBulk {
 	return u.Update(func(s *RolePermissionUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *RolePermissionUpsertBulk) ClearUpdatedAt() *RolePermissionUpsertBulk {
-	return u.Update(func(s *RolePermissionUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

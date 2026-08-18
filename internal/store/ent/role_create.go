@@ -221,6 +221,12 @@ func (_c *RoleCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *RoleCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Role.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Role.updated_at"`)}
+	}
 	if _, ok := _c.mutation.OrganizationID(); !ok {
 		return &ValidationError{Name: "organization_id", err: errors.New(`ent: missing required field "Role.organization_id"`)}
 	}
@@ -440,12 +446,6 @@ func (u *RoleUpsert) UpdateUpdatedAt() *RoleUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *RoleUpsert) ClearUpdatedAt() *RoleUpsert {
-	u.SetNull(role.FieldUpdatedAt)
-	return u
-}
-
 // SetOrganizationID sets the "organization_id" field.
 func (u *RoleUpsert) SetOrganizationID(v uuid.UUID) *RoleUpsert {
 	u.Set(role.FieldOrganizationID, v)
@@ -574,13 +574,6 @@ func (u *RoleUpsertOne) SetUpdatedAt(v time.Time) *RoleUpsertOne {
 func (u *RoleUpsertOne) UpdateUpdatedAt() *RoleUpsertOne {
 	return u.Update(func(s *RoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *RoleUpsertOne) ClearUpdatedAt() *RoleUpsertOne {
-	return u.Update(func(s *RoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -890,13 +883,6 @@ func (u *RoleUpsertBulk) SetUpdatedAt(v time.Time) *RoleUpsertBulk {
 func (u *RoleUpsertBulk) UpdateUpdatedAt() *RoleUpsertBulk {
 	return u.Update(func(s *RoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *RoleUpsertBulk) ClearUpdatedAt() *RoleUpsertBulk {
-	return u.Update(func(s *RoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

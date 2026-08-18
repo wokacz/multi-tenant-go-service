@@ -191,6 +191,12 @@ func (_c *InvitationCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *InvitationCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Invitation.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Invitation.updated_at"`)}
+	}
 	if _, ok := _c.mutation.OrganizationID(); !ok {
 		return &ValidationError{Name: "organization_id", err: errors.New(`ent: missing required field "Invitation.organization_id"`)}
 	}
@@ -377,12 +383,6 @@ func (u *InvitationUpsert) UpdateUpdatedAt() *InvitationUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *InvitationUpsert) ClearUpdatedAt() *InvitationUpsert {
-	u.SetNull(invitation.FieldUpdatedAt)
-	return u
-}
-
 // SetOrganizationID sets the "organization_id" field.
 func (u *InvitationUpsert) SetOrganizationID(v uuid.UUID) *InvitationUpsert {
 	u.Set(invitation.FieldOrganizationID, v)
@@ -529,13 +529,6 @@ func (u *InvitationUpsertOne) SetUpdatedAt(v time.Time) *InvitationUpsertOne {
 func (u *InvitationUpsertOne) UpdateUpdatedAt() *InvitationUpsertOne {
 	return u.Update(func(s *InvitationUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *InvitationUpsertOne) ClearUpdatedAt() *InvitationUpsertOne {
-	return u.Update(func(s *InvitationUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -866,13 +859,6 @@ func (u *InvitationUpsertBulk) SetUpdatedAt(v time.Time) *InvitationUpsertBulk {
 func (u *InvitationUpsertBulk) UpdateUpdatedAt() *InvitationUpsertBulk {
 	return u.Update(func(s *InvitationUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *InvitationUpsertBulk) ClearUpdatedAt() *InvitationUpsertBulk {
-	return u.Update(func(s *InvitationUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

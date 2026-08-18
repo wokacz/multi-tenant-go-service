@@ -323,6 +323,10 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.IsProtected(); !ok {
+		v := user.DefaultIsProtected
+		_c.mutation.SetIsProtected(v)
+	}
 	if _, ok := _c.mutation.SessionEpoch(); !ok {
 		v := user.DefaultSessionEpoch
 		_c.mutation.SetSessionEpoch(v)
@@ -339,6 +343,15 @@ func (_c *UserCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *UserCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "User.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "User.updated_at"`)}
+	}
+	if _, ok := _c.mutation.IsProtected(); !ok {
+		return &ValidationError{Name: "is_protected", err: errors.New(`ent: missing required field "User.is_protected"`)}
+	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "User.name"`)}
 	}
@@ -630,12 +643,6 @@ func (u *UserUpsert) UpdateUpdatedAt() *UserUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *UserUpsert) ClearUpdatedAt() *UserUpsert {
-	u.SetNull(user.FieldUpdatedAt)
-	return u
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (u *UserUpsert) SetDeletedAt(v time.Time) *UserUpsert {
 	u.Set(user.FieldDeletedAt, v)
@@ -663,12 +670,6 @@ func (u *UserUpsert) SetIsProtected(v bool) *UserUpsert {
 // UpdateIsProtected sets the "is_protected" field to the value that was provided on create.
 func (u *UserUpsert) UpdateIsProtected() *UserUpsert {
 	u.SetExcluded(user.FieldIsProtected)
-	return u
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (u *UserUpsert) ClearIsProtected() *UserUpsert {
-	u.SetNull(user.FieldIsProtected)
 	return u
 }
 
@@ -839,13 +840,6 @@ func (u *UserUpsertOne) UpdateUpdatedAt() *UserUpsertOne {
 	})
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *UserUpsertOne) ClearUpdatedAt() *UserUpsertOne {
-	return u.Update(func(s *UserUpsert) {
-		s.ClearUpdatedAt()
-	})
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (u *UserUpsertOne) SetDeletedAt(v time.Time) *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
@@ -878,13 +872,6 @@ func (u *UserUpsertOne) SetIsProtected(v bool) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateIsProtected() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateIsProtected()
-	})
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (u *UserUpsertOne) ClearIsProtected() *UserUpsertOne {
-	return u.Update(func(s *UserUpsert) {
-		s.ClearIsProtected()
 	})
 }
 
@@ -1239,13 +1226,6 @@ func (u *UserUpsertBulk) UpdateUpdatedAt() *UserUpsertBulk {
 	})
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *UserUpsertBulk) ClearUpdatedAt() *UserUpsertBulk {
-	return u.Update(func(s *UserUpsert) {
-		s.ClearUpdatedAt()
-	})
-}
-
 // SetDeletedAt sets the "deleted_at" field.
 func (u *UserUpsertBulk) SetDeletedAt(v time.Time) *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
@@ -1278,13 +1258,6 @@ func (u *UserUpsertBulk) SetIsProtected(v bool) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateIsProtected() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateIsProtected()
-	})
-}
-
-// ClearIsProtected clears the value of the "is_protected" field.
-func (u *UserUpsertBulk) ClearIsProtected() *UserUpsertBulk {
-	return u.Update(func(s *UserUpsert) {
-		s.ClearIsProtected()
 	})
 }
 

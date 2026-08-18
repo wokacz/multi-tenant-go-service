@@ -37,12 +37,6 @@ func (_u *EmailChangeUpdate) SetUpdatedAt(v time.Time) *EmailChangeUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *EmailChangeUpdate) ClearUpdatedAt() *EmailChangeUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetUserID sets the "user_id" field.
 func (_u *EmailChangeUpdate) SetUserID(v uuid.UUID) *EmailChangeUpdate {
 	_u.mutation.SetUserID(v)
@@ -186,7 +180,7 @@ func (_u *EmailChangeUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *EmailChangeUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := emailchange.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -228,14 +222,8 @@ func (_u *EmailChangeUpdate) sqlSave(ctx context.Context) (_node int, err error)
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(emailchange.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(emailchange.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(emailchange.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.NewEmail(); ok {
 		_spec.SetField(emailchange.FieldNewEmail, field.TypeString, value)
@@ -312,12 +300,6 @@ type EmailChangeUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *EmailChangeUpdateOne) SetUpdatedAt(v time.Time) *EmailChangeUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *EmailChangeUpdateOne) ClearUpdatedAt() *EmailChangeUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -477,7 +459,7 @@ func (_u *EmailChangeUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *EmailChangeUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := emailchange.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -536,14 +518,8 @@ func (_u *EmailChangeUpdateOne) sqlSave(ctx context.Context) (_node *EmailChange
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(emailchange.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(emailchange.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(emailchange.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.NewEmail(); ok {
 		_spec.SetField(emailchange.FieldNewEmail, field.TypeString, value)

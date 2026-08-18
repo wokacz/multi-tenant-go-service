@@ -3,7 +3,6 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -20,8 +19,8 @@ func (Organization) Mixin() []ent.Mixin {
 
 func (Organization) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("slug").MaxLen(63).SchemaType(varchar(63)).NotEmpty().Immutable(),
-		field.String("name").MaxLen(100).SchemaType(varchar(100)).NotEmpty(),
+		field.String("slug").MaxLen(63).NotEmpty().Immutable(),
+		field.String("name").MaxLen(100).NotEmpty(),
 	}
 }
 
@@ -47,8 +46,4 @@ func (Organization) Indexes() []ent.Index {
 		index.Fields("deleted_at").
 			StorageKey("idx_organizations_deleted_at"),
 	}
-}
-
-func (Organization) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "organizations"}}
 }

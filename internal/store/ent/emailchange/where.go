@@ -136,16 +136,6 @@ func CreatedAtLTE(v time.Time) predicate.EmailChange {
 	return predicate.EmailChange(sql.FieldLTE(FieldCreatedAt, v))
 }
 
-// CreatedAtIsNil applies the IsNil predicate on the "created_at" field.
-func CreatedAtIsNil() predicate.EmailChange {
-	return predicate.EmailChange(sql.FieldIsNull(FieldCreatedAt))
-}
-
-// CreatedAtNotNil applies the NotNil predicate on the "created_at" field.
-func CreatedAtNotNil() predicate.EmailChange {
-	return predicate.EmailChange(sql.FieldNotNull(FieldCreatedAt))
-}
-
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
 func UpdatedAtEQ(v time.Time) predicate.EmailChange {
 	return predicate.EmailChange(sql.FieldEQ(FieldUpdatedAt, v))
@@ -184,16 +174,6 @@ func UpdatedAtLT(v time.Time) predicate.EmailChange {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.EmailChange {
 	return predicate.EmailChange(sql.FieldLTE(FieldUpdatedAt, v))
-}
-
-// UpdatedAtIsNil applies the IsNil predicate on the "updated_at" field.
-func UpdatedAtIsNil() predicate.EmailChange {
-	return predicate.EmailChange(sql.FieldIsNull(FieldUpdatedAt))
-}
-
-// UpdatedAtNotNil applies the NotNil predicate on the "updated_at" field.
-func UpdatedAtNotNil() predicate.EmailChange {
-	return predicate.EmailChange(sql.FieldNotNull(FieldUpdatedAt))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.

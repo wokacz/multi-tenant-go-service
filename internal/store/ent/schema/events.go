@@ -30,16 +30,15 @@ func (LoginEvent) Fields() []ent.Field {
 		field.UUID("device_id", uuid.UUID{}).Optional().Nillable(),
 
 		field.String("ip").SchemaType(inetType),
-		field.String("user_agent").MaxLen(512).SchemaType(varchar(512)).Optional(),
+		field.String("user_agent").MaxLen(512).Optional(),
 
 		// Unlike the membership status, this enum has a CHECK because the values are
 		// written by exactly one place and read by a screen: a fifth outcome nobody
 		// declared would render as a blank.
 		field.Enum("outcome").
-			Values("success", "bad_password", "mfa_failed", "locked").
-			SchemaType(varchar20),
+			Values("success", "bad_password", "mfa_failed", "locked"),
 
-		field.String("country").MaxLen(2).SchemaType(varchar(2)).Optional(),
+		field.String("country").MaxLen(2).Optional(),
 	}
 }
 
@@ -85,12 +84,12 @@ func (AuthzEvent) Fields() []ent.Field {
 		field.UUID("organization_id", uuid.UUID{}).Optional().Nillable(),
 		field.UUID("actor_id", uuid.UUID{}),
 		field.UUID("subject_id", uuid.UUID{}).Optional().Nillable(),
-		field.String("action").MaxLen(40).SchemaType(varchar(40)).NotEmpty(),
+		field.String("action").MaxLen(40).NotEmpty(),
 		field.UUID("role_id", uuid.UUID{}).Optional().Nillable(),
-		field.String("permission_key").MaxLen(100).SchemaType(varchar(100)).Optional(),
+		field.String("permission_key").MaxLen(100).Optional(),
 		field.String("ip").SchemaType(inetType),
-		field.String("user_agent").MaxLen(512).SchemaType(varchar(512)).Optional(),
-		field.String("detail").MaxLen(500).SchemaType(varchar(500)).Optional(),
+		field.String("user_agent").MaxLen(512).Optional(),
+		field.String("detail").MaxLen(500).Optional(),
 	}
 }
 
@@ -100,8 +99,4 @@ func (AuthzEvent) Indexes() []ent.Index {
 		index.Fields("actor_id", "created_at").StorageKey("idx_authz_actor_time"),
 		index.Fields("subject_id").StorageKey("idx_authz_events_subject_id"),
 	}
-}
-
-func (AuthzEvent) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "authz_events"}}
 }

@@ -37,9 +37,7 @@ func (SoftDelete) Fields() []ent.Field {
 		// The default organization carries this, and it is what makes
 		// models.ErrProtected reachable: an installation that lost its only
 		// organization has no working accounts and no screen to undo it from.
-		// Nullable and without a default, matching what GORM produced from an
-		// untagged bool. Same reasoning as the timestamps above.
 		field.Bool("is_protected").
-			Optional(),
+			Default(false),
 	}
 }

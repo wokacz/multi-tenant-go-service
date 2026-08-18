@@ -78,6 +78,8 @@ var (
 	NewEmailValidator func(string) error
 	// CodeHashValidator is a validator for the "code_hash" field. It is called by the builders before save.
 	CodeHashValidator func(string) error
+	// DefaultAttempts holds the default value on creation for the "attempts" field.
+	DefaultAttempts int
 	// DefaultID holds the default value on creation for the "id" field.
 	DefaultID func() uuid.UUID
 )

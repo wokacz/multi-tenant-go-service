@@ -183,6 +183,12 @@ func (_c *LoginEventCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *LoginEventCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "LoginEvent.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "LoginEvent.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "LoginEvent.user_id"`)}
 	}
@@ -355,12 +361,6 @@ func (u *LoginEventUpsert) UpdateUpdatedAt() *LoginEventUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *LoginEventUpsert) ClearUpdatedAt() *LoginEventUpsert {
-	u.SetNull(loginevent.FieldUpdatedAt)
-	return u
-}
-
 // SetUserID sets the "user_id" field.
 func (u *LoginEventUpsert) SetUserID(v uuid.UUID) *LoginEventUpsert {
 	u.Set(loginevent.FieldUserID, v)
@@ -513,13 +513,6 @@ func (u *LoginEventUpsertOne) SetUpdatedAt(v time.Time) *LoginEventUpsertOne {
 func (u *LoginEventUpsertOne) UpdateUpdatedAt() *LoginEventUpsertOne {
 	return u.Update(func(s *LoginEventUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *LoginEventUpsertOne) ClearUpdatedAt() *LoginEventUpsertOne {
-	return u.Update(func(s *LoginEventUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -857,13 +850,6 @@ func (u *LoginEventUpsertBulk) SetUpdatedAt(v time.Time) *LoginEventUpsertBulk {
 func (u *LoginEventUpsertBulk) UpdateUpdatedAt() *LoginEventUpsertBulk {
 	return u.Update(func(s *LoginEventUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *LoginEventUpsertBulk) ClearUpdatedAt() *LoginEventUpsertBulk {
-	return u.Update(func(s *LoginEventUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

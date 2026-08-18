@@ -3,7 +3,6 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -22,9 +21,9 @@ func (Role) Mixin() []ent.Mixin {
 func (Role) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("organization_id", uuid.UUID{}),
-		field.String("key").MaxLen(64).SchemaType(varchar(64)).NotEmpty(),
-		field.String("name").MaxLen(100).SchemaType(varchar(100)).NotEmpty(),
-		field.String("description").MaxLen(255).SchemaType(varchar(255)).Optional(),
+		field.String("key").MaxLen(64).NotEmpty(),
+		field.String("name").MaxLen(100).NotEmpty(),
+		field.String("description").MaxLen(255).Optional(),
 
 		// Marks a role materialised from the shipped catalog when the organization
 		// was created. The API renders those from the message catalog rather than
@@ -55,8 +54,4 @@ func (Role) Indexes() []ent.Index {
 			Unique().
 			StorageKey("idx_role_org_key"),
 	}
-}
-
-func (Role) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "roles"}}
 }

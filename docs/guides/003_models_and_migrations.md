@@ -1,133 +1,84 @@
 # Modele i migracje
 
-Modele GORM są źródłem prawdy dla schematu. Migracje z nich **wynikają**, nie odwrotnie.
+Schemat ent jest źródłem prawdy dla bazy. Migracje z niego **wynikają**, nie odwrotnie.
 
 ## Lista kontrolna
 
-1. Model w `internal/store/models/<rzecz>.go`
-2. Dopisz go do `Load(...)` w `loader/main.go`
-3. `task migrate:diff NAME=<opis>` i `task migrate`
-4. Test kształtu indeksów, jeśli dodałeś indeks złożony lub unikalny
-5. Test hooków, jeśli dodałeś regułę w Go
+1. Schemat w [`internal/store/ent/schema/`](../../internal/store/ent/schema) — jeden plik na encję.
+2. `task ent:generate` — bez tego kod klienta nie wie o zmianie, a `task check` przewraca build (`ent:check`).
+3. `task migrate:diff NAME=cos` — migracja.
+4. `task migrate` — zastosowanie.
+5. Struktura w [`internal/store/models/`](../../internal/store/models), jeśli domena ma o niej wiedzieć: typy ent **nie
+   wychodzą** z `internal/store` (`TestEntStaysInsideTheStore`), więc repozytorium mapuje jedno na drugie.
 
-Krok 2 jest tym, który boli po cichu: model pominięty w loaderze **nie istnieje**
-w generowanym schemacie, a Atlas zaproponuje **usunięcie** jego tabeli.
+Kroku „dopisz encję do listy" **nie ma**: `ent generate` czyta cały katalog `schema/`. Poprzedni układ wymagał wpisania
+każdego modelu do ręcznej listy w osobnym module, a pominięty był po cichu nieobecny w schemacie — po czym Atlas
+proponował usunięcie jego tabeli.
 
-## Model
+## Schemat
 
 ```go
+// internal/store/ent/schema/widget.go
 type Widget struct {
-Model      // ID (UUIDv7), CreatedAt, UpdatedAt
-SoftDelete // tylko gdy potrzebujesz miękkiego usuwania
+	ent.Schema
+}
 
-OrganizationID uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:idx_widget_org_key,priority:1"`
-Organization   *Organization `json:"-" gorm:"constraint:OnDelete:CASCADE"`
+// Mixin daje id (UUIDv7), created_at i updated_at. SoftDelete dokłada deleted_at
+// i is_protected — tylko tam, gdzie miękkie usuwanie ma sens.
+func (Widget) Mixin() []ent.Mixin {
+	return []ent.Mixin{Model{}}
+}
 
-Key    string  `gorm:"size:64;not null;uniqueIndex:idx_widget_org_key,priority:2"`
-Name   string  `gorm:"size:100;not null"`
-Note   *string `gorm:"size:255"` // wskaźnik = kolumna NULL-owalna
+func (Widget) Fields() []ent.Field {
+	return []ent.Field{
+		field.UUID("organization_id", uuid.UUID{}),
+		field.String("key").MaxLen(64).NotEmpty(),
+		field.String("name").MaxLen(100).NotEmpty(),
+
+		// Optional() to kolumna NULL-owalna; Nillable() dokłada wskaźnik w Go, żeby
+		// „brak wartości" dało się odróżnić od „wartość zerowa".
+		field.String("note").MaxLen(255).Optional(),
+	}
+}
+
+func (Widget) Edges() []ent.Edge {
+	return []ent.Edge{
+		// Krawędź daje kolumnę FK **i** constraint. Field() nazywa kolumnę, żeby
+		// zapytania pisane ręcznie miały do czego się odwołać.
+		edge.From("organization", Organization.Type).
+			Ref("widgets").
+			Field("organization_id").
+			Unique().
+			Required().
+			Annotations(entsql.OnDelete(entsql.Cascade)),
+	}
+}
+
+func (Widget) Indexes() []ent.Index {
+	return []ent.Index{
+		// StorageKey, bo nazwa indeksu jest czytana przez testy schematu i przez
+		// człowieka szukającego w EXPLAIN. Bez niej ent nadaje własną.
+		index.Fields("organization_id", "key").
+			Unique().
+			StorageKey("idx_widget_org_key"),
+	}
 }
 ```
 
-Konwencje:
+Dwie rzeczy, które ent robi inaczej, niż wygląda:
 
-| Zasada                              | Dlaczego                                                                     |
-|-------------------------------------|------------------------------------------------------------------------------|
-| jawne `size:` i `not null`          | inaczej dostajesz `text` i kolumnę opcjonalną, o której nikt nie zdecydował  |
-| `type:uuid` dla identyfikatorów     |                                                                              |
-| wskaźnik dla wartości opcjonalnej   | „nigdy nie ustawione" to `NULL`, nie `""` — Postgres odrzuca `''` dla `inet` |
-| relacja wsteczna z `json:"-"`       | model i tak nie trafia do JSON-a, ale nie zostawiaj wątpliwości              |
-| `constraint:OnDelete:CASCADE`       | na relacji wstecznej                                                         |
-| reguły biznesowe jako metody modelu | `Device.Revoke()`, `MembershipStatus.GrantsPermissions()`                    |
-| błędy jako `models.ErrXxx`          | z prefiksem `models: ` w treści                                              |
+- **`MaxLen(n)` to walidator w Go, nie szerokość kolumny.** W Postgresie kolumna jest `character varying` bez długości.
+  Świadomie tak zostało: długość pilnuje Go, tam gdzie mieszkają wszystkie inne reguły długości w tym kodzie.
+- **`Optional()` na czasie nie daje wskaźnika.** Bez `Nillable()` dostajesz `time.Time` i zero jako „brak".
 
-## Reguły w hookach
+## Reguły: hooki i walidatory
 
-Walidacja, którą da się sprawdzić w Go, idzie do `BeforeSave` — daje sensowny błąd zamiast naruszenia ograniczenia z
-Postgresa:
+Walidacja pola idzie w pole (`NotEmpty()`, `MaxLen`, `Validate(func)`), a reguła obejmująca cały wiersz — w hook.
+To odpowiednik dawnych `BeforeSave`: sprawdzenia, które muszą zachodzić niezależnie od tego, kto zapisuje.
 
-```go
-func (w *Widget) BeforeSave(_ *gorm.DB) error {
-if w.Name == "" || utf8.RuneCountInString(w.Name) > 100 {
-return fmt.Errorf("models: invalid widget name %q", w.Name)
-}
-
-return nil
-}
-```
-
-**Pułapka batch delete.** Hook `BeforeDelete` dostaje zerową strukturę przy usuwaniu bez klucza głównego, więc ochrona
-typu `IsSystem` po cichu by nie zadziałała. Wzorzec:
-
-```go
-func (r *Role) BeforeDelete(_ *gorm.DB) error {
-if r.ID == uuid.Nil {
-return ErrRoleBatchDeleteUnsupported
-}
-
-if r.IsSystem {
-return ErrRoleIsSystem
-}
-
-return nil
-}
-```
-
-Repozytorium musi wtedy **wczytać wiersz przed usunięciem**, a nie robić
-`Where(...).Delete(...)`.
-
-## Enumeracje
-
-```go
-type WidgetState string
-
-const (
-WidgetDraft     WidgetState = "draft"
-WidgetPublished WidgetState = "published"
-)
-
-func (s WidgetState) Valid() bool { ... }
-```
-
-Plus `check:` w tagu kolumny i `BeforeSave` odrzucający nieznaną wartość — reguła istnieje wtedy i w Go, i w bazie.
-Wzorzec: `models.LoginOutcome`.
-
-Wyjątek: lista, która rośnie z każdą operacją (jak `AuthzAction`), nie dostaje
-`check`, bo zamieniałby każde dopisanie w migrację.
-
-## Indeks złożony wymaga przesłonięcia `CreatedAt`
-
-GORM buduje indeks złożony tylko wtedy, gdy kilka pól dzieli nazwę indeksu, a osadzonego `Model.CreatedAt` nie da się
-otagować per model:
-
-```go
-type WidgetEvent struct {
-Model
-CreatedAt time.Time `gorm:"index:idx_widget_time,priority:2"`
-WidgetID  uuid.UUID `gorm:"type:uuid;not null;index:idx_widget_time,priority:1"`
-}
-```
-
-Bez przesłonięcia indeks po cichu degraduje się do jednokolumnowego. Dlatego każdy indeks złożony i unikalny dostaje
-asercję w
-`internal/store/models/schema_test.go`:
-
-```go
-func TestWidgetKeyIsUniquePerOrganization(t *testing.T) {
-idx := indexOf(t, &models.Widget{}, "idx_widget_org_key")
-
-want := []string{"organization_id", "key"}
-if got := indexColumns(idx); !slices.Equal(got, want) {
-t.Errorf("kolumny = %v, want %v", got, want)
-}
-
-if idx.Class != "UNIQUE" {
-t.Errorf("klasa = %q, want UNIQUE", idx.Class)
-}
-}
-```
-
-Test używa `schema.Parse` w pamięci — **nie potrzebuje bazy**.
+Miękkie usuwanie jest mixinem z **interceptorem** (filtruje odczyty) i **hookiem** (zamienia DELETE na UPDATE), plus
+`SkipSoftDelete(ctx)` dla ścieżek, które muszą zobaczyć wiersz usunięty — `RemoveMember` działa na członkostwie, którego
+konto zniknęło, i to jest jedyny sposób posprzątania takiego wiersza.
 
 ## Migracja
 
@@ -136,19 +87,26 @@ task migrate:diff NAME=widgets
 task migrate
 ```
 
-Atlas porównuje DDL wynikający z modeli z katalogiem `migrations/` i dopisuje plik `NNNNNNNNNNNNNN_widgets.sql`.
+Różnicę liczy **ent**: odtwarza `migrations/` na jednorazowej bazie, żeby poznać stan obecny, porównuje ze schematem i
+oddaje wynik Atlasowi do wyrenderowania jako SQL. Odtwarzanie, a nie podłączanie się do żywej bazy, jest tym, co czyni
+migrację niezależną od maszyny, na której powstała.
+
 Migracji **nie pisze się ręcznie** — ręczna edycja unieważnia `atlas.sum`. Wyjątek: `ADD COLUMN … NOT NULL` na tabeli,
-która już ma wiersze. Diff tego nie umie uzupełnić danymi; wtedy dopisuje się `UPDATE` z istniejącej kolumny i woła
-`atlas migrate hash`.
+która ma już wiersze. Diff tego nie umie uzupełnić danymi; wtedy dopisuje się `UPDATE` i woła `atlas migrate hash`.
+
+Generator **nie usuwa** kolumn ani indeksów sam z siebie (`WithDropColumn(false)`, `WithDropIndex(false)`): usunięcie to
+decyzja, a generator, który podejmuje ją po cichu, kiedyś podejmie ją na złej gałęzi.
 
 Sprawdzenie przed pull requestem:
 
 ```bash
-atlas migrate validate --env local
-atlas migrate diff ci_drift --env local     # "synced" = brak dryfu
+task check            # zawiera ent:check — klient zgodny ze schematem
+task schema:compare   # baza z migracji == baza ze schematu ent
 ```
 
-CI robi dokładnie to i przewraca build, gdy model zmienił się bez migracji.
+`task schema:compare` przykłada schemat ent do pustej bazy, zrzuca ją i porównuje ze zrzutem z `migrations/`. Porównuje
+**dwie bazy, nie dwa opisy**, więc łapie migrację edytowaną ręcznie i taką wygenerowaną na nieaktualnej gałęzi. Ignoruje
+kolejność kolumn i nazwy constraintów FK — pierwsza nic nie znaczy, drugiej ent nie pozwala ustawić.
 
 ## Zgniatanie historii, dopóki nic nie jest wdrożone
 
@@ -159,7 +117,7 @@ kroków, których żadna baza nie wykonała, nie jest historią, tylko szumem.
 ```bash
 rm -f migrations/*.sql migrations/atlas.sum
 task migrate:diff NAME=baseline
-atlas migrate diff verify --env local        # "synced" = baseline zgadza się z modelami
+task schema:compare                          # baseline zgadza się ze schematem ent
 ```
 
 Dwie rzeczy przy tym giną i trzeba o nich wiedzieć:
@@ -176,8 +134,8 @@ usunięcie plików.
 
 ## Czego nie robić
 
-- **Nie wołaj `AutoMigrate`.** Zgaduje zmiany kolumn i nigdy nic nie usuwa.
+- **Nie wołaj automatycznej migracji w aplikacji.** `cmd/entmigrate -apply` istnieje wyłącznie dla `schema:compare`;
+  serwis nie tworzy ani nie zmienia schematu przy starcie.
 - **Nie licz na kaskadę przy miękkim usuwaniu.** `ON DELETE CASCADE` odpala się tylko przy twardym; przy miękkim
-  posprzątaj w `BeforeDelete` albo filtruj
-  `deleted_at` w zapytaniu.
+  posprzątaj w hooku albo filtruj `deleted_at` w zapytaniu.
 - **Nie zakładaj, że indeks unikalny po kolumnie NULL-owalnej coś wymusza.** W Postgresie dwa `NULL`-e nie kolidują.

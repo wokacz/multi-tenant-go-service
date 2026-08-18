@@ -2,8 +2,6 @@ package schema
 
 import (
 	"entgo.io/ent"
-	"entgo.io/ent/dialect/entsql"
-	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -45,10 +43,6 @@ func (MembershipRole) Indexes() []ent.Index {
 	}
 }
 
-func (MembershipRole) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "membership_roles"}}
-}
-
 // RolePermission is one permission key granted by one role.
 //
 // The key is a string rather than a foreign key to a table of permissions, and that
@@ -64,7 +58,7 @@ func (RolePermission) Mixin() []ent.Mixin { return []ent.Mixin{Model{}} }
 func (RolePermission) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("role_id", uuid.UUID{}),
-		field.String("permission_key").MaxLen(100).SchemaType(varchar(100)).NotEmpty(),
+		field.String("permission_key").MaxLen(100).NotEmpty(),
 	}
 }
 
@@ -79,10 +73,6 @@ func (RolePermission) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("role_id", "permission_key").Unique().StorageKey("idx_role_permission"),
 	}
-}
-
-func (RolePermission) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "role_permissions"}}
 }
 
 // InvitationRole is the role set an invitation promises.
@@ -114,10 +104,6 @@ func (InvitationRole) Indexes() []ent.Index {
 	}
 }
 
-func (InvitationRole) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "invitation_roles"}}
-}
-
 // UserSystemRole is an installation-wide grant, addressed by key for the same reason
 // RolePermission is: the installation's roles are code.
 type UserSystemRole struct {
@@ -129,7 +115,7 @@ func (UserSystemRole) Mixin() []ent.Mixin { return []ent.Mixin{Model{}} }
 func (UserSystemRole) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("user_id", uuid.UUID{}),
-		field.String("role_key").MaxLen(64).SchemaType(varchar(64)).NotEmpty(),
+		field.String("role_key").MaxLen(64).NotEmpty(),
 		field.UUID("granted_by", uuid.UUID{}).Optional().Nillable(),
 	}
 }
@@ -145,8 +131,4 @@ func (UserSystemRole) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("user_id", "role_key").Unique().StorageKey("idx_user_system_role"),
 	}
-}
-
-func (UserSystemRole) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Table: "user_system_roles"}}
 }

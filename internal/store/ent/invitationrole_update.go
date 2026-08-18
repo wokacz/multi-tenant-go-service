@@ -38,12 +38,6 @@ func (_u *InvitationRoleUpdate) SetUpdatedAt(v time.Time) *InvitationRoleUpdate 
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *InvitationRoleUpdate) ClearUpdatedAt() *InvitationRoleUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetInvitationID sets the "invitation_id" field.
 func (_u *InvitationRoleUpdate) SetInvitationID(v uuid.UUID) *InvitationRoleUpdate {
 	_u.mutation.SetInvitationID(v)
@@ -129,7 +123,7 @@ func (_u *InvitationRoleUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *InvitationRoleUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := invitationrole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -164,14 +158,8 @@ func (_u *InvitationRoleUpdate) sqlSave(ctx context.Context) (_node int, err err
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(invitationrole.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(invitationrole.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(invitationrole.FieldUpdatedAt, field.TypeTime)
 	}
 	if _u.mutation.InvitationCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -256,12 +244,6 @@ type InvitationRoleUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *InvitationRoleUpdateOne) SetUpdatedAt(v time.Time) *InvitationRoleUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *InvitationRoleUpdateOne) ClearUpdatedAt() *InvitationRoleUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -363,7 +345,7 @@ func (_u *InvitationRoleUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *InvitationRoleUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := invitationrole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -415,14 +397,8 @@ func (_u *InvitationRoleUpdateOne) sqlSave(ctx context.Context) (_node *Invitati
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(invitationrole.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(invitationrole.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(invitationrole.FieldUpdatedAt, field.TypeTime)
 	}
 	if _u.mutation.InvitationCleared() {
 		edge := &sqlgraph.EdgeSpec{

@@ -39,12 +39,6 @@ func (_u *MembershipUpdate) SetUpdatedAt(v time.Time) *MembershipUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *MembershipUpdate) ClearUpdatedAt() *MembershipUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetUserID sets the "user_id" field.
 func (_u *MembershipUpdate) SetUserID(v uuid.UUID) *MembershipUpdate {
 	_u.mutation.SetUserID(v)
@@ -220,7 +214,7 @@ func (_u *MembershipUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *MembershipUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := membership.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -260,14 +254,8 @@ func (_u *MembershipUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(membership.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(membership.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(membership.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(membership.FieldStatus, field.TypeEnum, value)
@@ -412,12 +400,6 @@ type MembershipUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MembershipUpdateOne) SetUpdatedAt(v time.Time) *MembershipUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *MembershipUpdateOne) ClearUpdatedAt() *MembershipUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -609,7 +591,7 @@ func (_u *MembershipUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *MembershipUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := membership.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -666,14 +648,8 @@ func (_u *MembershipUpdateOne) sqlSave(ctx context.Context) (_node *Membership, 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(membership.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(membership.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(membership.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(membership.FieldStatus, field.TypeEnum, value)

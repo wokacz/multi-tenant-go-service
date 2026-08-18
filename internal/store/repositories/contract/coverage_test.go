@@ -378,13 +378,13 @@ func TestTheInvitationListingsHideWhatIsNoLongerOpen(t *testing.T) {
 		now := time.Now().UTC()
 
 		open, err := b.repo.InviteMember(t.Context(), orgID, "open@example.com",
-			"token-open", nil, uuid.Nil, now.Add(time.Hour), now)
+			freshToken("open"), nil, uuid.Nil, now.Add(time.Hour), now)
 		if err != nil {
 			t.Fatalf("InviteMember() = %v", err)
 		}
 
 		expired, err := b.repo.InviteMember(t.Context(), orgID, "expired@example.com",
-			"token-expired", nil, uuid.Nil, now.Add(time.Hour), now)
+			freshToken("expired"), nil, uuid.Nil, now.Add(time.Hour), now)
 		if err != nil {
 			t.Fatalf("InviteMember() = %v", err)
 		}
@@ -392,7 +392,7 @@ func TestTheInvitationListingsHideWhatIsNoLongerOpen(t *testing.T) {
 		// Reissue is the one operation allowed to move an invitation's clock, so it is
 		// how a test produces an expired one without waiting a week.
 		_, err = b.repo.ReissueInvitation(t.Context(), orgID, expired.ID,
-			"token-expired-again", now.Add(-time.Hour))
+			freshToken("expired-again"), now.Add(-time.Hour))
 		if err != nil {
 			t.Fatalf("ReissueInvitation() = %v", err)
 		}
@@ -428,8 +428,10 @@ func TestDecliningRemovesTheOffer(t *testing.T) {
 		orgID := b.newOrg(t)
 		now := time.Now().UTC()
 
+		token := freshToken("declined")
+
 		invitation, err := b.repo.InviteMember(t.Context(), orgID, "bo@example.com",
-			"token-declined", nil, uuid.Nil, now.Add(time.Hour), now)
+			token, nil, uuid.Nil, now.Add(time.Hour), now)
 		if err != nil {
 			t.Fatalf("InviteMember() = %v", err)
 		}
@@ -438,7 +440,7 @@ func TestDecliningRemovesTheOffer(t *testing.T) {
 			t.Fatalf("DeclineInvitation() = %v", err)
 		}
 
-		if _, err := b.dir.InvitationByToken(t.Context(), "token-declined", now); !errors.Is(err, orgs.ErrNotFound) {
+		if _, err := b.dir.InvitationByToken(t.Context(), token, now); !errors.Is(err, orgs.ErrNotFound) {
 			t.Errorf("InvitationByToken() after declining = %v, want ErrNotFound", err)
 		}
 
@@ -583,6 +585,17 @@ func TestConfirmingAnAddressReportsOneThatWasTaken(t *testing.T) {
 			t.Error("the address moved anyway")
 		}
 	})
+}
+
+// freshToken is a token hash no other run has used.
+//
+// invitations.token_hash is unique across the whole installation, so a literal here
+// makes the suite pass once and then fail on the same database — which is exactly what
+// happened, and what the older invitation tests already had a note about after
+// colliding on the literal "a-token". task test:store hides it behind a throwaway
+// container; a developer pointing the suite at a persistent database does not have one.
+func freshToken(prefix string) string {
+	return prefix + "-" + uuid.Must(uuid.NewV7()).String()
 }
 
 // sortedPermissions makes two permission sets comparable regardless of the order the

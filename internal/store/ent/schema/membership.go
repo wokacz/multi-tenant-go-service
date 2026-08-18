@@ -27,11 +27,8 @@ func (Membership) Fields() []ent.Field {
 		// Two values, and the CHECK is what keeps a third out. "invited" was the
 		// third until invitations moved to a table of their own, and the constraint
 		// is what stops anything that is not this application writing it back.
-		// varchar(20) rather than ent's default text, because that is the column the
-		// database has. ent has no MaxLen on an enum, so the type is stated directly.
 		field.Enum("status").
-			Values("active", "suspended").
-			SchemaType(varchar20),
+			Values("active", "suspended"),
 
 		field.UUID("invited_by", uuid.UUID{}).Optional().Nillable(),
 		field.Time("joined_at").Optional().Nillable(),

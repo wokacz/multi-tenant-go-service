@@ -34,23 +34,17 @@ func (Model) Fields() []ent.Field {
 		// which covered the whole connection; ent has no such single place, so the
 		// zone belongs on each default or the same row serialises as +02:00 on a
 		// laptop and Z on a server.
-		// Optional, which in ent means a nullable column — and that is what the table
-		// has today. GORM left both timestamps nullable because the struct fields
-		// carried no `not null` tag, and nothing has ever written a row without them.
-		//
-		// Reproducing the accident rather than fixing it is deliberate: stage 2 is
-		// accepted when Atlas finds *nothing* to change, so that a real difference is
-		// visible instead of buried under improvements. Tightening these to NOT NULL
-		// is a migration of its own, decided and reviewed as one.
+		// NOT NULL, which is what these always should have been. GORM left them
+		// nullable because the struct fields carried no tag saying otherwise, and
+		// nothing has ever written a row without them — the column was permissive
+		// about a value the application always supplies.
 		field.Time("created_at").
 			Default(nowUTC).
-			Optional().
 			Immutable(),
 
 		field.Time("updated_at").
 			Default(nowUTC).
-			UpdateDefault(nowUTC).
-			Optional(),
+			UpdateDefault(nowUTC),
 	}
 }
 

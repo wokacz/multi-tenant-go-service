@@ -8,7 +8,8 @@ Serwis HTTP w Go, z Postgresem, bez frontendu. Kontrakt API jest generowany z ko
 |----------------------------------------------|------------------|--------------------------------------------------|
 | [huma](https://huma.rocks/)                  | v2.39.1          | operacje, walidacja wejścia, generowanie OpenAPI |
 | [chi](https://github.com/go-chi/chi)         | v5.3.1           | router i middleware                              |
-| [GORM](https://gorm.io/) + driver `postgres` | v1.31.2 / v1.6.2 | dostęp do bazy (pgx pod spodem)                  |
+| [ent](https://entgo.io/) | v0.14.6 | schemat i migracje; docelowo cały dostęp do bazy (pgx pod spodem) |
+| [GORM](https://gorm.io/) + driver `postgres` | v1.31.2 / v1.6.2 | dostęp do bazy w repozytoriach — **przenoszony na ent**, patrz `ENT.md` |
 | `github.com/google/uuid`                     | v1.6.0           | identyfikatory UUIDv7                            |
 | `golang.org/x/crypto`                        | v0.55.0          | bcrypt                                           |
 | `golang.org/x/text`                          | v0.41.0          | negocjacja języka (`Accept-Language`)            |
@@ -21,7 +22,7 @@ Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obr
 | Narzędzie                                          | Do czego                                                               |
 |----------------------------------------------------|------------------------------------------------------------------------|
 | [Task](https://taskfile.dev/)                      | wszystkie polecenia projektu; `task check` to dokładnie to, co robi CI |
-| [Atlas](https://atlasgo.io/)                       | migracje wersjonowane, generowane z modeli GORM                        |
+| [Atlas](https://atlasgo.io/)                       | migracje wersjonowane; różnicę liczy ent, Atlas renderuje SQL          |
 | [golangci-lint](https://golangci-lint.run/) **v2** | lint                                                                   |
 | Docker Compose                                     | środowisko developerskie: Postgres 18, migracje, API                   |
 
@@ -50,9 +51,10 @@ Lista jest krótka i to jest celowe — każda pozycja to decyzja, nie zaniedban
 Repozytorium zawiera **dwa** moduły:
 
 - główny — serwis,
-- `loader/` — drukuje DDL wynikający z modeli GORM, dla Atlasa.
+- `tools/entgen/` — generator kodu ent, w osobnym module.
 
-`loader/` jest osobny, bo `atlas-provider-gorm` wciąga każdy sterownik GORM-a plus gRPC i SDK chmurowe. Nic z tego nie
+`tools/entgen/` jest osobny, bo generator ent wciąga cobra, pflag i bibliotekę do szerokości znaków — a przy okazji
+`go mod tidy` w głównym module wybierał wersję jednej z tych zależności, która się nie kompiluje. Nic z tego nie
 ma prawa być w grafie zależności serwisu, który rozmawia wyłącznie z Postgresem.
 
 Praktyczny skutek: `go mod tidy` bez `-C loader` pomija drugi moduł. `task tidy`

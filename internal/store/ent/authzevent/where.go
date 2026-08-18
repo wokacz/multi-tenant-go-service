@@ -150,16 +150,6 @@ func CreatedAtLTE(v time.Time) predicate.AuthzEvent {
 	return predicate.AuthzEvent(sql.FieldLTE(FieldCreatedAt, v))
 }
 
-// CreatedAtIsNil applies the IsNil predicate on the "created_at" field.
-func CreatedAtIsNil() predicate.AuthzEvent {
-	return predicate.AuthzEvent(sql.FieldIsNull(FieldCreatedAt))
-}
-
-// CreatedAtNotNil applies the NotNil predicate on the "created_at" field.
-func CreatedAtNotNil() predicate.AuthzEvent {
-	return predicate.AuthzEvent(sql.FieldNotNull(FieldCreatedAt))
-}
-
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
 func UpdatedAtEQ(v time.Time) predicate.AuthzEvent {
 	return predicate.AuthzEvent(sql.FieldEQ(FieldUpdatedAt, v))
@@ -198,16 +188,6 @@ func UpdatedAtLT(v time.Time) predicate.AuthzEvent {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.AuthzEvent {
 	return predicate.AuthzEvent(sql.FieldLTE(FieldUpdatedAt, v))
-}
-
-// UpdatedAtIsNil applies the IsNil predicate on the "updated_at" field.
-func UpdatedAtIsNil() predicate.AuthzEvent {
-	return predicate.AuthzEvent(sql.FieldIsNull(FieldUpdatedAt))
-}
-
-// UpdatedAtNotNil applies the NotNil predicate on the "updated_at" field.
-func UpdatedAtNotNil() predicate.AuthzEvent {
-	return predicate.AuthzEvent(sql.FieldNotNull(FieldUpdatedAt))
 }
 
 // OrganizationIDEQ applies the EQ predicate on the "organization_id" field.

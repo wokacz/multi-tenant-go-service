@@ -77,10 +77,10 @@ services:
   # Applies pending migrations, then exits. The API waits for it to succeed, so
   # a container start can never race the schema.
   #
-  # It uses --dir rather than --env local on purpose: the local environment in
-  # atlas.hcl resolves its schema by running `go run -C loader .`, which is what
-  # generating a migration needs and applying one does not. Skipping it keeps
-  # this container to the Atlas binary alone.
+  # --dir, and nothing else: applying a migration needs the directory and a database.
+  # Generating one needs the ent schema, a Go toolchain and a throwaway database, which
+  # is `task migrate:diff` on a developer's machine and has no business in a container
+  # that runs on every start.
   migrate:
     image: arigaio/atlas:latest
     restart: "no"

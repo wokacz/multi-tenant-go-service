@@ -38,12 +38,6 @@ func (_u *InvitationUpdate) SetUpdatedAt(v time.Time) *InvitationUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *InvitationUpdate) ClearUpdatedAt() *InvitationUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetOrganizationID sets the "organization_id" field.
 func (_u *InvitationUpdate) SetOrganizationID(v uuid.UUID) *InvitationUpdate {
 	_u.mutation.SetOrganizationID(v)
@@ -222,7 +216,7 @@ func (_u *InvitationUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *InvitationUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := invitation.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -264,14 +258,8 @@ func (_u *InvitationUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(invitation.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(invitation.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(invitation.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(invitation.FieldEmail, field.TypeString, value)
@@ -393,12 +381,6 @@ type InvitationUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *InvitationUpdateOne) SetUpdatedAt(v time.Time) *InvitationUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *InvitationUpdateOne) ClearUpdatedAt() *InvitationUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -593,7 +575,7 @@ func (_u *InvitationUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *InvitationUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := invitation.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -652,14 +634,8 @@ func (_u *InvitationUpdateOne) sqlSave(ctx context.Context) (_node *Invitation, 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(invitation.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(invitation.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(invitation.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(invitation.FieldEmail, field.TypeString, value)

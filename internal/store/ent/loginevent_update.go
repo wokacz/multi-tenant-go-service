@@ -37,12 +37,6 @@ func (_u *LoginEventUpdate) SetUpdatedAt(v time.Time) *LoginEventUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *LoginEventUpdate) ClearUpdatedAt() *LoginEventUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetUserID sets the "user_id" field.
 func (_u *LoginEventUpdate) SetUserID(v uuid.UUID) *LoginEventUpdate {
 	_u.mutation.SetUserID(v)
@@ -191,7 +185,7 @@ func (_u *LoginEventUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *LoginEventUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := loginevent.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -238,14 +232,8 @@ func (_u *LoginEventUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(loginevent.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(loginevent.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(loginevent.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.DeviceID(); ok {
 		_spec.SetField(loginevent.FieldDeviceID, field.TypeUUID, value)
@@ -325,12 +313,6 @@ type LoginEventUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *LoginEventUpdateOne) SetUpdatedAt(v time.Time) *LoginEventUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *LoginEventUpdateOne) ClearUpdatedAt() *LoginEventUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -495,7 +477,7 @@ func (_u *LoginEventUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *LoginEventUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := loginevent.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -559,14 +541,8 @@ func (_u *LoginEventUpdateOne) sqlSave(ctx context.Context) (_node *LoginEvent, 
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(loginevent.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(loginevent.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(loginevent.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.DeviceID(); ok {
 		_spec.SetField(loginevent.FieldDeviceID, field.TypeUUID, value)

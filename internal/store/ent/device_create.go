@@ -235,6 +235,12 @@ func (_c *DeviceCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *DeviceCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Device.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Device.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "Device.user_id"`)}
 	}
@@ -425,12 +431,6 @@ func (u *DeviceUpsert) SetUpdatedAt(v time.Time) *DeviceUpsert {
 // UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
 func (u *DeviceUpsert) UpdateUpdatedAt() *DeviceUpsert {
 	u.SetExcluded(device.FieldUpdatedAt)
-	return u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *DeviceUpsert) ClearUpdatedAt() *DeviceUpsert {
-	u.SetNull(device.FieldUpdatedAt)
 	return u
 }
 
@@ -628,13 +628,6 @@ func (u *DeviceUpsertOne) SetUpdatedAt(v time.Time) *DeviceUpsertOne {
 func (u *DeviceUpsertOne) UpdateUpdatedAt() *DeviceUpsertOne {
 	return u.Update(func(s *DeviceUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *DeviceUpsertOne) ClearUpdatedAt() *DeviceUpsertOne {
-	return u.Update(func(s *DeviceUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -1021,13 +1014,6 @@ func (u *DeviceUpsertBulk) SetUpdatedAt(v time.Time) *DeviceUpsertBulk {
 func (u *DeviceUpsertBulk) UpdateUpdatedAt() *DeviceUpsertBulk {
 	return u.Update(func(s *DeviceUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *DeviceUpsertBulk) ClearUpdatedAt() *DeviceUpsertBulk {
-	return u.Update(func(s *DeviceUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

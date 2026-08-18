@@ -77,6 +77,14 @@ func (_c *PasswordResetCreate) SetAttempts(v int) *PasswordResetCreate {
 	return _c
 }
 
+// SetNillableAttempts sets the "attempts" field if the given value is not nil.
+func (_c *PasswordResetCreate) SetNillableAttempts(v *int) *PasswordResetCreate {
+	if v != nil {
+		_c.SetAttempts(*v)
+	}
+	return _c
+}
+
 // SetConsumedAt sets the "consumed_at" field.
 func (_c *PasswordResetCreate) SetConsumedAt(v time.Time) *PasswordResetCreate {
 	_c.mutation.SetConsumedAt(v)
@@ -153,6 +161,10 @@ func (_c *PasswordResetCreate) defaults() {
 		v := passwordreset.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Attempts(); !ok {
+		v := passwordreset.DefaultAttempts
+		_c.mutation.SetAttempts(v)
+	}
 	if _, ok := _c.mutation.ID(); !ok {
 		v := passwordreset.DefaultID()
 		_c.mutation.SetID(v)
@@ -161,6 +173,12 @@ func (_c *PasswordResetCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *PasswordResetCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "PasswordReset.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "PasswordReset.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "PasswordReset.user_id"`)}
 	}
@@ -322,12 +340,6 @@ func (u *PasswordResetUpsert) UpdateUpdatedAt() *PasswordResetUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *PasswordResetUpsert) ClearUpdatedAt() *PasswordResetUpsert {
-	u.SetNull(passwordreset.FieldUpdatedAt)
-	return u
-}
-
 // SetUserID sets the "user_id" field.
 func (u *PasswordResetUpsert) SetUserID(v uuid.UUID) *PasswordResetUpsert {
 	u.Set(passwordreset.FieldUserID, v)
@@ -462,13 +474,6 @@ func (u *PasswordResetUpsertOne) SetUpdatedAt(v time.Time) *PasswordResetUpsertO
 func (u *PasswordResetUpsertOne) UpdateUpdatedAt() *PasswordResetUpsertOne {
 	return u.Update(func(s *PasswordResetUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *PasswordResetUpsertOne) ClearUpdatedAt() *PasswordResetUpsertOne {
-	return u.Update(func(s *PasswordResetUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -785,13 +790,6 @@ func (u *PasswordResetUpsertBulk) SetUpdatedAt(v time.Time) *PasswordResetUpsert
 func (u *PasswordResetUpsertBulk) UpdateUpdatedAt() *PasswordResetUpsertBulk {
 	return u.Update(func(s *PasswordResetUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *PasswordResetUpsertBulk) ClearUpdatedAt() *PasswordResetUpsertBulk {
-	return u.Update(func(s *PasswordResetUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

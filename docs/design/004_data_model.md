@@ -1,26 +1,32 @@
 # Model danych
 
-## Modele GORM są źródłem prawdy
+## Schemat ent jest źródłem prawdy
 
-Schemat bazy wynika z modeli, nie odwrotnie.
+Schemat bazy wynika ze schematu ent, nie odwrotnie.
 
 ```
-internal/store/models/*.go
+internal/store/ent/schema/*.go
         │
-        ▼  loader/ drukuje DDL
-   Atlas diffuje z migrations/
+        ▼  ent generuje klienta i opis tabel
+   ent odtwarza migrations/ na bazie roboczej
         │
-        ▼
+        ▼  Atlas renderuje różnicę jako SQL
 migrations/NNNNNNNNNNNNNN_nazwa.sql
 ```
 
 ```bash
-task migrate:diff NAME=cos_sie_zmienilo   # wygeneruj migrację po zmianie modelu
+task ent:generate                         # po każdej zmianie schematu
+task migrate:diff NAME=cos_sie_zmienilo   # wygeneruj migrację
 task migrate                              # zastosuj
 ```
 
-**`AutoMigrate` nie jest wywoływane nigdzie.** Zgaduje zmiany kolumn i nigdy nic nie usuwa, więc schemat rozjeżdżałby
-się po cichu. CI przewraca build, gdy model zmienił się bez migracji.
+Migrację liczy **ent**, nie zewnętrzny dostawca schematu: odtwarza katalog `migrations/` na jednorazowej bazie, żeby
+poznać stan obecny, porównuje go ze schematem i oddaje różnicę Atlasowi do wyrenderowania. Odtwarzanie, a nie
+podłączanie się do żywej bazy, jest tym, co czyni wynik niezależnym od tego, na której maszynie go wygenerowano.
+
+**Automatyczna migracja nie jest wywoływana nigdzie** poza `cmd/entmigrate -apply`, które istnieje tylko po to, żeby
+`task schema:compare` mogło porównać dwie bazy. Automatyczna migracja to sposób, żeby w piątek odkryć, że w produkcji
+zniknęła kolumna. CI przewraca build (`task ent:check`), gdy schemat zmienił się bez regenerowania klienta.
 
 Krok po kroku: [instrukcja modeli i migracji](../guides/003_models_and_migrations.md).
 
@@ -169,11 +175,13 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 | `login_events`                             | historia logowań                                                                              |
 | `password_resets`, `two_factor_challenges`, `email_changes` | kody jednorazowe (HMAC z osobnym `purpose`, TTL, licznik prób)               |
 | `organizations`                            | najemcy                                                                                       |
-| `memberships`                              | kto należy do której organizacji i w jakim stanie; zaproszenie trzyma adres i puste `user_id` |
+| `memberships`                              | kto należy do której organizacji i w jakim stanie                                             |
+| `invitations`, `invitation_roles`          | oferty członkostwa; tożsamością jest hash tokenu, nie adres                                   |
 | `roles`, `role_permissions`                | role organizacji i to, co nadają                                                              |
 | `membership_roles`                         | przypisania ról                                                                               |
 | `user_system_roles`                        | role platformowe, przypisywane kluczem                                                        |
 | `authz_events`                             | dziennik zmian uprawnień                                                                      |
 
-Każdy nowy model musi trafić do listy w `loader/main.go`. Pominięty jest po cichu nieobecny w generowanym schemacie, a
-Atlas zaproponuje **usunięcie** jego tabeli.
+Każdy nowy schemat trafia do opisu automatycznie: `ent generate` czyta cały katalog `schema/`. Poprzedni układ wymagał
+wpisania każdego modelu do ręcznej listy, a pominięty był po cichu nieobecny w generowanym schemacie — po czym Atlas
+proponował **usunięcie** jego tabeli.

@@ -83,6 +83,14 @@ func (_c *EmailChangeCreate) SetAttempts(v int) *EmailChangeCreate {
 	return _c
 }
 
+// SetNillableAttempts sets the "attempts" field if the given value is not nil.
+func (_c *EmailChangeCreate) SetNillableAttempts(v *int) *EmailChangeCreate {
+	if v != nil {
+		_c.SetAttempts(*v)
+	}
+	return _c
+}
+
 // SetConsumedAt sets the "consumed_at" field.
 func (_c *EmailChangeCreate) SetConsumedAt(v time.Time) *EmailChangeCreate {
 	_c.mutation.SetConsumedAt(v)
@@ -159,6 +167,10 @@ func (_c *EmailChangeCreate) defaults() {
 		v := emailchange.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Attempts(); !ok {
+		v := emailchange.DefaultAttempts
+		_c.mutation.SetAttempts(v)
+	}
 	if _, ok := _c.mutation.ID(); !ok {
 		v := emailchange.DefaultID()
 		_c.mutation.SetID(v)
@@ -167,6 +179,12 @@ func (_c *EmailChangeCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *EmailChangeCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "EmailChange.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "EmailChange.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "EmailChange.user_id"`)}
 	}
@@ -340,12 +358,6 @@ func (u *EmailChangeUpsert) UpdateUpdatedAt() *EmailChangeUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *EmailChangeUpsert) ClearUpdatedAt() *EmailChangeUpsert {
-	u.SetNull(emailchange.FieldUpdatedAt)
-	return u
-}
-
 // SetUserID sets the "user_id" field.
 func (u *EmailChangeUpsert) SetUserID(v uuid.UUID) *EmailChangeUpsert {
 	u.Set(emailchange.FieldUserID, v)
@@ -492,13 +504,6 @@ func (u *EmailChangeUpsertOne) SetUpdatedAt(v time.Time) *EmailChangeUpsertOne {
 func (u *EmailChangeUpsertOne) UpdateUpdatedAt() *EmailChangeUpsertOne {
 	return u.Update(func(s *EmailChangeUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *EmailChangeUpsertOne) ClearUpdatedAt() *EmailChangeUpsertOne {
-	return u.Update(func(s *EmailChangeUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -829,13 +834,6 @@ func (u *EmailChangeUpsertBulk) SetUpdatedAt(v time.Time) *EmailChangeUpsertBulk
 func (u *EmailChangeUpsertBulk) UpdateUpdatedAt() *EmailChangeUpsertBulk {
 	return u.Update(func(s *EmailChangeUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *EmailChangeUpsertBulk) ClearUpdatedAt() *EmailChangeUpsertBulk {
-	return u.Update(func(s *EmailChangeUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

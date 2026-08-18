@@ -37,12 +37,6 @@ func (_u *PasswordResetUpdate) SetUpdatedAt(v time.Time) *PasswordResetUpdate {
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *PasswordResetUpdate) ClearUpdatedAt() *PasswordResetUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetUserID sets the "user_id" field.
 func (_u *PasswordResetUpdate) SetUserID(v uuid.UUID) *PasswordResetUpdate {
 	_u.mutation.SetUserID(v)
@@ -172,7 +166,7 @@ func (_u *PasswordResetUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *PasswordResetUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := passwordreset.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -209,14 +203,8 @@ func (_u *PasswordResetUpdate) sqlSave(ctx context.Context) (_node int, err erro
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(passwordreset.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(passwordreset.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(passwordreset.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CodeHash(); ok {
 		_spec.SetField(passwordreset.FieldCodeHash, field.TypeString, value)
@@ -290,12 +278,6 @@ type PasswordResetUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *PasswordResetUpdateOne) SetUpdatedAt(v time.Time) *PasswordResetUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *PasswordResetUpdateOne) ClearUpdatedAt() *PasswordResetUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -441,7 +423,7 @@ func (_u *PasswordResetUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *PasswordResetUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := passwordreset.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -495,14 +477,8 @@ func (_u *PasswordResetUpdateOne) sqlSave(ctx context.Context) (_node *PasswordR
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(passwordreset.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(passwordreset.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(passwordreset.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.CodeHash(); ok {
 		_spec.SetField(passwordreset.FieldCodeHash, field.TypeString, value)

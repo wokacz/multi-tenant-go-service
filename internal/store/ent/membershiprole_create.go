@@ -155,6 +155,12 @@ func (_c *MembershipRoleCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *MembershipRoleCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "MembershipRole.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "MembershipRole.updated_at"`)}
+	}
 	if _, ok := _c.mutation.MembershipID(); !ok {
 		return &ValidationError{Name: "membership_id", err: errors.New(`ent: missing required field "MembershipRole.membership_id"`)}
 	}
@@ -313,12 +319,6 @@ func (u *MembershipRoleUpsert) UpdateUpdatedAt() *MembershipRoleUpsert {
 	return u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *MembershipRoleUpsert) ClearUpdatedAt() *MembershipRoleUpsert {
-	u.SetNull(membershiprole.FieldUpdatedAt)
-	return u
-}
-
 // SetMembershipID sets the "membership_id" field.
 func (u *MembershipRoleUpsert) SetMembershipID(v uuid.UUID) *MembershipRoleUpsert {
 	u.Set(membershiprole.FieldMembershipID, v)
@@ -423,13 +423,6 @@ func (u *MembershipRoleUpsertOne) SetUpdatedAt(v time.Time) *MembershipRoleUpser
 func (u *MembershipRoleUpsertOne) UpdateUpdatedAt() *MembershipRoleUpsertOne {
 	return u.Update(func(s *MembershipRoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *MembershipRoleUpsertOne) ClearUpdatedAt() *MembershipRoleUpsertOne {
-	return u.Update(func(s *MembershipRoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 
@@ -711,13 +704,6 @@ func (u *MembershipRoleUpsertBulk) SetUpdatedAt(v time.Time) *MembershipRoleUpse
 func (u *MembershipRoleUpsertBulk) UpdateUpdatedAt() *MembershipRoleUpsertBulk {
 	return u.Update(func(s *MembershipRoleUpsert) {
 		s.UpdateUpdatedAt()
-	})
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (u *MembershipRoleUpsertBulk) ClearUpdatedAt() *MembershipRoleUpsertBulk {
-	return u.Update(func(s *MembershipRoleUpsert) {
-		s.ClearUpdatedAt()
 	})
 }
 

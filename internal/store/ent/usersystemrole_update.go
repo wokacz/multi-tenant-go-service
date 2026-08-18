@@ -37,12 +37,6 @@ func (_u *UserSystemRoleUpdate) SetUpdatedAt(v time.Time) *UserSystemRoleUpdate 
 	return _u
 }
 
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *UserSystemRoleUpdate) ClearUpdatedAt() *UserSystemRoleUpdate {
-	_u.mutation.ClearUpdatedAt()
-	return _u
-}
-
 // SetUserID sets the "user_id" field.
 func (_u *UserSystemRoleUpdate) SetUserID(v uuid.UUID) *UserSystemRoleUpdate {
 	_u.mutation.SetUserID(v)
@@ -137,7 +131,7 @@ func (_u *UserSystemRoleUpdate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *UserSystemRoleUpdate) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := usersystemrole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -174,14 +168,8 @@ func (_u *UserSystemRoleUpdate) sqlSave(ctx context.Context) (_node int, err err
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(usersystemrole.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(usersystemrole.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(usersystemrole.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.RoleKey(); ok {
 		_spec.SetField(usersystemrole.FieldRoleKey, field.TypeString, value)
@@ -246,12 +234,6 @@ type UserSystemRoleUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UserSystemRoleUpdateOne) SetUpdatedAt(v time.Time) *UserSystemRoleUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// ClearUpdatedAt clears the value of the "updated_at" field.
-func (_u *UserSystemRoleUpdateOne) ClearUpdatedAt() *UserSystemRoleUpdateOne {
-	_u.mutation.ClearUpdatedAt()
 	return _u
 }
 
@@ -362,7 +344,7 @@ func (_u *UserSystemRoleUpdateOne) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_u *UserSystemRoleUpdateOne) defaults() {
-	if _, ok := _u.mutation.UpdatedAt(); !ok && !_u.mutation.UpdatedAtCleared() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
 		v := usersystemrole.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
@@ -416,14 +398,8 @@ func (_u *UserSystemRoleUpdateOne) sqlSave(ctx context.Context) (_node *UserSyst
 			}
 		}
 	}
-	if _u.mutation.CreatedAtCleared() {
-		_spec.ClearField(usersystemrole.FieldCreatedAt, field.TypeTime)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(usersystemrole.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if _u.mutation.UpdatedAtCleared() {
-		_spec.ClearField(usersystemrole.FieldUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.RoleKey(); ok {
 		_spec.SetField(usersystemrole.FieldRoleKey, field.TypeString, value)

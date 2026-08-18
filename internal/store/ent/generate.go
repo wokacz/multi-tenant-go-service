@@ -18,6 +18,9 @@
 //   - sql/modifier is the escape hatch for the statements that cannot be expressed
 //     as a builder call — the attempt counter's CASE WHEN, the ::inet cast, the
 //     correlated subquery counting owners.
+//   - sql/versioned-migration generates migrate.NamedDiff, which is how the versioned
+//     migrations in migrations/ are written: ent computes the difference between the
+//     schema here and the directory, and Atlas renders it as SQL.
 package ent
 
 // The generator is built from tools/entgen — a module of its own, see the comment
