@@ -5,7 +5,7 @@ module github.com/wokacz/multi-tenant-go-service/loader
 go 1.26.6
 
 require (
-	ariga.io/atlas-provider-gorm v0.6.0
+	ariga.io/atlas-provider-gorm v0.6.1
 	github.com/wokacz/multi-tenant-go-service v0.0.0
 )
 
