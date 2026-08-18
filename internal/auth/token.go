@@ -29,6 +29,17 @@ type claims struct {
 	Sub string `json:"sub"`
 	Exp int64  `json:"exp"`
 	Iat int64  `json:"iat"`
+	// Iss and Aud are what stops a token minted by one installation from working
+	// in another that happens to share the secret — staging and production
+	// configured from the same secrets file is not a hypothetical.
+	//
+	// They carry the same string today, and that is not an oversight: there is one
+	// service here, so whoever signed the token is also the only party meant to
+	// accept it. Both are written and both are checked, so the day a second
+	// service appears the audience is what splits, and tokens issued for this API
+	// will not be accepted by it.
+	Iss string `json:"iss"`
+	Aud string `json:"aud"`
 	// Ver is the user's session epoch at issue time. Password changes bump
 	// the epoch so a still-unexpired token issued before the change is
 	// rejected without a denylist.
@@ -54,11 +65,12 @@ type Session struct {
 type Signer struct {
 	secret []byte
 	ttl    time.Duration
+	issuer string
 }
 
 // NewSigner copies secret so later mutations of the caller's string storage
 // cannot change what is used to sign. Secret must be at least 32 bytes.
-func NewSigner(secret string, ttl time.Duration) (*Signer, error) {
+func NewSigner(secret string, ttl time.Duration, issuer string) (*Signer, error) {
 	if len(secret) < 32 {
 		return nil, fmt.Errorf("auth: token secret must be at least 32 bytes")
 	}
@@ -67,9 +79,14 @@ func NewSigner(secret string, ttl time.Duration) (*Signer, error) {
 		return nil, fmt.Errorf("auth: token TTL must be positive")
 	}
 
+	if issuer == "" {
+		return nil, fmt.Errorf("auth: token issuer must not be empty")
+	}
+
 	return &Signer{
 		secret: []byte(secret),
 		ttl:    ttl,
+		issuer: issuer,
 	}, nil
 }
 
@@ -90,6 +107,8 @@ func (s *Signer) Issue(sess Session, now time.Time) (token string, expires time.
 		Iat: now.Unix(),
 		Ver: sess.Epoch,
 		Did: sess.DeviceID.String(),
+		Iss: s.issuer,
+		Aud: s.issuer,
 	})
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("auth: encode claims: %w", err)
@@ -144,6 +163,15 @@ func (s *Signer) Parse(token string, now time.Time) (Session, error) {
 	}
 
 	if c.Exp <= now.Unix() {
+		return Session{}, ErrInvalidToken
+	}
+
+	// A token from another installation is refused here rather than at the
+	// signature: the signature can agree while the token was never meant for this
+	// service. Both claims are compared, not just one, because a token missing
+	// either is a token from before they existed — and accepting those would make
+	// the check optional, which is the same as not having it.
+	if c.Iss != s.issuer || c.Aud != s.issuer {
 		return Session{}, ErrInvalidToken
 	}
 

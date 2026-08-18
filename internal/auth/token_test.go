@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 func testSigner(t *testing.T) *Signer {
 	t.Helper()
 
-	s, err := NewSigner("0123456789abcdef0123456789abcdef", time.Hour)
+	s, err := NewSigner("0123456789abcdef0123456789abcdef", time.Hour, testIssuer)
 	if err != nil {
 		t.Fatalf("NewSigner() = %v", err)
 	}
@@ -43,6 +44,11 @@ func testSession() Session {
 		DeviceID: uuid.MustParse("01900000-0000-7000-8000-0000000000d1"),
 	}
 }
+
+// testIssuer is what the tests sign and verify against. A literal rather than the
+// production default, so a test cannot pass because both sides quietly agreed on an
+// empty string.
+const testIssuer = "test-issuer"
 
 func TestIssueParseRoundTrip(t *testing.T) {
 	s := testSigner(t)
@@ -109,7 +115,7 @@ func TestParseRejectsAlgNoneHeader(t *testing.T) {
 }
 
 func TestNewSignerRejectsShortSecret(t *testing.T) {
-	if _, err := NewSigner("too-short", time.Hour); err == nil {
+	if _, err := NewSigner("too-short", time.Hour, testIssuer); err == nil {
 		t.Fatal("NewSigner() accepted a short secret")
 	}
 }
@@ -182,7 +188,7 @@ func TestIssueParsePreservesEpoch(t *testing.T) {
 
 func TestNewSignerRejectsNonPositiveTTL(t *testing.T) {
 	for _, ttl := range []time.Duration{0, -time.Minute} {
-		if _, err := NewSigner("0123456789abcdef0123456789abcdef", ttl); err == nil {
+		if _, err := NewSigner("0123456789abcdef0123456789abcdef", ttl, testIssuer); err == nil {
 			t.Errorf("NewSigner(ttl=%s) accepted a non-positive TTL", ttl)
 		}
 	}
@@ -237,7 +243,7 @@ func TestParseRejectsMalformedTokens(t *testing.T) {
 func TestParseRejectsAForeignSecret(t *testing.T) {
 	mine := testSigner(t)
 
-	theirs, err := NewSigner("ffffffffffffffffffffffffffffffff", time.Hour)
+	theirs, err := NewSigner("ffffffffffffffffffffffffffffffff", time.Hour, testIssuer)
 	if err != nil {
 		t.Fatalf("NewSigner() = %v", err)
 	}
@@ -251,5 +257,65 @@ func TestParseRejectsAForeignSecret(t *testing.T) {
 
 	if _, err := mine.Parse(token, now); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("Parse() = %v, want ErrInvalidToken", err)
+	}
+}
+
+// TestParseRejectsAnotherInstallationSharingTheSecret is why iss and aud exist.
+//
+// The secret is the same, so the signature verifies — that is the whole point of
+// the case. Two deployments of this product configured from the same secrets file
+// is not a hypothetical, and without these claims a staging token is a production
+// token.
+func TestParseRejectsAnotherInstallationSharingTheSecret(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+
+	staging, err := NewSigner(secret, time.Hour, "staging")
+	if err != nil {
+		t.Fatalf("NewSigner() = %v", err)
+	}
+
+	production, err := NewSigner(secret, time.Hour, "production")
+	if err != nil {
+		t.Fatalf("NewSigner() = %v", err)
+	}
+
+	now := time.Now().UTC()
+
+	token, _, err := staging.Issue(testSession(), now)
+	if err != nil {
+		t.Fatalf("Issue() = %v", err)
+	}
+
+	// The signature is good; only the issuer is wrong.
+	if _, err := staging.Parse(token, now); err != nil {
+		t.Fatalf("the issuer cannot verify its own token: %v", err)
+	}
+
+	if _, err := production.Parse(token, now); !errors.Is(err, ErrInvalidToken) {
+		t.Errorf("Parse() = %v, want ErrInvalidToken", err)
+	}
+}
+
+// TestParseRejectsATokenFromBeforeTheClaimsExisted is the deliberate cost of the
+// change.
+//
+// A token without iss and aud is a token this build did not issue, and tolerating
+// one for a grace period would mean carrying a code path nobody removes and a
+// verification that is optional in the meantime. Every session ends once, which is
+// one sign-in.
+func TestParseRejectsATokenFromBeforeTheClaimsExisted(t *testing.T) {
+	s := testSigner(t)
+	now := time.Now().UTC()
+
+	// The old shape: sub, exp, iat, ver, did and nothing else, correctly signed.
+	payload := fmt.Sprintf(
+		`{"sub":%q,"exp":%d,"iat":%d,"ver":0,"did":%q}`,
+		testSession().UserID, now.Add(time.Hour).Unix(), now.Unix(), testSession().DeviceID)
+
+	signing := jwtHeader + "." + base64.RawURLEncoding.EncodeToString([]byte(payload))
+	token := signing + "." + sign(t, s, signing)
+
+	if _, err := s.Parse(token, now); !errors.Is(err, ErrInvalidToken) {
+		t.Errorf("Parse() = %v, want ErrInvalidToken", err)
 	}
 }

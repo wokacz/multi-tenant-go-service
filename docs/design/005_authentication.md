@@ -52,6 +52,19 @@ Kompaktowy JWT podpisany HMAC-SHA256, bez biblioteki — parser ma ~50 linii w
 | `did`         | identyfikator **urządzenia**, dla którego token wydano |
 | `ver`         | **epoka sesji** w chwili wydania                       |
 | `exp` / `iat` | wygaśnięcie i moment wydania                           |
+| `iss` / `aud` | nazwa **tej instalacji**; oba sprawdzane przy parsowaniu |
+
+`iss` i `aud` niosą dziś ten sam napis (`AUTH_TOKEN_ISSUER`, domyślnie
+`multi-tenant-go-service`) i to nie jest przeoczenie: jest jedna usługa, więc ten, kto podpisał token, jest zarazem
+jedyną stroną, która ma go przyjmować. Oba są zapisywane i oba sprawdzane, więc w dniu, w którym pojawi się druga
+usługa, **odbiorca** jest tym, co się rozdzieli.
+
+Powód jest praktyczny: **staging i produkcja skonfigurowane z tego samego pliku sekretów** to nie hipoteza, a bez tych
+claimów token stagingowy jest tokenem produkcyjnym — podpis się zgadza, bo sekret jest ten sam.
+
+Token **bez** `iss`/`aud` jest odrzucany, bez okresu przejściowego. Tolerowanie go przez jedno `AUTH_TOKEN_TTL`
+znaczyłoby, że weryfikacja jest w tym czasie opcjonalna, i zostawiałoby ścieżkę kodu, której nikt nie usuwa. Koszt:
+wszystkie sesje padają raz, czyli jedno zalogowanie.
 
 Konfiguracja: `AUTH_TOKEN_SECRET` (min. 32 bajty) i `AUTH_TOKEN_TTL` (domyślnie
 `1h`, format czasu Go — gołe `30` jest odrzucane, nie zgadywane). Produkcja nie wystartuje z sekretem deweloperskim ani

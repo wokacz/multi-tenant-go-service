@@ -217,6 +217,7 @@ Najważniejsze zmienne (pełna lista z komentarzami w `.env.example`):
 | `AUTH_TOKEN_SECRET`                 | wartość dev          | tylko na loopbacku; Compose ustawia własną                     |
 | `AUTH_TOKEN_TTL`                    | `1h`                 | format czasu Go; gołe `30` jest odrzucane                      |
 | `AUTH_RESET_SECRET`                 | wartość dev          | **osobny** sekret od tokenowego; ta sama zasada co tokenowy    |
+| `AUTH_TOKEN_ISSUER`                 | `multi-tenant-go-service` | `iss`/`aud` w tokenie; ustaw osobno na staging i produkcji, jeśli dzielą sekret |
 | `TRUSTED_PROXIES`                   | puste                | CIDR, którym wolno ufać `X-Forwarded-For`; puste = nigdy       |
 | `CORS_ALLOWED_ORIGINS`              | puste                | originy przeglądarkowe, np. `http://localhost:4200`; puste = brak CORS |
 | `POSTGRES_*`                        | localhost / postgres | produkcja wymaga SSL i mocnego hasła                           |

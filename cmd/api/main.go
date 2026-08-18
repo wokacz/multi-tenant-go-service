@@ -67,7 +67,7 @@ func run() error {
 		}
 	}()
 
-	tokens, err := auth.NewSigner(cfg.AuthTokenSecret, cfg.AuthTokenTTL)
+	tokens, err := auth.NewSigner(cfg.AuthTokenSecret, cfg.AuthTokenTTL, cfg.AuthTokenIssuer)
 	if err != nil {
 		return err
 	}

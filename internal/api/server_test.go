@@ -42,6 +42,10 @@ func (okPinger) Ping(context.Context) error { return nil }
 // capturingMailer keeps the two code kinds apart. Collapsing them into one
 // field would let a test assert on "the last code" and pass while the wrong
 // flow delivered it.
+// testIssuer is the installation name the test signer uses. It only has to match
+// itself; auth's own tests are where the claim is checked against another issuer.
+const testIssuer = "test-issuer"
+
 type capturingMailer struct {
 	to, code        string
 	twoFactorTo     string
@@ -154,7 +158,7 @@ func newTestAPIConfig(
 ) (*Server, *memory.Authz) {
 	t.Helper()
 
-	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour)
+	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour, testIssuer)
 	if err != nil {
 		t.Fatalf("NewSigner() = %v", err)
 	}
@@ -524,7 +528,7 @@ func TestHealthOmitsDependencyName(t *testing.T) {
 }
 
 func TestProductionHidesOpenAPI(t *testing.T) {
-	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour)
+	tokens, err := auth.NewSigner(strings.Repeat("k", 32), time.Hour, testIssuer)
 	if err != nil {
 		t.Fatalf("NewSigner() = %v", err)
 	}

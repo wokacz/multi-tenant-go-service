@@ -66,6 +66,15 @@ type Config struct {
 	// machine requires a unique one.
 	AuthResetSecret string
 
+	// AuthTokenIssuer goes into iss and aud, and is checked on every token.
+	//
+	// It names this installation, so a token signed by another one that shares the
+	// secret — staging and production configured from the same file — is refused
+	// rather than honoured. The default is the product name, which is enough to
+	// separate this service from a different product; separating two deployments
+	// of *this* product is what setting it explicitly is for.
+	AuthTokenIssuer string
+
 	// RegisterPerMinute / LoginPerMinute cap bcrypt-heavy endpoints per peer
 	// address. Zero disables the limiter, which is only for tests.
 	RegisterPerMinute int
@@ -192,6 +201,7 @@ func Load() (*Config, error) {
 		AuthTokenSecret: os.Getenv("AUTH_TOKEN_SECRET"),
 		AuthTokenTTL:    getDuration("AUTH_TOKEN_TTL", time.Hour),
 		AuthResetSecret: os.Getenv("AUTH_RESET_SECRET"),
+		AuthTokenIssuer: getEnv("AUTH_TOKEN_ISSUER", "multi-tenant-go-service"),
 
 		RegisterPerMinute: getInt("REGISTER_PER_MINUTE", 5),
 		LoginPerMinute:    getInt("LOGIN_PER_MINUTE", 5),
@@ -309,6 +319,10 @@ func (c *Config) validate() []error {
 	// auth.NewSigner refuses a non-positive TTL as well, but failing here puts
 	// it in the same batch as every other configuration error instead of
 	// aborting the assembly in main one problem later.
+	if c.AuthTokenIssuer == "" {
+		errs = append(errs, fmt.Errorf("config: AUTH_TOKEN_ISSUER must not be empty"))
+	}
+
 	if c.AuthTokenTTL <= 0 {
 		errs = append(errs, fmt.Errorf("config: AUTH_TOKEN_TTL must be positive, got %s", c.AuthTokenTTL))
 	}
