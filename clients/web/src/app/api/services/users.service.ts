@@ -23,6 +23,7 @@ import { HttpParamsBuilder } from '../utils/http-params-builder';
 import {
   RequestOptions,
   UserResponse,
+  UpdateMeRequest,
   ListMyInvitationsOutputBody,
   InvitationTokenRequest,
 } from '../models';
@@ -63,6 +64,54 @@ export class UsersService {
     }
 
     return this.httpClient.request('get', url, {
+      observe,
+      headers,
+      reportProgress: options?.reportProgress,
+      withCredentials: options?.withCredentials,
+      context: this.createContextWithClientId(options?.context),
+    });
+  }
+
+  updateMe(
+    updateMeRequest: UpdateMeRequest,
+    observe?: 'body',
+    options?: RequestOptions<'json'>,
+  ): Observable<UserResponse>;
+  updateMe(
+    updateMeRequest: UpdateMeRequest,
+    observe?: 'response',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpResponse<UserResponse>>;
+  updateMe(
+    updateMeRequest: UpdateMeRequest,
+    observe?: 'events',
+    options?: RequestOptions<'json'>,
+  ): Observable<HttpEvent<UserResponse>>;
+  /** Self-service: no permission is required, and none can take it away. Both fields are optional — an absent field is left alone, which is not the same as sending an empty one. An empty locale clears the preference and puts the account back to negotiating from Accept-Language on every request. A locale this build does not ship is refused with 422 and the code unsupported_locale. The address is changed separately, through POST /v1/me/email, because that one has to prove the mailbox is readable. */
+  updateMe(
+    updateMeRequest: UpdateMeRequest,
+    observe?: 'body' | 'events' | 'response',
+    options?: RequestOptions<'arraybuffer' | 'blob' | 'json' | 'text'>,
+  ): Observable<any> {
+    const url = `${this.basePath}/v1/me`;
+
+    let headers: HttpHeaders;
+    if (options?.headers instanceof HttpHeaders) {
+      headers = options.headers;
+    } else {
+      headers = new HttpHeaders(options?.headers);
+    }
+    // Advertise the response content type declared in the spec
+    if (!headers.has('Accept')) {
+      headers = headers.set('Accept', 'application/json');
+    }
+    // Set Content-Type for JSON requests if not already set
+    if (!headers.has('Content-Type')) {
+      headers = headers.set('Content-Type', 'application/json');
+    }
+
+    return this.httpClient.request('patch', url, {
+      body: updateMeRequest,
       observe,
       headers,
       reportProgress: options?.reportProgress,

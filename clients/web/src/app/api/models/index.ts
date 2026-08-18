@@ -492,6 +492,15 @@ export interface SystemRoleHolderResponse {
   user_id: string;
 }
 
+export interface UpdateMeRequest {
+  /** A URL to the JSON Schema for this object. */
+  readonly $schema?: string;
+  /** BCP 47 tag, or empty to negotiate from Accept-Language on every request */
+  locale?: string;
+  /** Display name */
+  name?: string;
+}
+
 export interface UpdateMemberStatusRequest {
   /** A URL to the JSON Schema for this object. */
   readonly $schema?: string;

@@ -36,6 +36,13 @@ var (
 	// those at the edge, but the rule belongs where the change is made too:
 	// nothing guarantees an HTTP request is the only caller.
 	ErrEmailInvalid = errors.New("user: email is empty or malformed")
+	// ErrLocaleUnsupported refuses a language this build cannot render. The
+	// decision needs the catalog, which lives at the edge with the rest of i18n,
+	// so the handler makes it and this is the vocabulary it reports it in —
+	// storing an unknown tag would silently give somebody the fallback language
+	// for good, which is worse than being told the language is not available.
+	ErrLocaleUnsupported = errors.New("user: unsupported locale")
+
 	// ErrSameEmail refuses a change to the address the account already has.
 	// Sending a code to prove what is already proved is only a way to send
 	// mail.
@@ -99,6 +106,14 @@ type Repository interface {
 	// Delete soft deletes an account. The model's hook revokes its devices,
 	// which the foreign key cascade does not do for a soft delete.
 	Delete(ctx context.Context, userID uuid.UUID) error
+
+	// UpdateProfile writes the account's display name and language preference.
+	//
+	// Both are always written: the service reads the account first and applies
+	// whatever the request left out, so there is no partial-update mode here to
+	// get wrong. locale may be empty, which means "no preference" and puts the
+	// account back to negotiating per request.
+	UpdateProfile(ctx context.Context, userID uuid.UUID, name, locale string) error
 
 	// SetSuspended blocks or unblocks an account. Suspending also bumps the
 	// session epoch, so tokens already issued stop working on the next request

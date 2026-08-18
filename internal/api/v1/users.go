@@ -55,6 +55,24 @@ func registerUsers(api huma.API, users *user.Service, service *orgs.Service) {
 	}, h.me)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "update-me",
+		Method:      http.MethodPatch,
+		Path:        Prefix + "/me",
+		Summary:     "Change the caller's own name or language",
+		Description: "Self-service: no permission is required, and none can take it " +
+			"away. Both fields are optional — an absent field is left alone, which " +
+			"is not the same as sending an empty one. An empty locale clears the " +
+			"preference and puts the account back to negotiating from " +
+			"Accept-Language on every request. A locale this build does not ship is " +
+			"refused with 422 and the code unsupported_locale. " +
+			"The address is changed separately, through POST /v1/me/email, because " +
+			"that one has to prove the mailbox is readable.",
+		Tags:     []string{"users"},
+		Security: bearer(),
+		Errors:   []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusUnprocessableEntity},
+	}, h.update)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "get-user",
 		Method:      http.MethodGet,
 		Path:        Prefix + "/users/{id}",
@@ -100,6 +118,50 @@ func (h *userHandlers) me(ctx context.Context, _ *GetMeInput) (*GetUserOutput, e
 	}
 
 	return &GetUserOutput{Body: newUserResponse(u)}, nil
+}
+
+// UpdateMeRequest carries only what the account owner may change about
+// themselves without proving anything further.
+//
+// Both fields are pointers so that "the client did not mention this" is
+// representable. It matters for the locale, where the empty string is a real
+// value — no preference — rather than a way of saying nothing.
+type UpdateMeRequest struct {
+	Name   *string `json:"name,omitempty" minLength:"1" maxLength:"100" doc:"Display name"`
+	Locale *string `json:"locale,omitempty" maxLength:"10" doc:"BCP 47 tag, or empty to negotiate from Accept-Language on every request"`
+}
+
+type UpdateMeInput struct {
+	Body UpdateMeRequest
+}
+
+func (h *userHandlers) update(ctx context.Context, in *UpdateMeInput) (*GetUserOutput, error) {
+	sess, ok := auth.SessionFrom(ctx)
+	if !ok {
+		return nil, problem.Error(ctx, user.ErrUnauthorized)
+	}
+
+	// The catalog lives here rather than in the domain, the same as it does for
+	// registration, so this is where an unknown language is caught. Resolving also
+	// normalises the tag: pl-PL is stored as pl, so the column holds one spelling
+	// per language rather than however many a browser might send.
+	locale := in.Body.Locale
+	if locale != nil && *locale != "" {
+		matched, ok := i18n.Default().Resolve(*locale)
+		if !ok {
+			return nil, problem.Error(ctx, user.ErrLocaleUnsupported)
+		}
+
+		resolved := string(matched)
+		locale = &resolved
+	}
+
+	updated, err := h.users.UpdateProfile(ctx, sess.UserID, in.Body.Name, locale)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return &GetUserOutput{Body: newUserResponse(updated)}, nil
 }
 
 func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutput, error) {

@@ -144,7 +144,7 @@ func (c *Catalog) Keys(locale Locale) []string {
 // a catalog that only has pl.
 func (c *Catalog) Negotiate(acceptLanguage, preference string) Locale {
 	if preference != "" {
-		if locale, ok := c.resolve(preference); ok {
+		if locale, ok := c.Resolve(preference); ok {
 			return locale
 		}
 	}
@@ -193,8 +193,13 @@ func (c *Catalog) Match(acceptLanguage string) (Locale, bool) {
 	return c.locales[index], true
 }
 
-// resolve maps one tag onto a shipped catalog, allowing pl-PL to find pl.
-func (c *Catalog) resolve(tag string) (Locale, bool) {
+// Resolve maps one tag onto a shipped catalog, allowing pl-PL to find pl.
+//
+// It is the counterpart of Match for a stored preference rather than a header,
+// and like Match it reports the absence instead of falling back: a caller
+// *setting* a language needs to hear that there is no such catalog, where a
+// caller *rendering* a response needs an answer whatever happens.
+func (c *Catalog) Resolve(tag string) (Locale, bool) {
 	if _, ok := c.messages[Locale(tag)]; ok {
 		return Locale(tag), true
 	}

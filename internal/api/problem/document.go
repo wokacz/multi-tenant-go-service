@@ -47,6 +47,7 @@ const (
 	CodeInsufficientRank    = "insufficient_rank"
 	CodeInvalidEmailCode    = "invalid_email_code"
 	CodeSameEmail           = "same_email"
+	CodeUnsupportedLocale   = "unsupported_locale"
 	CodeEmailTaken          = "email_taken"
 	CodeInvitationExpired   = "invitation_expired"
 	CodeInvitationMismatch  = "invitation_address_mismatch"

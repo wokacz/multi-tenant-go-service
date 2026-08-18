@@ -28,6 +28,7 @@
   "error.insufficient_rank": "osoba, której zmiana dotyczy, ma uprawnienia, których nie masz",
   "error.invalid_email_code": "nieprawidłowy kod potwierdzający",
   "error.same_email": "to już jest twój adres",
+  "error.unsupported_locale": "ta wersja nie ma tego języka",
   "error.email_taken": "ten adres jest już używany",
   "error.invitation_expired": "to zaproszenie wygasło",
   "error.invitation_address_mismatch": "to zaproszenie wystawiono na inny adres",

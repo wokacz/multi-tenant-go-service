@@ -151,6 +151,21 @@ func (m *Users) Delete(_ context.Context, userID uuid.UUID) error {
 	return nil
 }
 
+func (m *Users) UpdateProfile(_ context.Context, userID uuid.UUID, name, locale string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok || u.IsDeleted() {
+		return user.ErrNotFound
+	}
+
+	u.Name = name
+	u.Locale = locale
+
+	return nil
+}
+
 func (m *Users) SetSuspended(_ context.Context, userID uuid.UUID, at *time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -28,6 +28,7 @@
   "error.insufficient_rank": "the subject holds permissions you do not",
   "error.invalid_email_code": "invalid confirmation code",
   "error.same_email": "this is already your address",
+  "error.unsupported_locale": "this build does not have that language",
   "error.email_taken": "that address is already in use",
   "error.invitation_expired": "this invitation has expired",
   "error.invitation_address_mismatch": "this invitation was issued to a different address",

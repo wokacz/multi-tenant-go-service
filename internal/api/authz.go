@@ -46,6 +46,7 @@ type accessRule struct {
 // the one who is locked out.
 var selfServiceOperations = map[string]bool{
 	"get-me":                true,
+	"update-me":             true,
 	"get-user":              true,
 	"set-two-factor":        true,
 	"list-devices":          true,

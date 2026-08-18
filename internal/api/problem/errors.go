@@ -145,6 +145,12 @@ func Error(ctx context.Context, err error) error {
 	case errors.Is(err, user.ErrSameEmail):
 		return newDocument(locale, http.StatusUnprocessableEntity, CodeSameEmail)
 
+	// 422 with a code of its own rather than a bare validation failure: the client
+	// asked for a language this build does not ship, and the fix is to pick another
+	// one — which is a different instruction from "that field is malformed".
+	case errors.Is(err, user.ErrLocaleUnsupported):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeUnsupportedLocale)
+
 	// Only reachable from confirming an address change. Registration intercepts
 	// ErrEmailTaken in the handler and answers 204, so that path cannot be used to
 	// probe which addresses exist; here the caller has already read a code out of

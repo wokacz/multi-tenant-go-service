@@ -112,6 +112,31 @@ func (r *User) Delete(ctx context.Context, userID uuid.UUID) error {
 // Hooks are skipped for the reason the organization updates skip them: GORM
 // runs BeforeSave against the zero value handed to Model, which no validation
 // on a real user can survive.
+// UpdateProfile writes the two fields an account owner may change about
+// themselves.
+//
+// Hooks are skipped for the same reason UpdateOrganization skips them: GORM runs
+// BeforeSave against the struct handed to Model, which for a statement-level
+// update is a zero value, so User.BeforeSave would judge an empty address. The
+// rules that matter ran in the service, and NOT NULL plus the column lengths are
+// on the table.
+func (r *User) UpdateProfile(ctx context.Context, userID uuid.UUID, name, locale string) error {
+	res := r.db.WithContext(ctx).
+		Session(&gorm.Session{SkipHooks: true}).
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]any{"name": name, "locale": locale})
+	if res.Error != nil {
+		return fmt.Errorf("store: update profile: %w", res.Error)
+	}
+
+	if res.RowsAffected == 0 {
+		return user.ErrNotFound
+	}
+
+	return nil
+}
+
 func (r *User) SetSuspended(ctx context.Context, userID uuid.UUID, at *time.Time) error {
 	updates := map[string]any{"suspended_at": at}
 	if at != nil {
