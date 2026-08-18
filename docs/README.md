@@ -34,6 +34,7 @@ element, nie czytając wszystkiego od zera.
 | [006 Nowe uprawnienie](guides/006_add_permission.md)                  | nowa rzecz do kontrolowania                    |
 | [007 Pisanie testów](guides/007_write_tests.md)                       | zawsze                                         |
 | [008 Tłumaczenia](guides/008_add_translation.md)                      | nowy komunikat lub nowy język                  |
+| [009 Dane rozwojowe](guides/009_seed_data.md)                         | konta i organizacje do klikania i testów       |
 
 ## Szybkie odpowiedzi
 
@@ -49,6 +50,7 @@ element, nie czytając wszystkiego od zera.
 | Dodałem trasę i dostaję 403 — dlaczego?           | [guides/002](guides/002_add_endpoint.md)          |
 | Zmieniłem model i CI protestuje                   | [guides/003](guides/003_models_and_migrations.md) |
 | Test przechodzi u mnie, a na CI nie               | [guides/007](guides/007_write_tests.md)           |
+| Skąd wziąć konta do klikania po aplikacji?        | [guides/009](guides/009_seed_data.md)             |
 
 ## Konwencja
 

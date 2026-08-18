@@ -156,8 +156,27 @@ func sameAccount(membership *models.Membership, userID uuid.UUID) bool {
 	return membership != nil && membership.UserID == userID
 }
 
+// accountDeletedLocked answers the rule "a membership whose account is gone is not a
+// member".
+//
+// Two sources, because the fakes are two objects where the store is one database:
+// SeedSoftDeletedUser for tests that never created an account at all, and the users
+// fake for an account genuinely deleted through the repository. The second was
+// missing, so deleting an account and then asking for the owner count gave different
+// answers here and in SQL — and the contract suite could not see it, because its own
+// fixture told both fakes by hand.
 func (m *Authz) accountDeletedLocked(membership *models.Membership) bool {
-	return m.deletedUsers[membership.UserID]
+	return m.accountIDDeletedLocked(membership.UserID)
+}
+
+// accountIDDeletedLocked is the same question about a bare id, for the places that
+// have one without a membership — an installation-wide role grant, for instance.
+func (m *Authz) accountIDDeletedLocked(userID uuid.UUID) bool {
+	if m.deletedUsers[userID] {
+		return true
+	}
+
+	return m.users != nil && m.users.IsSoftDeleted(userID)
 }
 
 func (m *Authz) emailOfLocked(userID uuid.UUID) string {
@@ -312,7 +331,7 @@ func (m *Authz) SystemRoleKeys(_ context.Context, userID uuid.UUID) ([]string, e
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.deletedUsers[userID] {
+	if m.accountIDDeletedLocked(userID) {
 		return nil, nil
 	}
 
@@ -953,7 +972,7 @@ func (m *Authz) SystemRoleHolders(_ context.Context) ([]orgs.SystemRoleHolder, e
 	for userID, keys := range m.systemRoles {
 		// A grant belonging to a deleted account confers nothing, the same rule
 		// every membership lookup follows.
-		if m.deletedUsers[userID] {
+		if m.accountIDDeletedLocked(userID) {
 			continue
 		}
 
@@ -1098,7 +1117,7 @@ func (m *Authz) organizationLocked(orgID uuid.UUID) (*models.Organization, error
 // activeMembershipLocked applies every condition the SQL applies: the user is
 // live, the organization is live, the row exists, and its status grants.
 func (m *Authz) activeMembershipLocked(userID, orgID uuid.UUID) *models.Membership {
-	if m.deletedUsers[userID] {
+	if m.accountIDDeletedLocked(userID) {
 		return nil
 	}
 

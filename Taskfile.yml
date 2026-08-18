@@ -116,6 +116,19 @@ tasks:
     cmds:
       - go run ./cmd/bootstrap {{.CLI_ARGS}}
 
+  seed:
+    desc: Fill a development database with the documented seed data
+    # -yes is passed here because typing `task seed` is already the confirmation;
+    # the flag exists so that running the binary directly does nothing by accident.
+    # Extra arguments go through: `task seed -- -reset`, `task seed -- -only=cast`.
+    cmds:
+      - go run ./cmd/seed -yes {{.CLI_ARGS}}
+
+  seed:reset:
+    desc: Remove the seed data and seed it again
+    cmds:
+      - go run ./cmd/seed -yes -reset {{.CLI_ARGS}}
+
   migrate:
     desc: Apply pending migrations
     cmds:

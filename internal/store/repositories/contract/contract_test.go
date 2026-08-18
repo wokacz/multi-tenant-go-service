@@ -144,13 +144,13 @@ func newMemoryBackend(t *testing.T) *backend {
 		deleteAccount: func(t *testing.T, userID uuid.UUID) {
 			t.Helper()
 
-			// The account and the authorization state live in two fakes here, so
-			// both have to be told — the SQL has one row and one soft delete.
+			// One call, like the SQL. It used to tell the authorization fake
+			// separately, which meant the fixture was compensating for the fake not
+			// noticing a deleted account — and every case here passed while anything
+			// that could not reach for a fixture did not.
 			if err := users.Delete(t.Context(), userID); err != nil {
 				t.Fatalf("delete account: %v", err)
 			}
-
-			repo.SeedSoftDeletedUser(userID)
 		},
 		newOrg: func(t *testing.T) uuid.UUID {
 			t.Helper()

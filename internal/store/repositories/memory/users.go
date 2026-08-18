@@ -195,6 +195,26 @@ func (m *Users) BumpSessionEpoch(_ context.Context, userID uuid.UUID) error {
 	return nil
 }
 
+// IsSoftDeleted reports whether the fake holds a deleted row for that id.
+//
+// It exists for the other fake. Authz has to answer "is this membership's account
+// gone", the two live in separate objects here, and in Postgres they are one
+// database — so without this, deleting an account through this repository left Authz
+// still counting it as a member. The seeder found that, because a seeder can only
+// use the real interfaces and cannot reach for a fixture to paper over it.
+//
+// An id this fake has never seen is not deleted: a membership with no account row is
+// unrepresentable in Postgres (the foreign key forbids it) but common in tests, and
+// treating those as deleted would change what every one of them means.
+func (m *Users) IsSoftDeleted(id uuid.UUID) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[id]
+
+	return ok && u.IsDeleted()
+}
+
 func (m *Users) SetSuspended(_ context.Context, userID uuid.UUID, at *time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

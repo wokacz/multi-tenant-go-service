@@ -226,6 +226,10 @@ Najważniejsze zmienne (pełna lista z komentarzami w `.env.example`):
 | `SMTP_HOST`                         | puste                | bez niego kody nie idą mailem (tylko development)              |
 | `MAIL_LOG_CODES`                    | puste                | `1` drukuje kody na stderr; Compose ustawia, bo nie ma TTY     |
 
+Świeża baza nie ma żadnych kont. `task seed` wypełnia ją udokumentowaną obsadą i setką osób do przewijania —
+patrz [009 Dane rozwojowe](009_seed_data.md). Odmawia uruchomienia z `ENV=production`, bez `-yes` i na bazie, w której są
+konta spoza jego własnej domeny.
+
 Timeouty i rozmiary puli połączeń **nie są** konfigurowalne przez środowisko — są stałymi w `internal/config`.
 
 Błędy konfiguracji zgłaszane są **wszystkie naraz**, żeby literówka nie zamieniła się w serię restartów.
