@@ -662,3 +662,119 @@ func TestSetTwoFactorEnabled(t *testing.T) {
 		}
 	}
 }
+
+// TestUpdateProfileWritesBothColumns covers the one statement behind PATCH /v1/me.
+//
+// It skips hooks, the same as UpdateOrganization, because GORM would run
+// User.BeforeSave against the zero-valued struct handed to Model and judge an
+// empty address. That makes this the kind of query where a wrong column name or a
+// missed WHERE is invisible until somebody's profile is somebody else's.
+func TestUpdateProfileWritesBothColumns(t *testing.T) {
+	repo := repositories.NewUser(testDB(t))
+	ctx := context.Background()
+	u := newUser(t, repo)
+	other := newUser(t, repo)
+
+	if err := repo.UpdateProfile(ctx, u.ID, "Ada Lovelace", "pl"); err != nil {
+		t.Fatalf("UpdateProfile() = %v", err)
+	}
+
+	got, err := repo.ByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("ByID() = %v", err)
+	}
+
+	if got.Name != "Ada Lovelace" || got.Locale != "pl" {
+		t.Errorf("name/locale = %q/%q, want %q/%q", got.Name, got.Locale, "Ada Lovelace", "pl")
+	}
+
+	if got.Email != u.Email {
+		t.Errorf("email = %q, want it untouched at %q", got.Email, u.Email)
+	}
+
+	if got.SessionEpoch != u.SessionEpoch {
+		t.Errorf("session epoch moved to %d; a profile edit is not a credential change",
+			got.SessionEpoch)
+	}
+
+	// The WHERE, stated as a test rather than trusted.
+	untouched, err := repo.ByID(ctx, other.ID)
+	if err != nil {
+		t.Fatalf("ByID(other) = %v", err)
+	}
+
+	if untouched.Name == "Ada Lovelace" {
+		t.Error("the other account was renamed too")
+	}
+
+	// Clearing the locale has to reach the column. The update is built from a map
+	// for exactly this reason: GORM skips zero values when it is handed a struct,
+	// so a struct here would silently keep "pl" while the fake cleared it — and the
+	// only visible symptom would be a language nobody can switch off.
+	if err := repo.UpdateProfile(ctx, u.ID, "Ada Lovelace", ""); err != nil {
+		t.Fatalf("UpdateProfile() clearing the locale = %v", err)
+	}
+
+	cleared, err := repo.ByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("ByID() = %v", err)
+	}
+
+	if cleared.Locale != "" {
+		t.Errorf("locale = %q, want it cleared", cleared.Locale)
+	}
+
+	if err := repo.UpdateProfile(ctx, uuid.Must(uuid.NewV7()), "Nobody", ""); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("UpdateProfile() on an unknown id = %v, want ErrNotFound", err)
+	}
+}
+
+// TestSetPasswordAndBumpEpochMoveTheEpochByOne pins the increment as an expression.
+//
+// Read-modify-write would be indistinguishable here with one caller and wrong with
+// two: both would read the same value and write the same value, and a token issued
+// under the old epoch would survive one of the two changes.
+func TestSetPasswordAndBumpEpochMoveTheEpochByOne(t *testing.T) {
+	repo := repositories.NewUser(testDB(t))
+	ctx := context.Background()
+	u := newUser(t, repo)
+
+	if err := repo.SetPassword(ctx, u.ID, "the-new-hash"); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
+
+	afterPassword, err := repo.ByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("ByID() = %v", err)
+	}
+
+	if afterPassword.PasswordHash != "the-new-hash" {
+		t.Errorf("password hash = %q, want the new one", afterPassword.PasswordHash)
+	}
+
+	if afterPassword.SessionEpoch != u.SessionEpoch+1 {
+		t.Errorf("session epoch = %d, want %d", afterPassword.SessionEpoch, u.SessionEpoch+1)
+	}
+
+	if err := repo.BumpSessionEpoch(ctx, u.ID); err != nil {
+		t.Fatalf("BumpSessionEpoch() = %v", err)
+	}
+
+	afterBump, err := repo.ByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("ByID() = %v", err)
+	}
+
+	if afterBump.SessionEpoch != afterPassword.SessionEpoch+1 {
+		t.Errorf("session epoch = %d, want %d",
+			afterBump.SessionEpoch, afterPassword.SessionEpoch+1)
+	}
+
+	if afterBump.PasswordHash != "the-new-hash" {
+		t.Error("signing out everywhere changed the password; it must only move the epoch")
+	}
+
+	if err := repo.BumpSessionEpoch(ctx, uuid.Must(uuid.NewV7())); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("BumpSessionEpoch() on an unknown id = %v, want ErrNotFound", err)
+	}
+}
