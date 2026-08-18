@@ -34,7 +34,7 @@ type Device struct {
 	// LastSeenAt holds the value of the "last_seen_at" field.
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 	// LastIP holds the value of the "last_ip" field.
-	LastIP string `json:"last_ip,omitempty"`
+	LastIP *string `json:"last_ip,omitempty"`
 	// TrustedAt holds the value of the "trusted_at" field.
 	TrustedAt *time.Time `json:"trusted_at,omitempty"`
 	// RevokedAt holds the value of the "revoked_at" field.
@@ -155,7 +155,8 @@ func (_m *Device) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field last_ip", values[i])
 			} else if value.Valid {
-				_m.LastIP = value.String
+				_m.LastIP = new(string)
+				*_m.LastIP = value.String
 			}
 		case device.FieldTrustedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -239,8 +240,10 @@ func (_m *Device) String() string {
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("last_ip=")
-	builder.WriteString(_m.LastIP)
+	if v := _m.LastIP; v != nil {
+		builder.WriteString("last_ip=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	if v := _m.TrustedAt; v != nil {
 		builder.WriteString("trusted_at=")

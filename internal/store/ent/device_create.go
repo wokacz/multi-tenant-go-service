@@ -327,7 +327,7 @@ func (_c *DeviceCreate) createSpec() (*Device, *sqlgraph.CreateSpec) {
 	}
 	if value, ok := _c.mutation.LastIP(); ok {
 		_spec.SetField(device.FieldLastIP, field.TypeString, value)
-		_node.LastIP = value
+		_node.LastIP = &value
 	}
 	if value, ok := _c.mutation.TrustedAt(); ok {
 		_spec.SetField(device.FieldTrustedAt, field.TypeTime, value)

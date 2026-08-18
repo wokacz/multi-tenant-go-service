@@ -23,7 +23,9 @@ func (Device) Fields() []ent.Field {
 		field.String("label").MaxLen(100).Optional(),
 		field.String("user_agent").MaxLen(512).Optional(),
 		field.Time("last_seen_at").Optional().Nillable(),
-		field.String("last_ip").Optional().SchemaType(inetType),
+		// Nillable as well as Optional: models.Device carries *string, and "never seen"
+		// has to stay distinguishable from "seen from an empty address".
+		field.String("last_ip").Optional().Nillable().SchemaType(inetType),
 
 		// Two timestamps rather than two booleans: "when was this trusted" and "when
 		// was it revoked" are questions somebody asks, and a boolean cannot answer

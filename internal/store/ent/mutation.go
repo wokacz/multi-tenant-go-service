@@ -1483,7 +1483,7 @@ func (m *DeviceMutation) LastIP() (r string, exists bool) {
 // OldLastIP returns the old "last_ip" field's value of the Device entity.
 // If the Device object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *DeviceMutation) OldLastIP(ctx context.Context) (v string, err error) {
+func (m *DeviceMutation) OldLastIP(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldLastIP is only allowed on UpdateOne operations")
 	}
