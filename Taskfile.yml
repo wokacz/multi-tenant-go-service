@@ -95,8 +95,33 @@ tasks:
     cmds:
       - go mod tidy
       - go mod verify
-      # The loader is a separate module and would otherwise drift unnoticed.
+      # The loader is a separate module and would otherwise drift unnoticed. Same for
+      # the ent generator.
       - go mod tidy -C loader
+      - go mod tidy -C tools/entgen
+
+  ent:generate:
+    desc: Regenerate the ent client from internal/store/ent/schema
+    aliases: [ent]
+    # Two steps on purpose. The generator lives in tools/entgen, a module of its own,
+    # so its dependencies stay out of the API's graph — and so that `go mod tidy` in
+    # the main module cannot downgrade one of them to a version that does not compile,
+    # which is what happened when the generator was a dependency here.
+    #
+    # Built first, then run from the repository root: entc loads ./schema with
+    # go/packages, which has to resolve it inside the module that owns it.
+    cmds:
+      - go build -C tools/entgen -o "$(pwd)/bin/entgen" entgo.io/ent/cmd/ent
+      - ./bin/entgen generate --feature sql/lock,sql/upsert,sql/modifier ./internal/store/ent/schema
+
+  ent:check:
+    desc: Fail if the committed ent client is out of date
+    cmds:
+      - task: ent:generate
+      # Same reasoning as openapi:check: the generated code is committed, so a schema
+      # change that nobody regenerated shows up as a diff in the pull request instead
+      # of as a compile error on somebody else's branch.
+      - git diff --exit-code -- internal/store/ent
 
   openapi:
     desc: Regenerate the committed OpenAPI document from the code
@@ -258,6 +283,7 @@ tasks:
       - task: tidy
       - task: lint
       - task: test
+      - task: ent:check
       - task: openapi:check
 
   clean:

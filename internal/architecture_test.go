@@ -37,6 +37,18 @@ func TestGormStaysInsideTheStore(t *testing.T) {
 	forbidImport(t, internalRoot, storeRoot, "gorm.io")
 }
 
+// TestEntStaysInsideTheStore is the same rule for the ORM replacing GORM, and it is
+// what keeps the migration (see ENT.md) from turning into a rewrite of the whole
+// service.
+//
+// Generated ent types are a persistence detail. If one reaches the domain, the domain
+// changes shape — and then the tests that were supposed to prove "behaves exactly as
+// before" are themselves rewritten, which proves nothing. The repositories map
+// ent entities onto internal/store/models, and that boundary is this test.
+func TestEntStaysInsideTheStore(t *testing.T) {
+	forbidImport(t, internalRoot, storeRoot, "entgo.io")
+}
+
 // forbidImport fails the test if any Go file under root imports a path
 // containing substr. The subtree at exempt, when non-empty, is skipped.
 //
