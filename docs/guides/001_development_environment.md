@@ -71,7 +71,7 @@ task run
 
 Szybsze przy intensywnym cyklu edycja–kompilacja i to jedyna droga dla
 `task migrate:diff`, który potrzebuje modułu `tools/entgen/` (celowo nieobecnego w obrazie —
-patrz [stack](../design/001_technology_stack.md#dwa-moduły-go)).
+patrz [stack](../design/001_technology_stack.md#dwa-moduły-go-i-narzędzia)).
 
 **Nie uruchamiaj obu naraz na tym samym porcie.** Objaw jest mylący: `docker
 compose ps` pokazuje kontener jako zdrowy, bo healthcheck sprawdza go od środka, a żądania z hosta trafiają do procesu,

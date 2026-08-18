@@ -3,6 +3,9 @@
 // The contract is generated from the handlers, but committed to the repository
 // so that a change to it is visible as a diff during review. `task openapi`
 // regenerates it; `task openapi:check` fails when it is stale.
+//
+// It lives under tools/ rather than cmd/ because it is a development generator,
+// not something the service runs in production.
 package main
 
 import (

@@ -106,7 +106,7 @@ jobs:
 
       - name: OpenAPI document is current
         run: |
-          go run ./cmd/openapi > api/openapi.yaml
+          go run ./tools/openapi > api/openapi.yaml
           git diff --exit-code -- api/openapi.yaml \
             || { echo "::error::The API contract changed. Run 'task openapi' and commit api/openapi.yaml."; exit 1; }
 

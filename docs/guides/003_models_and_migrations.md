@@ -101,13 +101,11 @@ decyzja, a generator, który podejmuje ją po cichu, kiedyś podejmie ją na zł
 Sprawdzenie przed pull requestem:
 
 ```bash
-task check            # zawiera ent:check — klient zgodny ze schematem
-task schema:compare   # baza z migracji == baza ze schematu ent
+task check            # tidy, lint, test, ent:check, openapi:check
 ```
 
-`task schema:compare` przykłada schemat ent do pustej bazy, zrzuca ją i porównuje ze zrzutem z `migrations/`. Porównuje
-**dwie bazy, nie dwa opisy**, więc łapie migrację edytowaną ręcznie i taką wygenerowaną na nieaktualnej gałęzi. Ignoruje
-kolejność kolumn i nazwy constraintów FK — pierwsza nic nie znaczy, drugiej ent nie pozwala ustawić.
+`ent:check` pilnuje, że wygenerowany klient zgadza się ze schematem. Testy postgresowe w CI sprawdzają, że repozytoria
+działają na prawdziwym schemacie po `atlas migrate apply`.
 
 ## Zgniatanie historii, dopóki nic nie jest wdrożone
 
@@ -118,7 +116,7 @@ kroków, których żadna baza nie wykonała, nie jest historią, tylko szumem.
 ```bash
 rm -f migrations/*.sql migrations/atlas.sum
 task migrate:diff NAME=baseline
-task schema:compare                          # baseline zgadza się ze schematem ent
+task check
 ```
 
 Dwie rzeczy przy tym giną i trzeba o nich wiedzieć:
@@ -135,8 +133,8 @@ usunięcie plików.
 
 ## Czego nie robić
 
-- **Nie wołaj automatycznej migracji w aplikacji.** `cmd/entmigrate -apply` istnieje wyłącznie dla `schema:compare`;
-  serwis nie tworzy ani nie zmienia schematu przy starcie.
+- **Nie wołaj automatycznej migracji w aplikacji.** Serwis nie tworzy ani nie zmienia schematu przy starcie — tylko
+  `atlas migrate apply` na wdrożeniu i `task migrate:diff` przy zmianie schematu.
 - **Nie licz na kaskadę przy miękkim usuwaniu.** `ON DELETE CASCADE` odpala się tylko przy twardym; przy miękkim
   posprzątaj w hooku albo filtruj `deleted_at` w zapytaniu.
 - **Nie zakładaj, że indeks unikalny po kolumnie NULL-owalnej coś wymusza.** W Postgresie dwa `NULL`-e nie kolidują.

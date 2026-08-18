@@ -124,7 +124,7 @@ tasks:
   openapi:
     desc: Regenerate the committed OpenAPI document from the code
     cmds:
-      - go run ./cmd/openapi > {{.SPEC}}
+      - go run ./tools/openapi > {{.SPEC}}
 
   openapi:check:
     desc: Fail if the committed OpenAPI document is out of date
@@ -178,90 +178,8 @@ tasks:
       - sleep 1
       - until docker exec {{.NAME_DB}} pg_isready -U postgres -d dev >/dev/null 2>&1; do sleep 1; done
       - ATLAS_DEV_URL="postgres://postgres:postgres@localhost:{{.PORT}}/dev?sslmode=disable&search_path=public"
-        go run ./cmd/entmigrate {{.NAME}}
+        go run ./tools/migrate {{.NAME}}
       - atlas migrate hash --dir "file://migrations"
-
-  # Dump the schema of a freshly migrated throwaway database. schema:compare diffs
-  # this against the dump the ent schema produces; that is a stronger statement than
-  # an empty Atlas diff — the diff can be empty because two things are equally wrong.
-  schema:dump:
-    desc: Dump the schema of a freshly migrated throwaway database
-    vars:
-      PORT: '{{.PORT | default "55440"}}'
-      NAME: mtgs-schema-dump
-      OUT: '{{.OUT | default "schema.baseline.sql"}}'
-    cmds:
-      - defer: docker rm -f {{.NAME}} >/dev/null 2>&1 || true
-      - docker rm -f {{.NAME}} >/dev/null 2>&1 || true
-      - docker run -d --name {{.NAME}} -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres
-        -e POSTGRES_DB=postgres -p 127.0.0.1:{{.PORT}}:5432 postgres:18 >/dev/null
-      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
-      - sleep 1
-      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
-      - atlas migrate apply --dir "file://migrations"
-        --url "postgres://postgres:postgres@localhost:{{.PORT}}/postgres?sslmode=disable"
-      # Excluding Atlas's bookkeeping: it records which migrations ran, not what the
-      # schema is. By *schema* rather than by table — Atlas puts that table in a schema
-      # of its own, so --exclude-table never matched it and the first comparison spent
-      # eighteen lines of diff on it.
-      #
-      # The grep is what makes two dumps comparable at all: pg_dump 18 opens with a
-      # \restrict line carrying a random token, and prints the server version it ran
-      # against. Both change between runs, so a byte comparison would always differ
-      # and the file would be worthless for the one job it has.
-      - docker exec {{.NAME}} pg_dump -U postgres -d postgres --schema-only --no-owner
-        --exclude-schema=atlas_schema_revisions
-        | grep -v -E '^\\(un)?restrict |^-- Dumped (from|by)' > {{.OUT}}
-      - 'echo "wrote {{.OUT}}"'
-
-  # The acceptance test for the ent schema: apply it to an empty database, dump it, and
-  # diff the dump against the one migrations/ produces. Stronger than comparing two
-  # descriptions, because it compares two databases.
-  schema:dump:ent:
-    desc: Dump the schema the ent definition produces
-    vars:
-      PORT: '{{.PORT | default "55441"}}'
-      NAME: mtgs-schema-ent
-      OUT: '{{.OUT | default "schema.ent.sql"}}'
-    cmds:
-      # Generated first, and this is not a convenience. Dumping from a stale client is
-      # how this task once reported "schemas match" after the generator had failed:
-      # the verdict described code from the previous run. A comparison that can pass on
-      # yesterday's output is worse than no comparison.
-      - task: ent:generate
-      - defer: docker rm -f {{.NAME}} >/dev/null 2>&1 || true
-      - docker rm -f {{.NAME}} >/dev/null 2>&1 || true
-      - docker run -d --name {{.NAME}} -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres
-        -e POSTGRES_DB=postgres -p 127.0.0.1:{{.PORT}}:5432 postgres:18 >/dev/null
-      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
-      - sleep 1
-      - until docker exec {{.NAME}} pg_isready -U postgres -d postgres >/dev/null 2>&1; do sleep 1; done
-      - DATABASE_URL="postgres://postgres:postgres@localhost:{{.PORT}}/postgres?sslmode=disable"
-        go run ./cmd/entmigrate -apply
-      - docker exec {{.NAME}} pg_dump -U postgres -d postgres --schema-only --no-owner
-        | grep -v -E '^\\(un)?restrict |^-- Dumped (from|by)' > {{.OUT}}
-      - 'echo "wrote {{.OUT}}"'
-
-  # Still worth having after the schema moved onto ent: it catches a migration edited by
-  # hand, or a schema change somebody generated against the wrong branch. It is the
-  # schema's openapi:check, except that it needs Docker and so is not in `task check`.
-  schema:compare:
-    desc: Diff the ent schema against the one the migrations produce
-    # Normalised before comparing, because two of the three ways these dumps differ
-    # carry no meaning:
-    #
-    #   - column order. pg_dump prints columns in ordinal position, and ent puts the
-    #     mixin's columns first. Nothing reads a column by position.
-    #   - constraint names. ent names foreign keys its own way and offers no hook to
-    #     override them; the columns and the ON DELETE action are what matter, and
-    #     those are compared.
-    #
-    # Anything left is a real difference: a column, a type, a default, an index.
-    # The unnormalised dumps stay on disk for whoever wants to read them.
-    cmds:
-      - task: schema:dump
-      - task: schema:dump:ent
-      - ./scripts/schema-compare.sh schema.baseline.sql schema.ent.sql
 
   migrate:status:
     desc: Show which migrations have been applied
@@ -354,7 +272,7 @@ tasks:
   clean:
     desc: Remove build and coverage artefacts
     cmds:
-      - rm -rf bin coverage.out coverage.html schema.baseline.sql schema.ent.sql
+      - rm -rf bin coverage.out coverage.html
 
   web:install:
     desc: Install the web client dependencies

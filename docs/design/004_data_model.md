@@ -24,9 +24,9 @@ Migrację liczy **ent**, nie zewnętrzny dostawca schematu: odtwarza katalog `mi
 poznać stan obecny, porównuje go ze schematem i oddaje różnicę Atlasowi do wyrenderowania. Odtwarzanie, a nie
 podłączanie się do żywej bazy, jest tym, co czyni wynik niezależnym od tego, na której maszynie go wygenerowano.
 
-**Automatyczna migracja nie jest wywoływana nigdzie** poza `cmd/entmigrate -apply`, które istnieje tylko po to, żeby
-`task schema:compare` mogło porównać dwie bazy. Automatyczna migracja to sposób, żeby w piątek odkryć, że w produkcji
-zniknęła kolumna. CI przewraca build (`task ent:check`), gdy schemat zmienił się bez regenerowania klienta.
+**Automatyczna migracja nie jest wywoływana w aplikacji.** Schemat zmienia się wyłącznie przez przejrzane pliki w
+`migrations/`. CI przewraca build (`task ent:check`), gdy schemat zmienił się bez regenerowania klienta, oraz
+`atlas migrate validate` na katalogu migracji.
 
 Krok po kroku: [instrukcja modeli i migracji](../guides/003_models_and_migrations.md).
 
@@ -98,8 +98,8 @@ ponowne użycie sluga sprawiłoby, że stary link wskazuje innego najemcę, i ta
 
 ### Indeks złożony jest w schemacie, nie na strukturze domeny
 
-Indeksy żyją w `internal/store/ent/schema`. Test Postgresowy czyta `pg_indexes`; `schema:compare` pilnuje, że migracje
-i schemat mówią to samo. Nie ma już cichej degradacji do jednej kolumny przez tag, którego osadzany typ nie dziedziczy.
+Indeksy żyją w `internal/store/ent/schema`. Test Postgresowy czyta `pg_indexes`; `atlas migrate validate` i testy
+repozytoriów pilnują, że migracje i schemat mówią to samo.
 
 ### `NULL` w indeksie unikalnym nie jest duplikatem
 

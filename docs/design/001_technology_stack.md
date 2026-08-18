@@ -22,7 +22,7 @@ Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obr
 | Narzędzie                                          | Do czego                                                               |
 |----------------------------------------------------|------------------------------------------------------------------------|
 | [Task](https://taskfile.dev/)                      | wszystkie polecenia projektu; `task check` to dokładnie to, co robi CI |
-| [Atlas](https://atlasgo.io/)                       | migracje wersjonowane; różnicę liczy ent, Atlas renderuje SQL          |
+| [Atlas](https://atlasgo.io/)                       | migracje wersjonowane; różnicę liczy ent (`tools/migrate`), Atlas renderuje SQL |
 | [golangci-lint](https://golangci-lint.run/) **v2** | lint                                                                   |
 | Docker Compose                                     | środowisko developerskie: Postgres 18, migracje, API                   |
 
@@ -46,24 +46,28 @@ Lista jest krótka i to jest celowe — każda pozycja to decyzja, nie zaniedban
 
 `go.sum` ma około pięćdziesięciu linii. To jest miara, którą warto pilnować przy dokładaniu zależności.
 
-## Dwa moduły Go
+## Dwa moduły Go i narzędzia
 
-Repozytorium zawiera **dwa** moduły:
+Repozytorium zawiera **dwa** moduły Go:
 
-- główny — serwis,
+- główny — serwis (`cmd/api`, …) oraz generatory `tools/openapi` i `tools/migrate`,
 - `tools/entgen/` — generator kodu ent, w osobnym module.
 
 `tools/entgen/` jest osobny, bo generator ent wciąga cobra, pflag i bibliotekę do szerokości znaków — a przy okazji
 `go mod tidy` w głównym module wybierał wersję jednej z tych zależności, która się nie kompiluje. Nic z tego nie
 ma prawa być w grafie zależności serwisu, który rozmawia wyłącznie z Postgresem.
 
+`tools/openapi` i `tools/migrate` mieszkają w głównym module, bo muszą importować `internal/api` i `internal/store/ent`
+— to nie są binaria produkcyjne, tylko generatory wołane przez `task openapi` i `task migrate:diff`.
+
+Katalog `cmd/` zostaje dla procesów uruchamianych w deploymencie lub na hoście developerskim: `api`, `bootstrap`, `seed`.
+
 Praktyczny skutek: `go mod tidy` bez `-C tools/entgen` pomija drugi moduł. `task tidy`
 robi oba i CI to sprawdza.
 
-Drugi skutek: obraz developerski **nie zawiera** generatora. Generowanie migracji (`task migrate:diff`) wymaga Atlasa i
-tego modułu na hoście; stosowanie gotowych plików (`migrate apply`) wystarcza sam binarny Atlas, i to robi usługa
-`migrate`
-w Compose.
+Drugi skutek: obraz developerski **nie zawiera** generatora ent. Generowanie migracji (`task migrate:diff`) wymaga Atlasa,
+modułu `tools/entgen` i `tools/migrate` na hoście; stosowanie gotowych plików (`migrate apply`) wystarcza sam binarny
+Atlas, i to robi usługa `migrate` w Compose.
 
 ## Docker Compose
 

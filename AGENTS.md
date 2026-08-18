@@ -49,7 +49,7 @@ If a task seems to require breaking one of these, stop and explain the conflict 
 ```
 cmd/api/                entrypoint — wiring only, no logic
 cmd/bootstrap/          grants the first owner (deployment step)
-cmd/openapi/            writes api/openapi.yaml
+cmd/seed/               development seed data
 internal/
   api/                  the only place huma appears
     authz.go            operationAccess, selfServiceOperations, requirePermission
@@ -66,7 +66,10 @@ internal/
     ent/                generated types — these are the models; no parallel package
     repositories/       implementations
       memory/           in-memory fake, shared by every test package
-tools/entgen/           SEPARATE Go module — the ent code generator
+tools/
+  entgen/               SEPARATE Go module — the ent code generator
+  migrate/              writes a migration from schema drift (task migrate:diff)
+  openapi/              writes api/openapi.yaml (task openapi)
 migrations/             Atlas migrations, generated
 compose.yml             include pointer so `docker compose up` works from the root
 .docker/                compose.yml, Dockerfile, air.toml — not a production image
