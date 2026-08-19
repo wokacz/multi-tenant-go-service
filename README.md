@@ -187,6 +187,7 @@ task test:store      # testy repozytoriów na Postgresie (POSTGRES_TEST=1)
 task run             # API na hoście
 task seed            # dane rozwojowe (patrz docs/guides/009)
 task otel            # kolektor OTLP + Grafana (profil compose)
+task compose:clamav  # ClamAV do skanu wgrywanych plików (profil)
 task migrate         # migracje (Atlas na hoście)
 task compose:migrate # migracje (obraz Atlasa)
 task web:serve       # klient Angular (clients/web/)

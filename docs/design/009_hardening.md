@@ -36,10 +36,13 @@ Token bucket per adres IP, osobne kubełki dla grup:
 | `LOGIN_PER_MINUTE`    | 5         | `POST /v1/sessions` **i** `POST /v1/sessions/verify`                                        |
 | `RESET_PER_MINUTE`    | 5         | `POST /v1/password-resets` i `…/confirm`, **`POST /v1/me/password`**                        |
 | `INVITE_PER_MINUTE`   | 30        | `POST /v1/orgs/{id}/members`, `POST /v1/orgs/{id}/invitations`, `POST …/invitations/{id}/reissue` |
+| `FILES_UPLOAD_PER_MINUTE` | 20    | `POST /v1/orgs/{id}/files`, **`POST /v1/me/avatar`**                                        |
 
 Oba kroki logowania dzielą kubełek — to jedno logowanie, a osobny kubełek byłby tylko drugim miejscem do zgadywania.
 Zaproszenia mają własny kubełek (`INVITE_PER_MINUTE`), bo administrator może wysłać wiele ofert w krótkim czasie —
-wspólny budżet z rejestracją byłby zbyt restrykcyjny. `POST /v1/me/email` dzieli kubełek z rejestracją: oba wysyłają
+wspólny budżet z rejestracją byłby zbyt restrykcyjny. `POST /v1/orgs/{id}/files` i `POST /v1/me/avatar` dzielą kubełek
+(`FILES_UPLOAD_PER_MINUTE`): to nie jest zgadywanie sekretu, tylko koszt pamięci i dysku na jednego klienta. `POST /v1/me/email` dzieli kubełek z
+rejestracją: oba wysyłają
 pocztę na dowolny adres podany przez wołającego. `POST /v1/me/password` dzieli kubełek z resetem hasła — aktualne hasło
 jest sekretem, który da się zgadywać uwierzytelnionym tokenem.
 
@@ -58,7 +61,7 @@ Odpowiedź `429` niesie `Retry-After` i jest zwykłym dokumentem `problem+json`.
 > **Uwaga przy dodawaniu trasy.** Dopasowanie w `rateLimit` idzie po
 > **literalnych ścieżkach**, więc zmiana nazwy trasy po cichu przestaje ją
 > limitować. Trasy ze zmiennym segmentem (`{orgID}`) wymagają dopasowania po
-> kształcie — patrz `isMembersPath`. `TestRateLimitAppliesToEveryCostlyRoute`
+> kształcie — patrz `isMembersPath` i `isFilesUploadPath`. `TestRateLimitAppliesToEveryCostlyRoute`
 > jest jedynym, co to wyłapie: domyślna konfiguracja testowa wyłącza limiter.
 
 ## Koszt hashowania
@@ -124,14 +127,15 @@ prosić — i nie ma pary „`*` plus credentials", która jest klasycznym błę
 |---------------------------------|---------------------------------------------------------------------------------------|
 | `Access-Control-Allow-Origin`   | dopasowany origin, nigdy `*`                                                          |
 | `Access-Control-Allow-Headers`  | `Authorization`, `Content-Type`, `Accept-Language`, `If-None-Match`, `X-Device-Token` |
-| `Access-Control-Expose-Headers` | `ETag`, `Retry-After`, `WWW-Authenticate`                                             |
+| `Access-Control-Expose-Headers` | `ETag`, `Retry-After`, `WWW-Authenticate`, `Content-Disposition`  |
 | `Access-Control-Allow-Methods`  | `GET, POST, PATCH, PUT, DELETE, OPTIONS`                                              |
 | `Access-Control-Max-Age`        | `600`                                                                                 |
 | `Vary`                          | `Origin` — zawsze, gdy lista jest niepusta                                            |
 
-Eksponowane są tylko nagłówki spoza listy bezpiecznej CORS-a, dlatego nie ma tam `Content-Language`. Każdy z trzech jest
-nośny dla klienta: `ETag` napędza żądanie warunkowe na migawce uprawnień, `Retry-After` mówi, ile czekać po `429`, a
-`WWW-Authenticate` odróżnia „brak tokenu" od „token odrzucony".
+Eksponowane są tylko nagłówki spoza listy bezpiecznej CORS-a, dlatego nie ma tam `Content-Language`. Każdy z czterech
+jest
+nośny dla klienta: `ETag` napędza żądanie warunkowe na migawce uprawnień, `Retry-After` mówi, ile czekać po `429`,
+`WWW-Authenticate` odróżnia „brak tokenu" od „token odrzucony", a `Content-Disposition` to nazwa pliku przy pobraniu.
 
 `Access-Control-Allow-Headers` musi zawierać każdy nagłówek deklarowany przez operacje.
 `TestCORSAllowsEveryHeaderTheAPIDeclares` przechodzi po dokumencie OpenAPI i przewraca build, gdy się rozejdą — ta
@@ -146,7 +150,9 @@ Preflight jest obsługiwany **przed** limiterem i przed negocjacją języka: pyt
 nie powinien kosztować nic z budżetu trasy, o którą pyta. Dziś każdy przypadek w `rateLimit` jest bramkowany na `POST`,
 więc i tak by nie kosztował — kolejność sprawia, że limiter nie musi o tym pamiętać.
 
-`MAX_REQUEST_BYTES` (domyślnie 1 MiB) ogranicza ciało żądania.
+`MAX_REQUEST_BYTES` (domyślnie 1 MiB) ogranicza ciało żądania JSON. Upload pliku, który ma prawo być większy, dostaje
+własny sufit: `FILES_MAX_BYTES` albo `FILES_AVATAR_MAX_BYTES` plus 256 KiB na obudowę multipart — inaczej domyślne
+limity blobów byłyby nieosiągalne. Szczegóły potoku: [Pliki](011_files.md).
 `ReadHeaderTimeout` to jedyny timeout będący kontrolą bezpieczeństwa, a nie udogodnieniem — bez niego klient trzyma
 połączenie w nieskończoność, sącząc nagłówki po bajcie.
 

@@ -9,6 +9,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/authzevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitation"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitationrole"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
@@ -183,6 +184,123 @@ func init() {
 	emailchangeDescID := emailchangeMixinFields0[0].Descriptor()
 	// emailchange.DefaultID holds the default value on creation for the id field.
 	emailchange.DefaultID = emailchangeDescID.Default.(func() uuid.UUID)
+	fileMixin := schema.File{}.Mixin()
+	fileMixinFields0 := fileMixin[0].Fields()
+	_ = fileMixinFields0
+	fileFields := schema.File{}.Fields()
+	_ = fileFields
+	// fileDescCreatedAt is the schema descriptor for created_at field.
+	fileDescCreatedAt := fileMixinFields0[1].Descriptor()
+	// file.DefaultCreatedAt holds the default value on creation for the created_at field.
+	file.DefaultCreatedAt = fileDescCreatedAt.Default.(func() time.Time)
+	// fileDescUpdatedAt is the schema descriptor for updated_at field.
+	fileDescUpdatedAt := fileMixinFields0[2].Descriptor()
+	// file.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	file.DefaultUpdatedAt = fileDescUpdatedAt.Default.(func() time.Time)
+	// file.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	file.UpdateDefaultUpdatedAt = fileDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// fileDescOriginalName is the schema descriptor for original_name field.
+	fileDescOriginalName := fileFields[2].Descriptor()
+	// file.OriginalNameValidator is a validator for the "original_name" field. It is called by the builders before save.
+	file.OriginalNameValidator = func() func(string) error {
+		validators := fileDescOriginalName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(original_name string) error {
+			for _, fn := range fns {
+				if err := fn(original_name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// fileDescDeclaredType is the schema descriptor for declared_type field.
+	fileDescDeclaredType := fileFields[3].Descriptor()
+	// file.DeclaredTypeValidator is a validator for the "declared_type" field. It is called by the builders before save.
+	file.DeclaredTypeValidator = fileDescDeclaredType.Validators[0].(func(string) error)
+	// fileDescDetectedType is the schema descriptor for detected_type field.
+	fileDescDetectedType := fileFields[4].Descriptor()
+	// file.DetectedTypeValidator is a validator for the "detected_type" field. It is called by the builders before save.
+	file.DetectedTypeValidator = func() func(string) error {
+		validators := fileDescDetectedType.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(detected_type string) error {
+			for _, fn := range fns {
+				if err := fn(detected_type); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// fileDescSha256 is the schema descriptor for sha256 field.
+	fileDescSha256 := fileFields[6].Descriptor()
+	// file.Sha256Validator is a validator for the "sha256" field. It is called by the builders before save.
+	file.Sha256Validator = func() func(string) error {
+		validators := fileDescSha256.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(sha256 string) error {
+			for _, fn := range fns {
+				if err := fn(sha256); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// fileDescStorageKey is the schema descriptor for storage_key field.
+	fileDescStorageKey := fileFields[7].Descriptor()
+	// file.StorageKeyValidator is a validator for the "storage_key" field. It is called by the builders before save.
+	file.StorageKeyValidator = func() func(string) error {
+		validators := fileDescStorageKey.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(storage_key string) error {
+			for _, fn := range fns {
+				if err := fn(storage_key); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// fileDescEncryptionKeyID is the schema descriptor for encryption_key_id field.
+	fileDescEncryptionKeyID := fileFields[8].Descriptor()
+	// file.EncryptionKeyIDValidator is a validator for the "encryption_key_id" field. It is called by the builders before save.
+	file.EncryptionKeyIDValidator = func() func(string) error {
+		validators := fileDescEncryptionKeyID.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(encryption_key_id string) error {
+			for _, fn := range fns {
+				if err := fn(encryption_key_id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// fileDescScanEngine is the schema descriptor for scan_engine field.
+	fileDescScanEngine := fileFields[10].Descriptor()
+	// file.ScanEngineValidator is a validator for the "scan_engine" field. It is called by the builders before save.
+	file.ScanEngineValidator = fileDescScanEngine.Validators[0].(func(string) error)
+	// fileDescID is the schema descriptor for id field.
+	fileDescID := fileMixinFields0[0].Descriptor()
+	// file.DefaultID holds the default value on creation for the id field.
+	file.DefaultID = fileDescID.Default.(func() uuid.UUID)
 	invitationMixin := schema.Invitation{}.Mixin()
 	invitationHooks := schema.Invitation{}.Hooks()
 	invitation.Hooks[0] = invitationHooks[0]

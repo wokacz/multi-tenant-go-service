@@ -13,6 +13,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/api/problem"
 	"github.com/wokacz/multi-tenant-go-service/internal/api/reqctx"
 	"github.com/wokacz/multi-tenant-go-service/internal/auth"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
@@ -44,6 +45,7 @@ type CreateSessionOutput struct {
 
 type sessionHandlers struct {
 	users  *user.Service
+	files  *files.Service
 	tokens *auth.Signer
 	mail   mail.Sender
 	log    *slog.Logger
@@ -53,6 +55,7 @@ type sessionHandlers struct {
 func registerSessions(api huma.API, deps Deps) {
 	h := &sessionHandlers{
 		users:  deps.Users,
+		files:  deps.Files,
 		tokens: deps.Tokens,
 		mail:   deps.Mail,
 		log:    deps.Log,
@@ -192,7 +195,10 @@ func (h *sessionHandlers) issue(
 
 	h.tel.Metrics.CountSignIn(ctx, telemetry.OutcomeGranted)
 
-	body := newUserResponse(u)
+	body, err := newUserResponse(ctx, u, h.files)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
 
 	return &CreateSessionOutput{
 		Status: http.StatusCreated,

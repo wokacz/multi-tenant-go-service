@@ -261,28 +261,39 @@ func TestProductionRejectsAPlaintextOrigin(t *testing.T) {
 
 func productionConfig() *Config {
 	return &Config{
-		Env:                  EnvProduction,
-		APIName:              "Example",
-		APIHost:              "127.0.0.1",
-		APIPort:              8000,
-		AuthTokenSecret:      "production-secret-must-be-at-least-32b",
-		AuthResetSecret:      "production-reset-must-be-at-least-32b",
-		AuthTokenTTL:         time.Hour,
-		AuthTokenIssuer:      "test-issuer",
-		LogFormat:            LogFormatJSON,
-		RegisterPerMinute:    5,
-		LoginPerMinute:       5,
-		ResetPerMinute:       5,
-		MaxRequestBytes:      1 << 20,
-		PostgresPort:         5432,
-		PostgresDatabaseName: "notes",
-		PostgresSSLMode:      "require",
-		PostgresPassword:     "not-a-default-password",
-		SMTPHost:             "smtp.example.com",
-		SMTPPort:             587,
-		SMTPFrom:             "noreply@example.com",
-		DBMaxOpenConns:       25,
-		DBMaxIdleConns:       25,
+		Env:                        EnvProduction,
+		APIName:                    "Example",
+		APIHost:                    "127.0.0.1",
+		APIPort:                    8000,
+		AuthTokenSecret:            "production-secret-must-be-at-least-32b",
+		AuthResetSecret:            "production-reset-must-be-at-least-32b",
+		AuthTokenTTL:               time.Hour,
+		AuthTokenIssuer:            "test-issuer",
+		LogFormat:                  LogFormatJSON,
+		RegisterPerMinute:          5,
+		LoginPerMinute:             5,
+		ResetPerMinute:             5,
+		MaxRequestBytes:            1 << 20,
+		FilesUploadPerMinute:       20,
+		FilesStorageBackend:        "local",
+		FilesStoragePath:           "/var/files",
+		FilesMaxBytes:              defaultFilesBytes,
+		FilesAvatarMaxBytes:        defaultAvatarBytes,
+		FilesScanMode:              ScanOff,
+		FilesClamAVTimeout:         10 * time.Second,
+		FilesEncryptionKey:         []byte("production-files-key-must-be-32b"),
+		FilesBlockExecutables:      true,
+		FilesRequireDeclaredMatch:  true,
+		FilesRequireExtensionMatch: true,
+		PostgresPort:               5432,
+		PostgresDatabaseName:       "notes",
+		PostgresSSLMode:            "require",
+		PostgresPassword:           "not-a-default-password",
+		SMTPHost:                   "smtp.example.com",
+		SMTPPort:                   587,
+		SMTPFrom:                   "noreply@example.com",
+		DBMaxOpenConns:             25,
+		DBMaxIdleConns:             25,
 	}
 }
 
@@ -293,4 +304,42 @@ func errorsJoin(errs []error) string {
 	}
 
 	return strings.Join(parts, "; ")
+}
+
+func TestFilesScanRequiredNeedsAnAddress(t *testing.T) {
+	c := productionConfig()
+	c.FilesScanMode = ScanRequired
+	c.FilesClamAVAddr = ""
+
+	if got := errorsJoin(c.validate()); !strings.Contains(got, "FILES_CLAMAV_ADDR") {
+		t.Fatalf("validate() = %q, want a FILES_CLAMAV_ADDR error", got)
+	}
+}
+
+func TestParseAllowedTypesRejectsAWildcard(t *testing.T) {
+	if _, err := parseAllowedTypes("*"); err == nil {
+		t.Fatal("parseAllowedTypes(*) = nil, want an error")
+	}
+}
+
+func TestParseEncryptionKeyAcceptsHexAndRaw(t *testing.T) {
+	raw := strings.Repeat("a", 32)
+	got, err := parseEncryptionKey(raw)
+	if err != nil {
+		t.Fatalf("parseEncryptionKey(raw) = %v", err)
+	}
+
+	if string(got) != raw {
+		t.Errorf("parseEncryptionKey(raw) = %q, want the raw bytes", got)
+	}
+
+	hexKey := strings.Repeat("ab", 32)
+	got, err = parseEncryptionKey(hexKey)
+	if err != nil {
+		t.Fatalf("parseEncryptionKey(hex) = %v", err)
+	}
+
+	if len(got) != 32 {
+		t.Errorf("hex key length = %d, want 32", len(got))
+	}
 }

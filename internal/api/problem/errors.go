@@ -16,6 +16,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
@@ -65,6 +66,7 @@ func Error(ctx context.Context, err error) error {
 	// hiding, so both refusals are one indistinguishable answer.
 	case errors.Is(err, user.ErrNotFound),
 		errors.Is(err, orgs.ErrNotFound),
+		errors.Is(err, files.ErrNotFound),
 		errors.Is(err, authz.ErrNotMember):
 		return newDocument(locale, http.StatusNotFound, CodeNotFound)
 
@@ -222,6 +224,35 @@ func Error(ctx context.Context, err error) error {
 
 	case errors.Is(err, orgs.ErrInvalidStatus):
 		return newDocument(locale, http.StatusUnprocessableEntity, CodeInvalidStatus)
+
+	case errors.Is(err, files.ErrTooLarge):
+		return newDocument(locale, http.StatusRequestEntityTooLarge, CodeFileTooLarge)
+
+	case errors.Is(err, files.ErrEmpty):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeFileEmpty)
+
+	case errors.Is(err, files.ErrNameInvalid):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeFileNameInvalid)
+
+	case errors.Is(err, files.ErrTypeNotAllowed):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeFileTypeNotAllowed)
+
+	case errors.Is(err, files.ErrTypeMismatch):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeFileTypeMismatch)
+
+	case errors.Is(err, files.ErrExecutable):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeFileExecutable)
+
+	case errors.Is(err, files.ErrInfected):
+		return newDocument(locale, http.StatusUnprocessableEntity, CodeFileInfected)
+
+	case errors.Is(err, files.ErrScanUnavailable):
+		return newDocument(locale, http.StatusServiceUnavailable, CodeFileScanUnavailable)
+
+	case errors.Is(err, files.ErrCorrupt):
+		LoggerFrom(ctx).ErrorContext(ctx, "stored file cannot be decrypted", "error", err)
+
+		return newDocument(locale, http.StatusInternalServerError, CodeInternal)
 
 	case errors.Is(err, context.Canceled):
 		return newDocument(locale, statusClientClosedRequest, CodeClientClosed)

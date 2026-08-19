@@ -15,6 +15,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/authzevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitation"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitationrole"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
@@ -90,6 +91,7 @@ func checkColumn(t, c string) error {
 			authzevent.Table:         authzevent.ValidColumn,
 			device.Table:             device.ValidColumn,
 			emailchange.Table:        emailchange.ValidColumn,
+			file.Table:               file.ValidColumn,
 			invitation.Table:         invitation.ValidColumn,
 			invitationrole.Table:     invitationrole.ValidColumn,
 			loginevent.Table:         loginevent.ValidColumn,

@@ -69,16 +69,19 @@ internal/
 ├── domain/         reguły biznesowe
 │   ├── audit/      ślad zmian uprawnień
 │   ├── authz/      katalog uprawnień i decyzja autoryzacyjna
+│   ├── files/      skanowanie, szyfrowanie, zapis
 │   ├── orgs/       organizacje, członkostwa, role
 │   └── user/       konta, hasła, urządzenia, drugi składnik
-└── store/          trwałość            ← tylko tu żyje import entgo.io
+├── filestore/      ciphertext na dysku, klient ClamAV
+└── store/          trwały zapis danych
     ├── ent/schema/ schemat (źródło prawdy dla bazy)
     ├── ent/        wygenerowane typy — to są modele
     └── repositories/
         └── memory/ fake in-memory, wspólny dla wszystkich testów
 ```
 
-Infrastruktura (`api`, `auth`, `config`, `store`, `i18n`, `mail`) leży bezpośrednio pod `internal/`. Byty biznesowe
+Infrastruktura (`api`, `auth`, `config`, `store`, `filestore`, `i18n`, `mail`) leży bezpośrednio pod `internal/`. Byty
+biznesowe
 mieszkają pod `internal/domain/`, żeby przyszła domena o nazwie `config` nie zderzyła się z konfiguracją procesu, a
 `auth` (kryptografia tokenu) nie trafił do drzewa domenowego.
 

@@ -1,6 +1,7 @@
 package ent
 
 import (
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 )
@@ -15,9 +16,14 @@ const (
 	OutcomeBadPassword = loginevent.OutcomeBadPassword
 	OutcomeMFAFailed   = loginevent.OutcomeMfaFailed
 	OutcomeLocked      = loginevent.OutcomeLocked
+
+	FileScanSkipped     = file.ScanStatusSkipped
+	FileScanClean       = file.ScanStatusClean
+	FileScanUnavailable = file.ScanStatusUnavailable
 )
 
 type (
 	MembershipStatus = membership.Status
 	LoginOutcome     = loginevent.Outcome
+	FileScanStatus   = file.ScanStatus
 )

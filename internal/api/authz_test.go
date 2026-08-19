@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 )
 
@@ -226,28 +227,31 @@ func TestSelfServiceOperationsHaveNoOrganizationInTheirPath(t *testing.T) {
 // spent several commits in orgs.Directory, which this test does not read, and so
 // were the only scoped methods in the package nothing was pinning.
 func TestScopedRepositoryMethodsTakeAnOrganization(t *testing.T) {
-	iface := reflect.TypeOf((*orgs.Repository)(nil)).Elem()
 	want := reflect.TypeOf(uuid.UUID{})
 
-	if iface.NumMethod() == 0 {
-		t.Fatal("orgs.Repository has no methods; this test would pass vacuously")
-	}
-
-	for i := range iface.NumMethod() {
-		method := iface.Method(i)
-		sig := method.Type
-
-		// Index 0 is context.Context, index 1 must be the organization.
-		if sig.NumIn() < 2 {
-			t.Errorf("orgs.Repository.%s takes no organization id", method.Name)
-
-			continue
+	for _, iface := range []reflect.Type{
+		reflect.TypeOf((*orgs.Repository)(nil)).Elem(),
+		reflect.TypeOf((*files.Repository)(nil)).Elem(),
+	} {
+		if iface.NumMethod() == 0 {
+			t.Fatalf("%s has no methods; this test would pass vacuously", iface)
 		}
 
-		if sig.In(1) != want {
-			t.Errorf("orgs.Repository.%s takes %s as its second parameter, want uuid.UUID "+
-				"(the organization every scoped query must be filtered by)",
-				method.Name, sig.In(1))
+		for i := range iface.NumMethod() {
+			method := iface.Method(i)
+			sig := method.Type
+
+			if sig.NumIn() < 2 {
+				t.Errorf("%s.%s takes no organization id", iface, method.Name)
+
+				continue
+			}
+
+			if sig.In(1) != want {
+				t.Errorf("%s.%s takes %s as its second parameter, want uuid.UUID "+
+					"(the organization every scoped query must be filtered by)",
+					iface, method.Name, sig.In(1))
+			}
 		}
 	}
 }

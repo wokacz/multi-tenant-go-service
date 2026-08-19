@@ -18,6 +18,8 @@ type Tx struct {
 	Device *DeviceClient
 	// EmailChange is the client for interacting with the EmailChange builders.
 	EmailChange *EmailChangeClient
+	// File is the client for interacting with the File builders.
+	File *FileClient
 	// Invitation is the client for interacting with the Invitation builders.
 	Invitation *InvitationClient
 	// InvitationRole is the client for interacting with the InvitationRole builders.
@@ -176,6 +178,7 @@ func (tx *Tx) init() {
 	tx.AuthzEvent = NewAuthzEventClient(tx.config)
 	tx.Device = NewDeviceClient(tx.config)
 	tx.EmailChange = NewEmailChangeClient(tx.config)
+	tx.File = NewFileClient(tx.config)
 	tx.Invitation = NewInvitationClient(tx.config)
 	tx.InvitationRole = NewInvitationRoleClient(tx.config)
 	tx.LoginEvent = NewLoginEventClient(tx.config)

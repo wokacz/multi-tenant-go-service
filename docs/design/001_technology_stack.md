@@ -5,15 +5,15 @@ Serwis HTTP w Go z Postgresem. Kontrakt API jest generowany z kodu i commitowany
 
 ## Zależności bezpośrednie
 
-| Biblioteka                           | Wersja  | Do czego                                         |
-|--------------------------------------|---------|--------------------------------------------------|
-| [huma](https://huma.rocks/)          | v2.39.1 | operacje, walidacja wejścia, generowanie OpenAPI |
-| [chi](https://github.com/go-chi/chi) | v5.3.1  | router i middleware                              |
-| [ent](https://entgo.io/)             | v0.14.6 | schemat, klient, migracje; dostęp do bazy        |
-| [pgx](https://github.com/jackc/pgx)  | v5.10.0 | sterownik Postgresa pod `database/sql`           |
-| `github.com/google/uuid`             | v1.6.0  | identyfikatory UUIDv7                            |
-| `golang.org/x/crypto`                | v0.55.0 | bcrypt                                           |
-| `golang.org/x/text`                  | v0.41.0 | negocjacja języka (`Accept-Language`)            |
+| Biblioteka                              | Wersja  | Do czego                                                                                    |
+| --------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| [huma](https://huma.rocks/)             | v2.39.1 | operacje, walidacja wejścia, generowanie OpenAPI                                            |
+| [chi](https://github.com/go-chi/chi)    | v5.3.1  | router i middleware                                                                         |
+| [ent](https://entgo.io/)                | v0.14.6 | schemat, klient, migracje; dostęp do bazy                                                   |
+| [pgx](https://github.com/jackc/pgx)     | v5.10.0 | sterownik Postgresa pod `database/sql`                                                      |
+| `github.com/google/uuid`                | v1.6.0  | identyfikatory UUIDv7                                                                       |
+| `golang.org/x/crypto`                   | v0.55.0 | bcrypt                                                                                      |
+| `golang.org/x/text`                     | v0.41.0 | negocjacja języka (`Accept-Language`)                                                       |
 | OpenTelemetry (`go.opentelemetry.io/*`) | v1.45.0 | ślady, metryki, logi — opcjonalny eksport OTLP; patrz [010](../design/010_observability.md) |
 
 Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obraz developerski pinuje minor tagiem
@@ -22,7 +22,7 @@ Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obr
 ## Narzędzia
 
 | Narzędzie                                          | Do czego                                                                        |
-|----------------------------------------------------|---------------------------------------------------------------------------------|
+| -------------------------------------------------- | ------------------------------------------------------------------------------- |
 | [Task](https://taskfile.dev/)                      | wszystkie polecenia projektu; `task check` to dokładnie to, co robi CI          |
 | [Atlas](https://atlasgo.io/)                       | migracje wersjonowane; różnicę liczy ent (`tools/migrate`), Atlas renderuje SQL |
 | [golangci-lint](https://golangci-lint.run/) **v2** | lint                                                                            |
@@ -36,15 +36,15 @@ Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obr
 
 Lista jest krótka i to jest celowe — każda pozycja to decyzja, nie zaniedbanie.
 
-| Brak                      | Dlaczego                                                                                                           |
-|---------------------------|--------------------------------------------------------------------------------------------------------------------|
+| Brak                      | Dlaczego                                                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | biblioteki JWT            | parser HMAC-SHA256 w `internal/auth/token.go`, bez zewnętrznej biblioteki; atak `alg=none` zamknięty jawnie i pokryty testem |
-| frameworka testowego      | wystarcza `testing` ze standardowej biblioteki; brak testify to brak drugiego języka asercji                       |
-| biblioteki konfiguracji   | `internal/config` czyta zmienne środowiskowe i zwraca **wszystkie** błędy naraz                                    |
-| biblioteki rate limitingu | token bucket per adres IP mieści się w `internal/api/limit.go`                                                     |
-| biblioteki logowania      | `log/slog` ze standardowej biblioteki                                                                              |
-| biblioteki i18n           | katalogi JSON wkompilowane przez `go:embed`, dopasowanie przez `x/text/language`                                   |
-| ORM-owego `AutoMigrate`   | zgaduje zmiany kolumn i nigdy nic nie usuwa, więc schemat cicho by się rozjeżdżał                                  |
+| frameworka testowego      | wystarcza `testing` ze standardowej biblioteki; brak testify to brak drugiego języka asercji                                 |
+| biblioteki konfiguracji   | `internal/config` czyta zmienne środowiskowe i zwraca **wszystkie** błędy naraz                                              |
+| biblioteki rate limitingu | token bucket per adres IP mieści się w `internal/api/limit.go`                                                               |
+| biblioteki logowania      | `log/slog` ze standardowej biblioteki                                                                                        |
+| biblioteki i18n           | katalogi JSON wkompilowane przez `go:embed`, dopasowanie przez `x/text/language`                                             |
+| ORM-owego `AutoMigrate`   | zgaduje zmiany kolumn i nigdy nic nie usuwa, więc schemat cicho by się rozjeżdżał                                            |
 
 `go.sum` pozostaje relatywnie krótki — pilnuj go przy dokładaniu zależności.
 

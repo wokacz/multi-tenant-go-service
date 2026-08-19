@@ -11,6 +11,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/authzevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitation"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitationrole"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
@@ -161,6 +162,33 @@ func (f TraverseEmailChange) Traverse(ctx context.Context, q ent.Query) error {
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.EmailChangeQuery", q)
+}
+
+// The FileFunc type is an adapter to allow the use of ordinary function as a Querier.
+type FileFunc func(context.Context, *ent.FileQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f FileFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.FileQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.FileQuery", q)
+}
+
+// The TraverseFile type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseFile func(context.Context, *ent.FileQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseFile) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseFile) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.FileQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.FileQuery", q)
 }
 
 // The InvitationFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -496,6 +524,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.DeviceQuery, predicate.Device, device.OrderOption]{typ: ent.TypeDevice, tq: q}, nil
 	case *ent.EmailChangeQuery:
 		return &query[*ent.EmailChangeQuery, predicate.EmailChange, emailchange.OrderOption]{typ: ent.TypeEmailChange, tq: q}, nil
+	case *ent.FileQuery:
+		return &query[*ent.FileQuery, predicate.File, file.OrderOption]{typ: ent.TypeFile, tq: q}, nil
 	case *ent.InvitationQuery:
 		return &query[*ent.InvitationQuery, predicate.Invitation, invitation.OrderOption]{typ: ent.TypeInvitation, tq: q}, nil
 	case *ent.InvitationRoleQuery:

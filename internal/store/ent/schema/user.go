@@ -7,6 +7,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/google/uuid"
 )
 
 // User is the account schema. Mixin Model gives id / timestamps; SoftDelete
@@ -54,6 +55,13 @@ func (User) Fields() []ent.Field {
 		field.Time("suspended_at").
 			Optional().
 			Nillable(),
+
+		// A pointer into files, not a copy of the metadata. Task attachments
+		// and every later blob will look the same: the parent holds a file id,
+		// the row and the ciphertext live in one place.
+		field.UUID("avatar_id", uuid.UUID{}).
+			Optional().
+			Nillable(),
 	}
 }
 
@@ -66,6 +74,11 @@ func (User) Edges() []ent.Edge {
 		edge.To("email_changes", EmailChange.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("challenges", TwoFactorChallenge.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("system_roles", UserSystemRole.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.From("avatar", File.Type).
+			Ref("avatar_of").
+			Unique().
+			Field("avatar_id").
+			Annotations(entsql.OnDelete(entsql.SetNull)),
 	}
 }
 

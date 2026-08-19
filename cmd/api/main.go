@@ -13,8 +13,10 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/filestore"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories"
@@ -115,8 +117,34 @@ func run() error {
 	}
 
 	orgRepo := repositories.NewOrgs(db)
-	users := user.NewService(repositories.NewUser(db), []byte(cfg.AuthResetSecret))
+	userRepo := repositories.NewUser(db)
+	users := user.NewService(userRepo, []byte(cfg.AuthResetSecret))
 	authzService := authz.NewService(repositories.NewAuthz(db))
+
+	blobs, err := filestore.NewLocal(cfg.FilesStoragePath)
+	if err != nil {
+		return err
+	}
+
+	scanner := files.NopScanner()
+	if cfg.FilesScanMode != config.ScanOff {
+		scanner = filestore.NewClamAV(cfg.FilesClamAVAddr, cfg.FilesClamAVTimeout)
+	}
+
+	fileRepo := repositories.NewFiles(db)
+	fileService, err := files.NewService(fileRepo, blobs, fileRepo, scanner, files.Settings{
+		MaxBytes:              cfg.FilesMaxBytes,
+		AvatarMaxBytes:        cfg.FilesAvatarMaxBytes,
+		AllowedTypes:          cfg.FilesAllowedTypes,
+		RequireDeclaredMatch:  cfg.FilesRequireDeclaredMatch,
+		RequireExtensionMatch: cfg.FilesRequireExtensionMatch,
+		BlockExecutables:      cfg.FilesBlockExecutables,
+		EncryptionKey:         cfg.FilesEncryptionKey,
+		ScanRequired:          cfg.FilesScanMode == config.ScanRequired,
+	})
+	if err != nil {
+		return err
+	}
 
 	deps := api.Deps{
 		DB:     db,
@@ -129,6 +157,7 @@ func run() error {
 		Snapshots: authzService,
 		Orgs:      orgs.NewService(orgRepo, orgRepo, orgRepo),
 		Audit:     audit.NewService(orgRepo, orgRepo),
+		Files:     fileService,
 		Telemetry: tel,
 	}
 

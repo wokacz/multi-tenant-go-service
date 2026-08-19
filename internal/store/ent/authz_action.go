@@ -41,6 +41,9 @@ const (
 
 	ActionSystemRoleGranted = "system_role.granted"
 	ActionSystemRoleRevoked = "system_role.revoked"
+
+	ActionFileUploaded = "file.uploaded"
+	ActionFileDeleted  = "file.deleted"
 )
 
 func (a AuthzAction) Valid() bool {
@@ -51,7 +54,8 @@ func (a AuthzAction) Valid() bool {
 		ActionMemberRemoved, ActionMemberLeft, ActionMemberSuspended,
 		ActionMemberReinstated, ActionMemberRolesChanged,
 		ActionRoleCreated, ActionRoleUpdated, ActionRoleDeleted, ActionRolePermissionsChanged,
-		ActionSystemRoleGranted, ActionSystemRoleRevoked:
+		ActionSystemRoleGranted, ActionSystemRoleRevoked,
+		ActionFileUploaded, ActionFileDeleted:
 		return true
 	default:
 		return false

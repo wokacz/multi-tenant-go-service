@@ -61,12 +61,13 @@ var corsAllowedHeaders = []string{
 //
 // Each of these is load-bearing for a client. ETag drives the conditional
 // request on the permission snapshot, Retry-After tells it how long to wait after
-// a 429, and WWW-Authenticate is how it tells "no token" apart from "token
-// rejected".
+// a 429, WWW-Authenticate is how it tells "no token" apart from "token
+// rejected", and Content-Disposition is the filename on a file download.
 var corsExposedHeaders = []string{
 	"ETag",
 	"Retry-After",
 	"WWW-Authenticate",
+	"Content-Disposition",
 }
 
 // corsAllowedMethods is written out rather than echoed back from
@@ -149,18 +150,30 @@ func isCORSPreflight(r *http.Request) bool {
 }
 
 func (s *Server) maxBytes(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, s.requestBodyLimit(r))
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requestBodyLimit(r *http.Request) int64 {
 	limit := s.cfg.MaxRequestBytes
 	if limit <= 0 {
 		limit = 1 << 20
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Body != nil {
-			r.Body = http.MaxBytesReader(w, r.Body, limit)
-		}
+	if r.Method == http.MethodPost && r.URL.Path == v1.Prefix+"/me/avatar" && s.cfg.FilesAvatarMaxBytes > limit {
+		const multipartOverhead = 256 << 10
+		limit = s.cfg.FilesAvatarMaxBytes + multipartOverhead
+	} else if r.Method == http.MethodPost && isOrgFilesUploadPath(r.URL.Path) && s.cfg.FilesMaxBytes > limit {
+		const multipartOverhead = 256 << 10
+		limit = s.cfg.FilesMaxBytes + multipartOverhead
+	}
 
-		next.ServeHTTP(w, r)
-	})
+	return limit
 }
 
 // locale negotiates the response language from Accept-Language.
@@ -281,6 +294,9 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 		// fourth knob, because both are "prove a secret to move the password".
 		case r.Method == http.MethodPost && r.URL.Path == v1.Prefix+"/me/password":
 			lim = s.resetLimit
+
+		case r.Method == http.MethodPost && isFilesUploadPath(r.URL.Path):
+			lim = s.filesLimit
 		}
 
 		if lim != nil && !lim.Allow(s.remoteIP(r)) {
@@ -342,6 +358,8 @@ func limiterRoute(path string) string {
 		return v1.Prefix + "/orgs/{orgID}/invitations"
 	case isReissuePath(path):
 		return v1.Prefix + "/orgs/{orgID}/invitations/{invitationID}/reissue"
+	case isOrgFilesUploadPath(path):
+		return v1.Prefix + "/orgs/{orgID}/files"
 	default:
 		return path
 	}
@@ -355,6 +373,15 @@ func limiterRoute(path string) string {
 // notice. TestRateLimitAppliesToEveryCostlyRoute is what does.
 func isMembersPath(path string) bool {
 	return orgSubPath(path, "/members") != ""
+}
+
+func isFilesUploadPath(path string) bool {
+	return isOrgFilesUploadPath(path) || path == v1.Prefix+"/me/avatar"
+}
+
+// isOrgFilesUploadPath reports whether the path is /v1/orgs/{something}/files.
+func isOrgFilesUploadPath(path string) bool {
+	return orgSubPath(path, "/files") != ""
 }
 
 // orgSubPath returns the organization id in /v1/orgs/{orgID}{suffix}, or "" when

@@ -59,6 +59,10 @@ kolumny bez osobnego SELECT-a. Korzysta z tego organizacja domyślna i konta sys
 ponownie kończyłoby się błędem duplikatu dla roli, której użytkownik nie widzi. Zamiast tego serwis odmawia usunięcia
 roli, którą ktoś jeszcze posiada, co jest lepszą gwarancją niż cofnięcie, do którego nikt nie ma dostępu.
 
+`files` też jest twarde. Miękko usunięta organizacja zostawia metadane — `ON DELETE CASCADE` odpala się tylko przy
+twardym DELETE — a ciphertext i tak leży poza bazą. Istniejące role shipowane dostają `files.*` w migracji
+`…_files.sql`. Szczegóły: [Pliki](011_files.md).
+
 ### Unikat przy miękkim usuwaniu musi być częściowy
 
 `users.email` i `organizations.slug` mają unikat **tylko wśród żywych wierszy**:
@@ -144,7 +148,7 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 
 | Tabela                                                      | Zawiera                                                        |
 |-------------------------------------------------------------|----------------------------------------------------------------|
-| `users`                                                     | konta, epoka sesji, drugi składnik, zawieszenie, język         |
+| `users`                                                     | konta, epoka sesji, drugi składnik, zawieszenie, język, `avatar_id` → `files` |
 | `devices`                                                   | znane urządzenia, odcisk `SHA-256`, zaufanie, odwołanie        |
 | `login_events`                                              | historia logowań                                               |
 | `password_resets`, `two_factor_challenges`, `email_changes` | kody jednorazowe (HMAC z osobnym `purpose`, TTL, licznik prób) |
@@ -155,6 +159,7 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 | `membership_roles`                                          | przypisania ról                                                |
 | `user_system_roles`                                         | role platformowe, przypisywane kluczem                         |
 | `authz_events`                                              | dziennik zmian uprawnień                                       |
+| `files`                                                     | metadane wgranych blobów (`organization_id` nullable dla blobów konta); ciphertext leży poza bazą |
 
 Każdy nowy schemat trafia do opisu automatycznie: `ent generate` czyta cały katalog `schema/`. Poprzedni układ wymagał
 wpisania każdego modelu do ręcznej listy, a pominięty był po cichu nieobecny w generowanym schemacie — po czym Atlas

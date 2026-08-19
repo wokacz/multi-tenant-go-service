@@ -44,9 +44,13 @@ func TestSetMemberStatusRefusesInvited(t *testing.T) {
 	subject := uuid.Must(uuid.NewV7())
 	member := repo.SeedMember(orgID, subject, ent.MembershipActive, viewer)
 
+	// The grant must cover every permission the subject holds, or the rank
+	// rule refuses first and this test never reaches the status check.
+	// Viewer includes files.read.
 	grant := authz.NewGrant(actor, orgID, []authz.Permission{
 		authz.PermMembersSuspend,
 		authz.PermOrganizationRead,
+		authz.PermFilesRead,
 	})
 
 	// "invited" is no longer a status the enum knows, and this operation must keep

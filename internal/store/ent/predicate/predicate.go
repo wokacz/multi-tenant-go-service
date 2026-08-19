@@ -15,6 +15,9 @@ type Device func(*sql.Selector)
 // EmailChange is the predicate function for emailchange builders.
 type EmailChange func(*sql.Selector)
 
+// File is the predicate function for file builders.
+type File func(*sql.Selector)
+
 // Invitation is the predicate function for invitation builders.
 type Invitation func(*sql.Selector)
 

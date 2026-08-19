@@ -1,8 +1,9 @@
 # Środowisko developerskie
 
 Są dwie równorzędne drogi uruchomienia. Obie czytają ten sam `.env`. Compose nadpisuje wartości, które nie mogą znaczyć
-tego samego w obu miejscach: `API_HOST`, `API_PORT`, `POSTGRES_HOST`, `POSTGRES_PORT`, a także sekrety JWT — kontener
-słucha na `0.0.0.0`, więc wbudowane wartości deweloperskie są odrzucane.
+tego samego w obu miejscach: `API_HOST`, `API_PORT`, `POSTGRES_HOST`, `POSTGRES_PORT`, sekrety JWT **i** klucz
+szyfrowania plików — kontener słucha na `0.0.0.0`, więc wbudowane wartości deweloperskie są odrzucane. Katalog blobów w
+kontenerze to `/tmp/air/files` (wolumen zapisywalny); na hoście domyślnie `var/files`.
 
 ## Czego potrzebujesz
 
@@ -179,6 +180,8 @@ organizacji nie stała się milcząco administratorem całej instalacji. Dlaczeg
 | `task migrate:diff NAME=…`   | wygeneruj migrację po zmianie modelu                   |
 | `task migrate:status`        | co jest zastosowane                                    |
 | `task bootstrap -- -email …` | nadaj pierwszą rolę właściciela                        |
+| `task otel`                  | kolektor OTLP + Grafana (profil)                       |
+| `task compose:clamav`        | ClamAV na :3310 (profil, obraz `clamav/clamav-debian`); skan plików nadal `off` |
 | `task clean`                 | usuń artefakty                                         |
 
 `task --list` pokazuje wszystko z opisami. `task check` i `task migrate:diff`
@@ -223,6 +226,11 @@ Najważniejsze zmienne (pełna lista z komentarzami w `.env.example`):
 | `POSTGRES_*`                        | localhost / postgres      | produkcja wymaga SSL i mocnego hasła                                                                        |
 | `REGISTER_/LOGIN_/RESET_PER_MINUTE` | `5`                       | `0` wyłącza limiter (tylko testy)                                                                           |
 | `INVITE_PER_MINUTE`                 | `30`                      | zaproszenia i ponowne wysłanie; **żądania**, nie adresy — jedno żądanie zbiorcze to do 50 adresów           |
+| `FILES_UPLOAD_PER_MINUTE`           | `20`                      | `POST /v1/orgs/{id}/files` i `POST /v1/me/avatar`; `0` wyłącza (tylko testy)                                 |
+| `FILES_AVATAR_MAX_BYTES`            | `2 MiB`                   | osobny sufit na zdjęcie profilowe                                                                           |
+| `FILES_STORAGE_PATH`                | `var/files`               | Compose: `/tmp/air/files`; produkcja wymaga jawnej                                                          |
+| `FILES_ENCRYPTION_KEY`              | wartość dev               | tylko na loopbacku; Compose ustawia własną; 32 bajty albo 64 znaki hex                                      |
+| `FILES_SCAN_MODE`                   | `off`                     | `optional` / `required` po `task compose:clamav`; patrz [011](../design/011_files.md)                        |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`       | puste                     | puste = telemetria **wyłączona**; `task otel` stawia kolektor — patrz [010](../design/010_observability.md) |
 | `LOG_FORMAT` / `LOG_LEVEL`          | `console` / `debug`       | produkcja domyślnie `json` / `info`                                                                         |
 | `LOG_COLOR`                         | `auto`                    | `never` albo `NO_COLOR` wyłącza; potok i tak nie dostaje kolorów                                            |

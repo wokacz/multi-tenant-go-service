@@ -3,6 +3,7 @@
 package httptest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,8 +24,10 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/filestore"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
@@ -200,6 +203,26 @@ func NewTestAPIConfigTel(
 		adjust(cfg)
 	}
 
+	if cfg.FilesStoragePath == "" {
+		cfg.FilesStoragePath = t.TempDir()
+	}
+
+	if len(cfg.FilesEncryptionKey) == 0 {
+		cfg.FilesEncryptionKey = bytes.Repeat([]byte("k"), 32)
+	}
+
+	if cfg.FilesMaxBytes == 0 {
+		cfg.FilesMaxBytes = 1 << 20
+	}
+
+	if cfg.FilesAvatarMaxBytes == 0 {
+		cfg.FilesAvatarMaxBytes = files.DefaultAvatarMaxBytes
+	}
+
+	if cfg.FilesStorageBackend == "" {
+		cfg.FilesStorageBackend = "local"
+	}
+
 	// The authorization fake joins to the user fake for names and addresses,
 	// the way the SQL joins to the users table. Passing the repository the
 	// service already uses is what keeps a member's account and their
@@ -208,6 +231,25 @@ func NewTestAPIConfigTel(
 	authzRepo := memory.NewAuthz(users)
 	accounts := user.NewService(repo, testPepper, user.WithBcryptCost(bcrypt.MinCost))
 	authzService := authz.NewService(authzRepo)
+
+	blobs, err := filestore.NewLocal(cfg.FilesStoragePath)
+	if err != nil {
+		t.Fatalf("filestore.NewLocal() = %v", err)
+	}
+
+	fileService, err := files.NewService(authzRepo, blobs, authzRepo, files.NopScanner(), files.Settings{
+		MaxBytes:              cfg.FilesMaxBytes,
+		AvatarMaxBytes:        cfg.FilesAvatarMaxBytes,
+		AllowedTypes:          cfg.FilesAllowedTypes,
+		RequireDeclaredMatch:  true,
+		RequireExtensionMatch: true,
+		BlockExecutables:      true,
+		EncryptionKey:         cfg.FilesEncryptionKey,
+		ScanRequired:          cfg.FilesScanMode == config.ScanRequired,
+	})
+	if err != nil {
+		t.Fatalf("files.NewService() = %v", err)
+	}
 
 	server := api.NewServer(cfg, slog.New(slog.DiscardHandler), api.Deps{
 		DB:        okPinger{},
@@ -218,6 +260,7 @@ func NewTestAPIConfigTel(
 		Snapshots: authzService,
 		Orgs:      orgs.NewService(authzRepo, authzRepo, authzRepo),
 		Audit:     audit.NewService(authzRepo, authzRepo),
+		Files:     fileService,
 		Telemetry: tel,
 	})
 

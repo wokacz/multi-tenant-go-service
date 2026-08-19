@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
@@ -164,6 +165,61 @@ func (m *Users) UpdateProfile(_ context.Context, userID uuid.UUID, name, locale 
 	u.Locale = locale
 
 	return nil
+}
+
+func (m *Users) attachAvatar(userID, fileID uuid.UUID) (uuid.UUID, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok || u.IsDeleted() {
+		return uuid.Nil, user.ErrNotFound
+	}
+
+	var previous uuid.UUID
+	if u.AvatarID != nil {
+		previous = *u.AvatarID
+	}
+
+	id := fileID
+	u.AvatarID = &id
+
+	return previous, nil
+}
+
+func (m *Users) detachAvatar(userID uuid.UUID) (uuid.UUID, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok || u.IsDeleted() {
+		return uuid.Nil, user.ErrNotFound
+	}
+
+	if u.AvatarID == nil {
+		return uuid.Nil, files.ErrNotFound
+	}
+
+	previous := *u.AvatarID
+	u.AvatarID = nil
+
+	return previous, nil
+}
+
+func (m *Users) avatarID(userID uuid.UUID) (uuid.UUID, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[userID]
+	if !ok || u.IsDeleted() {
+		return uuid.Nil, user.ErrNotFound
+	}
+
+	if u.AvatarID == nil {
+		return uuid.Nil, files.ErrNotFound
+	}
+
+	return *u.AvatarID, nil
 }
 
 func (m *Users) SetPassword(_ context.Context, userID uuid.UUID, passwordHash string) error {

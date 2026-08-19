@@ -11,6 +11,7 @@ import (
 
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
@@ -52,6 +53,7 @@ type Authz struct {
 	invitations  map[uuid.UUID]*ent.Invitation
 	systemGrants map[systemGrantKey]systemGrant
 	inviteRoles  map[uuid.UUID][]uuid.UUID
+	files        map[uuid.UUID]*ent.File
 
 	// events is append-only, the way the table is. Writes go through
 	// recordLocked so the "no actor, no row" rule is copied exactly rather than
@@ -69,6 +71,8 @@ var (
 
 	_ audit.Reader         = (*Authz)(nil)
 	_ audit.PlatformReader = (*Authz)(nil)
+	_ files.Repository     = (*Authz)(nil)
+	_ files.AccountFiles   = (*Authz)(nil)
 )
 
 func NewAuthz(users *Users) *Authz {
@@ -84,6 +88,7 @@ func NewAuthz(users *Users) *Authz {
 		invitations:  map[uuid.UUID]*ent.Invitation{},
 		systemGrants: map[systemGrantKey]systemGrant{},
 		inviteRoles:  map[uuid.UUID][]uuid.UUID{},
+		files:        map[uuid.UUID]*ent.File{},
 	}
 }
 

@@ -74,6 +74,13 @@ var selfServiceOperations = map[string]bool{
 	// The caller's own snapshot of what they may do. Gating it would be circular,
 	// and a client that cannot read it cannot render anything at all.
 	"get-my-permissions": true,
+
+	// The caller's own photo. Gating it would mean an organization could
+	// configure a role that cannot change the picture on the account it lives
+	// on — and /v1/me/* is never behind a permission.
+	"set-avatar":    true,
+	"get-avatar":    true,
+	"delete-avatar": true,
 }
 
 // operationAccess maps an operation to the permission it needs.
@@ -114,6 +121,12 @@ var operationAccess = map[string]accessRule{
 	"delete-role":          {authz.PermRolesDelete, authz.ScopeOrganization},
 
 	"list-audit-events": {authz.PermAuditRead, authz.ScopeOrganization},
+
+	"list-files":    {authz.PermFilesRead, authz.ScopeOrganization},
+	"get-file":      {authz.PermFilesRead, authz.ScopeOrganization},
+	"download-file": {authz.PermFilesRead, authz.ScopeOrganization},
+	"upload-file":   {authz.PermFilesCreate, authz.ScopeOrganization},
+	"delete-file":   {authz.PermFilesDelete, authz.ScopeOrganization},
 
 	// System scope. No {orgID} in these paths, so the middleware skips the
 	// organization lookup entirely and resolves the caller's platform roles

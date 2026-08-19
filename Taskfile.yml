@@ -244,6 +244,14 @@ tasks:
       - docker compose --profile otel up -d --wait otel
       - 'echo "Grafana: http://127.0.0.1:3000 (traces: Tempo, metrics: Prometheus, logs: Loki)"'
 
+  compose:clamav:
+    desc: Start ClamAV for file-upload scanning (TCP 3310)
+    # The API already has FILES_CLAMAV_ADDR; this only starts the daemon.
+    # Scanning stays off until FILES_SCAN_MODE is optional or required.
+    cmds:
+      - docker compose --profile clamav up -d clamav
+      - 'echo "clamd: 127.0.0.1:3310 — first start downloads signatures; set FILES_SCAN_MODE=optional and restart the API once it is healthy"'
+
   compose:debug:
     desc: Start the API under delve (API 4001, debugger 2345)
     cmds:

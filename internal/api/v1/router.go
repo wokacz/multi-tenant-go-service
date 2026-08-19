@@ -15,6 +15,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/auth"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
@@ -36,6 +37,7 @@ type Deps struct {
 	Orgs   *orgs.Service
 	Authz  authz.Snapshotter
 	Audit  *audit.Service
+	Files  *files.Service
 	Log    *slog.Logger
 
 	// Telemetry is where the handlers that know an outcome record it. Only two do:
@@ -57,7 +59,7 @@ func Register(api huma.API, deps Deps) {
 		deps.Telemetry = telemetry.Disabled()
 	}
 
-	registerUsers(api, deps.Users, deps.Orgs)
+	registerUsers(api, deps.Users, deps.Orgs, deps.Files)
 	registerSessions(api, deps)
 	registerPasswordResets(api, deps.Users, deps.Mail, deps.Log)
 	registerTwoFactor(api, deps.Users)
@@ -72,6 +74,8 @@ func Register(api huma.API, deps Deps) {
 	registerPlatform(api, deps.Orgs, deps.Users)
 	registerSystemRoles(api, deps.Orgs)
 	registerAudit(api, deps.Audit)
+	registerFiles(api, deps.Files)
+	registerAvatar(api, deps.Files)
 }
 
 // logger falls back to the default when no logger was wired in. It matters for

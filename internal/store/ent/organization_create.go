@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitation"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/organization"
@@ -152,6 +153,21 @@ func (_c *OrganizationCreate) AddInvitations(v ...*Invitation) *OrganizationCrea
 		ids[i] = v[i].ID
 	}
 	return _c.AddInvitationIDs(ids...)
+}
+
+// AddFileIDs adds the "files" edge to the File entity by IDs.
+func (_c *OrganizationCreate) AddFileIDs(ids ...uuid.UUID) *OrganizationCreate {
+	_c.mutation.AddFileIDs(ids...)
+	return _c
+}
+
+// AddFiles adds the "files" edges to the File entity.
+func (_c *OrganizationCreate) AddFiles(v ...*File) *OrganizationCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddFileIDs(ids...)
 }
 
 // Mutation returns the OrganizationMutation object of the builder.
@@ -347,6 +363,22 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(invitation.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.FilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.FilesTable,
+			Columns: []string{organization.FilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

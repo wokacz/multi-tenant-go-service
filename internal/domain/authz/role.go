@@ -87,6 +87,9 @@ var organizationRoles = []RoleDefinition{
 			PermRolesUpdate,
 			PermRolesDelete,
 			PermAuditRead,
+			PermFilesRead,
+			PermFilesCreate,
+			PermFilesDelete,
 		},
 	},
 	{
@@ -97,6 +100,8 @@ var organizationRoles = []RoleDefinition{
 		Permissions: []Permission{
 			PermOrganizationRead,
 			PermMembersRead,
+			PermFilesRead,
+			PermFilesCreate,
 		},
 	},
 	{
@@ -106,6 +111,7 @@ var organizationRoles = []RoleDefinition{
 		Description: "Read-only access to the organization itself.",
 		Permissions: []Permission{
 			PermOrganizationRead,
+			PermFilesRead,
 		},
 	},
 }

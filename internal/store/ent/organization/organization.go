@@ -34,6 +34,8 @@ const (
 	EdgeMemberships = "memberships"
 	// EdgeInvitations holds the string denoting the invitations edge name in mutations.
 	EdgeInvitations = "invitations"
+	// EdgeFiles holds the string denoting the files edge name in mutations.
+	EdgeFiles = "files"
 	// Table holds the table name of the organization in the database.
 	Table = "organizations"
 	// RolesTable is the table that holds the roles relation/edge.
@@ -57,6 +59,13 @@ const (
 	InvitationsInverseTable = "invitations"
 	// InvitationsColumn is the table column denoting the invitations relation/edge.
 	InvitationsColumn = "organization_id"
+	// FilesTable is the table that holds the files relation/edge.
+	FilesTable = "files"
+	// FilesInverseTable is the table name for the File entity.
+	// It exists in this package in order to avoid circular dependency with the "file" package.
+	FilesInverseTable = "files"
+	// FilesColumn is the table column denoting the files relation/edge.
+	FilesColumn = "organization_id"
 )
 
 // Columns holds all SQL columns for organization fields.
@@ -183,6 +192,20 @@ func ByInvitations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newInvitationsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByFilesCount orders the results by files count.
+func ByFilesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newFilesStep(), opts...)
+	}
+}
+
+// ByFiles orders the results by files terms.
+func ByFiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newFilesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newRolesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -202,5 +225,12 @@ func newInvitationsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(InvitationsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, InvitationsTable, InvitationsColumn),
+	)
+}
+func newFilesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(FilesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, FilesTable, FilesColumn),
 	)
 }

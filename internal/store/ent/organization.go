@@ -44,9 +44,11 @@ type OrganizationEdges struct {
 	Memberships []*Membership `json:"memberships,omitempty"`
 	// Invitations holds the value of the invitations edge.
 	Invitations []*Invitation `json:"invitations,omitempty"`
+	// Files holds the value of the files edge.
+	Files []*File `json:"files,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // RolesOrErr returns the Roles value or an error if the edge
@@ -74,6 +76,15 @@ func (e OrganizationEdges) InvitationsOrErr() ([]*Invitation, error) {
 		return e.Invitations, nil
 	}
 	return nil, &NotLoadedError{edge: "invitations"}
+}
+
+// FilesOrErr returns the Files value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) FilesOrErr() ([]*File, error) {
+	if e.loadedTypes[3] {
+		return e.Files, nil
+	}
+	return nil, &NotLoadedError{edge: "files"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -173,6 +184,11 @@ func (_m *Organization) QueryMemberships() *MembershipQuery {
 // QueryInvitations queries the "invitations" edge of the Organization entity.
 func (_m *Organization) QueryInvitations() *InvitationQuery {
 	return NewOrganizationClient(_m.config).QueryInvitations(_m)
+}
+
+// QueryFiles queries the "files" edge of the Organization entity.
+func (_m *Organization) QueryFiles() *FileQuery {
+	return NewOrganizationClient(_m.config).QueryFiles(_m)
 }
 
 // Update returns a builder for updating this Organization.

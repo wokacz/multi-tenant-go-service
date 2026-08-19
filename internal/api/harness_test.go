@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -17,8 +18,10 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
+	"github.com/wokacz/multi-tenant-go-service/internal/filestore"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/repositories/memory"
 	"github.com/wokacz/multi-tenant-go-service/internal/telemetry"
@@ -89,10 +92,43 @@ func newTestAPIConfig(
 		adjust(cfg)
 	}
 
+	if cfg.FilesStoragePath == "" {
+		cfg.FilesStoragePath = t.TempDir()
+	}
+
+	if len(cfg.FilesEncryptionKey) == 0 {
+		cfg.FilesEncryptionKey = bytes.Repeat([]byte("k"), 32)
+	}
+
+	if cfg.FilesMaxBytes == 0 {
+		cfg.FilesMaxBytes = 1 << 20
+	}
+
+	if cfg.FilesAvatarMaxBytes == 0 {
+		cfg.FilesAvatarMaxBytes = files.DefaultAvatarMaxBytes
+	}
+
 	users, _ := repo.(*memory.Users)
 	authzRepo := memory.NewAuthz(users)
 	accounts := user.NewService(repo, harnessPepper, user.WithBcryptCost(bcrypt.MinCost))
 	authzService := authz.NewService(authzRepo)
+
+	blobs, err := filestore.NewLocal(cfg.FilesStoragePath)
+	if err != nil {
+		t.Fatalf("filestore.NewLocal() = %v", err)
+	}
+
+	fileService, err := files.NewService(authzRepo, blobs, authzRepo, files.NopScanner(), files.Settings{
+		MaxBytes:              cfg.FilesMaxBytes,
+		AvatarMaxBytes:        cfg.FilesAvatarMaxBytes,
+		EncryptionKey:         cfg.FilesEncryptionKey,
+		RequireDeclaredMatch:  true,
+		RequireExtensionMatch: true,
+		BlockExecutables:      true,
+	})
+	if err != nil {
+		t.Fatalf("files.NewService() = %v", err)
+	}
 
 	server := NewServer(cfg, slog.New(slog.DiscardHandler), Deps{
 		DB:        harnessPinger{},
@@ -103,6 +139,7 @@ func newTestAPIConfig(
 		Snapshots: authzService,
 		Orgs:      orgs.NewService(authzRepo, authzRepo, authzRepo),
 		Audit:     audit.NewService(authzRepo, authzRepo),
+		Files:     fileService,
 		Telemetry: telemetry.Disabled(),
 	})
 

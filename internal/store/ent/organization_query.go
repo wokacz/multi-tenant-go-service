@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitation"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/organization"
@@ -31,6 +32,7 @@ type OrganizationQuery struct {
 	withRoles       *RoleQuery
 	withMemberships *MembershipQuery
 	withInvitations *InvitationQuery
+	withFiles       *FileQuery
 	modifiers       []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -127,6 +129,28 @@ func (_q *OrganizationQuery) QueryInvitations() *InvitationQuery {
 			sqlgraph.From(organization.Table, organization.FieldID, selector),
 			sqlgraph.To(invitation.Table, invitation.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.InvitationsTable, organization.InvitationsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryFiles chains the current query on the "files" edge.
+func (_q *OrganizationQuery) QueryFiles() *FileQuery {
+	query := (&FileClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(file.Table, file.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.FilesTable, organization.FilesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -329,6 +353,7 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		withRoles:       _q.withRoles.Clone(),
 		withMemberships: _q.withMemberships.Clone(),
 		withInvitations: _q.withInvitations.Clone(),
+		withFiles:       _q.withFiles.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -366,6 +391,17 @@ func (_q *OrganizationQuery) WithInvitations(opts ...func(*InvitationQuery)) *Or
 		opt(query)
 	}
 	_q.withInvitations = query
+	return _q
+}
+
+// WithFiles tells the query-builder to eager-load the nodes that are connected to
+// the "files" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithFiles(opts ...func(*FileQuery)) *OrganizationQuery {
+	query := (&FileClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withFiles = query
 	return _q
 }
 
@@ -447,10 +483,11 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*Organization{}
 		_spec       = _q.querySpec()
-		loadedTypes = [3]bool{
+		loadedTypes = [4]bool{
 			_q.withRoles != nil,
 			_q.withMemberships != nil,
 			_q.withInvitations != nil,
+			_q.withFiles != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -492,6 +529,13 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 		if err := _q.loadInvitations(ctx, query, nodes,
 			func(n *Organization) { n.Edges.Invitations = []*Invitation{} },
 			func(n *Organization, e *Invitation) { n.Edges.Invitations = append(n.Edges.Invitations, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withFiles; query != nil {
+		if err := _q.loadFiles(ctx, query, nodes,
+			func(n *Organization) { n.Edges.Files = []*File{} },
+			func(n *Organization, e *File) { n.Edges.Files = append(n.Edges.Files, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -583,6 +627,39 @@ func (_q *OrganizationQuery) loadInvitations(ctx context.Context, query *Invitat
 		node, ok := nodeids[fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "organization_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadFiles(ctx context.Context, query *FileQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *File)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(file.FieldOrganizationID)
+	}
+	query.Where(predicate.File(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.FilesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OrganizationID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "organization_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "organization_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

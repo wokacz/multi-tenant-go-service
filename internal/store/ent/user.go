@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/user"
 )
 
@@ -40,6 +41,8 @@ type User struct {
 	TwoFactorEnabled bool `json:"two_factor_enabled,omitempty"`
 	// SuspendedAt holds the value of the "suspended_at" field.
 	SuspendedAt *time.Time `json:"suspended_at,omitempty"`
+	// AvatarID holds the value of the "avatar_id" field.
+	AvatarID *uuid.UUID `json:"avatar_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
 	Edges        UserEdges `json:"edges"`
@@ -62,9 +65,11 @@ type UserEdges struct {
 	Challenges []*TwoFactorChallenge `json:"challenges,omitempty"`
 	// SystemRoles holds the value of the system_roles edge.
 	SystemRoles []*UserSystemRole `json:"system_roles,omitempty"`
+	// Avatar holds the value of the avatar edge.
+	Avatar *File `json:"avatar,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [7]bool
+	loadedTypes [8]bool
 }
 
 // MembershipsOrErr returns the Memberships value or an error if the edge
@@ -130,11 +135,24 @@ func (e UserEdges) SystemRolesOrErr() ([]*UserSystemRole, error) {
 	return nil, &NotLoadedError{edge: "system_roles"}
 }
 
+// AvatarOrErr returns the Avatar value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e UserEdges) AvatarOrErr() (*File, error) {
+	if e.Avatar != nil {
+		return e.Avatar, nil
+	} else if e.loadedTypes[7] {
+		return nil, &NotFoundError{label: file.Label}
+	}
+	return nil, &NotLoadedError{edge: "avatar"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case user.FieldAvatarID:
+			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case user.FieldIsProtected, user.FieldTwoFactorEnabled:
 			values[i] = new(sql.NullBool)
 		case user.FieldSessionEpoch:
@@ -234,6 +252,13 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				_m.SuspendedAt = new(time.Time)
 				*_m.SuspendedAt = value.Time
 			}
+		case user.FieldAvatarID:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field avatar_id", values[i])
+			} else if value.Valid {
+				_m.AvatarID = new(uuid.UUID)
+				*_m.AvatarID = *value.S.(*uuid.UUID)
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -280,6 +305,11 @@ func (_m *User) QueryChallenges() *TwoFactorChallengeQuery {
 // QuerySystemRoles queries the "system_roles" edge of the User entity.
 func (_m *User) QuerySystemRoles() *UserSystemRoleQuery {
 	return NewUserClient(_m.config).QuerySystemRoles(_m)
+}
+
+// QueryAvatar queries the "avatar" edge of the User entity.
+func (_m *User) QueryAvatar() *FileQuery {
+	return NewUserClient(_m.config).QueryAvatar(_m)
 }
 
 // Update returns a builder for updating this User.
@@ -339,6 +369,11 @@ func (_m *User) String() string {
 	if v := _m.SuspendedAt; v != nil {
 		builder.WriteString("suspended_at=")
 		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.AvatarID; v != nil {
+		builder.WriteString("avatar_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteByte(')')
 	return builder.String()

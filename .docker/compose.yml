@@ -34,6 +34,15 @@ x-api-environment: &api-environment
   # must not match internal/config's dev-only constants.
   AUTH_TOKEN_SECRET: compose-dev-auth-token-secret-32b!
   AUTH_RESET_SECRET: compose-dev-auth-reset-secret-32b!
+  # Same loopback rule as the JWT secrets: the container binds 0.0.0.0, so
+  # the in-repo files key is refused. Must be 32 bytes and must not match
+  # internal/config's dev-only constant.
+  FILES_ENCRYPTION_KEY: compose-dev-files-enc-key-32byt!
+  # /app is mounted read-only; air's writable volume is /tmp/air.
+  FILES_STORAGE_PATH: /tmp/air/files
+  # Pointed at whether the clamav profile is up. Scan mode stays off until
+  # FILES_SCAN_MODE is changed — a missing daemon then does not fail uploads.
+  FILES_CLAMAV_ADDR: clamav:3310
   # stderr inside Compose is not a TTY, so without this the development
   # mailer would log that a code was requested and never print the code.
   MAIL_LOG_CODES: "1"
@@ -171,6 +180,26 @@ services:
       retries: 10
       start_period: 60s
 
+  # Signature scanner for file uploads, opt in with:
+  #
+  #   task compose:clamav
+  #
+  # Under a profile, so ordinary `task up` does not download virus definitions
+  # on a laptop. FILES_CLAMAV_ADDR is set on the API either way; FILES_SCAN_MODE
+  # stays off until somebody changes it, so a missing daemon is ignored.
+  #
+  # Debian, not Alpine: clamav/clamav is linux/amd64 only. The Debian image is
+  # the official multi-arch one (amd64, arm64, ppc64le) — Apple Silicon cannot
+  # pull the Alpine tag.
+  clamav:
+    profiles: [ clamav ]
+    image: clamav/clamav-debian:1.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+
   # Same image, running under delve. Opt in with:
   #
   #   task compose:debug
@@ -238,3 +267,4 @@ volumes:
   go-build-cache:
   api-tmp:
   api-debug-tmp:
+  clamav-data:

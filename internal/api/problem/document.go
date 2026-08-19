@@ -65,6 +65,15 @@ const (
 	CodeInvalidEmail        = "invalid_email"
 	CodeInvalidStatus       = "invalid_status"
 	CodeInvalidOrgID        = "invalid_organization_id"
+
+	CodeFileTooLarge        = "file_too_large"
+	CodeFileEmpty           = "file_empty"
+	CodeFileNameInvalid     = "file_name_invalid"
+	CodeFileTypeNotAllowed  = "file_type_not_allowed"
+	CodeFileTypeMismatch    = "file_type_mismatch"
+	CodeFileExecutable      = "file_executable"
+	CodeFileInfected        = "file_infected"
+	CodeFileScanUnavailable = "file_scan_unavailable"
 )
 
 // Document is the RFC 7807 body this API emits, with two fields of its own.

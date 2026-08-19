@@ -4,14 +4,14 @@ Kod jest źródłem prawdy. Te strony tłumaczą **dlaczego** rzeczy wyglądają
 element, nie czytając wszystkiego od zera.
 
 | Katalog              | Zawiera                              | Kiedy tu zaglądasz                                  |
-|----------------------|--------------------------------------|-----------------------------------------------------|
+| -------------------- | ------------------------------------ | --------------------------------------------------- |
 | [`design/`](design/) | jak system jest zbudowany i dlaczego | gdy chcesz zrozumieć decyzję albo ją zakwestionować |
 | [`guides/`](guides/) | jak dodać kolejny element            | gdy piszesz kod                                     |
 
 ## Projekt
 
 | Dokument                                                         | O czym                                                                      |
-|------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [001 Stack technologiczny](design/001_technology_stack.md)       | biblioteki, narzędzia, czego świadomie nie ma, dwa moduły Go                |
 | [002 Architektura](design/002_architecture.md)                   | warstwy, kierunek zależności, granice pilnowane testem, podział `internal/` |
 | [003 Kontrakt API](design/003_api_contract.md)                   | wersjonowanie, generowane OpenAPI, DTO, wymagania wobec operacji            |
@@ -22,11 +22,12 @@ element, nie czytając wszystkiego od zera.
 | [008 Błędy i języki](design/008_errors_and_i18n.md)              | `problem+json`, kody błędów, mapa błędów domenowych, i18n                   |
 | [009 Odporność](design/009_hardening.md)                         | enumeracja kont, limity, koszt bcrypta, nagłówki, produkcja                 |
 | [010 Obserwowalność](design/010_observability.md)                | ślady, metryki, logi, korelacja, logowanie w terminalu                      |
+| [011 Pliki](design/011_files.md)                                 | sprawdzanie typu, skan, szyfrowanie w spoczynku, magazyn blobów, awatar |
 
 ## Instrukcje
 
 | Dokument                                                              | Kiedy                                          |
-|-----------------------------------------------------------------------|------------------------------------------------|
+| --------------------------------------------------------------------- | ---------------------------------------------- |
 | [001 Środowisko developerskie](guides/001_development_environment.md) | pierwsze uruchomienie, polecenia, konfiguracja |
 | [002 Dodanie endpointu](guides/002_add_endpoint.md)                   | nowa operacja HTTP                             |
 | [003 Modele i migracje](guides/003_models_and_migrations.md)          | nowa tabela albo zmiana kolumny                |
@@ -40,21 +41,22 @@ element, nie czytając wszystkiego od zera.
 
 ## Szybkie odpowiedzi
 
-| Pytanie                                           | Gdzie                                                 |
-|---------------------------------------------------|-------------------------------------------------------|
-| Dlaczego huma nie może wyjść poza `internal/api`? | [design/002](design/002_architecture.md)              |
-| Dlaczego uprawnień nie ma w tokenie?              | [design/007](design/007_authorization.md)             |
-| Kiedy 403, a kiedy 404?                           | [design/007](design/007_authorization.md)             |
-| Co znaczy `code` w odpowiedzi błędnej?            | [design/008](design/008_errors_and_i18n.md)           |
-| Dlaczego licznik prób rusza się w SQL-u?          | [design/006](design/006_devices_and_2fa.md)           |
-| Skąd się bierze pierwszy administrator?           | [design/007](design/007_authorization.md)             |
-| Jak działają zaproszenia e-mail?                  | [design/007](design/007_authorization.md#zaproszenia) |
-| Dodałem trasę i dostaję 403 — dlaczego?           | [guides/002](guides/002_add_endpoint.md)              |
-| Zmieniłem model i CI protestuje                   | [guides/003](guides/003_models_and_migrations.md)     |
-| Test przechodzi u mnie, a na CI nie               | [guides/007](guides/007_write_tests.md)               |
-| Skąd wziąć konta do klikania po aplikacji?        | [guides/009](guides/009_seed_data.md)                 |
-| Gdzie zobaczyć ślady i metryki?                   | [design/010](design/010_observability.md)             |
-| Dlaczego log nie ma `trace_id`?                   | [design/010](design/010_observability.md#logi)        |
+| Pytanie                                           | Gdzie                                                                      |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| Dlaczego huma nie może wyjść poza `internal/api`? | [design/002](design/002_architecture.md)                                   |
+| Dlaczego uprawnień nie ma w tokenie?              | [design/007](design/007_authorization.md)                                  |
+| Kiedy 403, a kiedy 404?                           | [design/007](design/007_authorization.md)                                  |
+| Co znaczy `code` w odpowiedzi błędnej?            | [design/008](design/008_errors_and_i18n.md)                                |
+| Dlaczego licznik prób rusza się w SQL-u?          | [design/006](design/006_devices_and_2fa.md)                                |
+| Skąd się bierze pierwszy administrator?           | [design/007](design/007_authorization.md)                                  |
+| Jak działają zaproszenia e-mail?                  | [design/007](design/007_authorization.md#zaproszenia)                      |
+| Dodałem trasę i dostaję 403 — dlaczego?           | [guides/002](guides/002_add_endpoint.md)                                   |
+| Zmieniłem model i CI protestuje                   | [guides/003](guides/003_models_and_migrations.md)                          |
+| Test przechodzi u mnie, a na CI nie               | [guides/007](guides/007_write_tests.md)                                    |
+| Skąd wziąć konta do klikania po aplikacji?        | [guides/009](guides/009_seed_data.md)                                      |
+| Gdzie zobaczyć ślady i metryki?                   | [design/010](design/010_observability.md)                                  |
+| Dlaczego log nie ma `trace_id`?                   | [design/010](design/010_observability.md#logi)                             |
+| Jak wgrywać i przechowywać pliki?                 | [design/011](design/011_files.md)                                          |
 | Jak zmienić język po rejestracji?                 | `PATCH /v1/me` — [design/008](design/008_errors_and_i18n.md#pierwszeństwo) |
 
 ## Konwencja
@@ -82,7 +84,7 @@ Zasady, które utrzymują to w kupie:
 ## Poza `docs/`
 
 | Gdzie                                     | Co                                                               |
-|-------------------------------------------|------------------------------------------------------------------|
+| ----------------------------------------- | ---------------------------------------------------------------- |
 | [`README.md`](../README.md)               | czym jest projekt, wymagania, uruchomienie                       |
 | [`compose.yml`](../compose.yml)           | wskaźnik `include`, żeby `docker compose up` działało z korzenia |
 | [`.docker/`](../.docker/)                 | Compose, obraz i hot-reload; bez konfiguracji produkcyjnej       |

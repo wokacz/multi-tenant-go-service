@@ -57,6 +57,10 @@ const (
 	PermRolesDelete Permission = "roles.delete"
 
 	PermAuditRead Permission = "audit.read"
+
+	PermFilesRead   Permission = "files.read"
+	PermFilesCreate Permission = "files.create"
+	PermFilesDelete Permission = "files.delete"
 )
 
 const (
@@ -124,6 +128,10 @@ var catalog = []Definition{
 	{PermRolesDelete, ScopeOrganization, "roles"},
 
 	{PermAuditRead, ScopeOrganization, "audit"},
+
+	{PermFilesRead, ScopeOrganization, "files"},
+	{PermFilesCreate, ScopeOrganization, "files"},
+	{PermFilesDelete, ScopeOrganization, "files"},
 
 	{PermPlatformOrganizationsRead, ScopeSystem, "platform.organizations"},
 	{PermPlatformOrganizationsCreate, ScopeSystem, "platform.organizations"},

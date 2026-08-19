@@ -125,6 +125,49 @@ var (
 			},
 		},
 	}
+	// FilesColumns holds the columns for the "files" table.
+	FilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "uploaded_by", Type: field.TypeUUID},
+		{Name: "original_name", Type: field.TypeString, Size: 255},
+		{Name: "declared_type", Type: field.TypeString, Nullable: true, Size: 127},
+		{Name: "detected_type", Type: field.TypeString, Size: 127},
+		{Name: "size_bytes", Type: field.TypeInt64},
+		{Name: "sha256", Type: field.TypeString, Size: 64},
+		{Name: "storage_key", Type: field.TypeString, Size: 512},
+		{Name: "encryption_key_id", Type: field.TypeString, Size: 64},
+		{Name: "scan_status", Type: field.TypeEnum, Enums: []string{"skipped", "clean", "unavailable"}},
+		{Name: "scan_engine", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "organization_id", Type: field.TypeUUID, Nullable: true},
+	}
+	// FilesTable holds the schema information for the "files" table.
+	FilesTable = &schema.Table{
+		Name:       "files",
+		Columns:    FilesColumns,
+		PrimaryKey: []*schema.Column{FilesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "files_organizations_files",
+				Columns:    []*schema.Column{FilesColumns[13]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_files_org_id",
+				Unique:  false,
+				Columns: []*schema.Column{FilesColumns[13], FilesColumns[0]},
+			},
+			{
+				Name:    "idx_files_org_created",
+				Unique:  false,
+				Columns: []*schema.Column{FilesColumns[13], FilesColumns[1]},
+			},
+		},
+	}
 	// InvitationsColumns holds the columns for the "invitations" table.
 	InvitationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -512,12 +555,21 @@ var (
 		{Name: "session_epoch", Type: field.TypeInt, Default: 0},
 		{Name: "two_factor_enabled", Type: field.TypeBool, Default: false},
 		{Name: "suspended_at", Type: field.TypeTime, Nullable: true},
+		{Name: "avatar_id", Type: field.TypeUUID, Unique: true, Nullable: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
 		Name:       "users",
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "users_files_avatar_of",
+				Columns:    []*schema.Column{UsersColumns[12]},
+				RefColumns: []*schema.Column{FilesColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "idx_users_email",
@@ -569,6 +621,7 @@ var (
 		AuthzEventsTable,
 		DevicesTable,
 		EmailChangesTable,
+		FilesTable,
 		InvitationsTable,
 		InvitationRolesTable,
 		LoginEventsTable,
@@ -587,6 +640,13 @@ var (
 func init() {
 	DevicesTable.ForeignKeys[0].RefTable = UsersTable
 	EmailChangesTable.ForeignKeys[0].RefTable = UsersTable
+	FilesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	FilesTable.Annotation = &entsql.Annotation{
+		Table: "files",
+	}
+	FilesTable.Annotation.Checks = map[string]string{
+		"chk_files_scan_status": "(scan_status)::text = ANY ((ARRAY['skipped'::character varying, 'clean'::character varying, 'unavailable'::character varying])::text[])",
+	}
 	InvitationsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	InvitationRolesTable.ForeignKeys[0].RefTable = InvitationsTable
 	InvitationRolesTable.ForeignKeys[1].RefTable = RolesTable
@@ -612,6 +672,7 @@ func init() {
 	RolePermissionsTable.ForeignKeys[0].RefTable = RolesTable
 	TwoFactorChallengesTable.ForeignKeys[0].RefTable = DevicesTable
 	TwoFactorChallengesTable.ForeignKeys[1].RefTable = UsersTable
+	UsersTable.ForeignKeys[0].RefTable = FilesTable
 	UsersTable.Annotation = &entsql.Annotation{
 		Table: "users",
 	}

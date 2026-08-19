@@ -111,6 +111,9 @@ func TestTheUniqueIndexesAreInTheDatabase(t *testing.T) {
 		"a system role is granted once per user": {
 			"user_system_roles", "idx_user_system_role", []string{"user_id", "role_key"},
 		},
+		"an account photo is attached to at most one account": {
+			"users", "users_avatar_id_key", []string{"avatar_id"},
+		},
 	}
 
 	for name, tc := range tests {
@@ -206,6 +209,7 @@ func TestForeignKeysCascade(t *testing.T) {
 		"memberships.organization_id":    "CASCADE",
 		"memberships.user_id":            "CASCADE",
 		"roles.organization_id":          "CASCADE",
+		"files.organization_id":          "CASCADE",
 		"devices.user_id":                "CASCADE",
 		"login_events.user_id":           "CASCADE",
 		"user_system_roles.user_id":      "CASCADE",

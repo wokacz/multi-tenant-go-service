@@ -21,6 +21,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/config"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/authz"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/mail"
@@ -65,6 +66,7 @@ type Deps struct {
 	Snapshots authz.Snapshotter
 	Orgs      *orgs.Service
 	Audit     *audit.Service
+	Files     *files.Service
 
 	// Telemetry carries the tracer and the counters. It is never nil in a wired
 	// process, and a test that leaves it out gets the no-op one from
@@ -86,6 +88,7 @@ type Server struct {
 	loginLimit    *limiter
 	resetLimit    *limiter
 	inviteLimit   *limiter
+	filesLimit    *limiter
 }
 
 // healthPath is the liveness endpoint. It is a constant because two places need to
@@ -112,6 +115,7 @@ func NewServer(cfg *config.Config, log *slog.Logger, deps Deps) *Server {
 		loginLimit:    newLimiter(cfg.LoginPerMinute),
 		resetLimit:    newLimiter(cfg.ResetPerMinute),
 		inviteLimit:   newLimiter(cfg.InvitePerMinute),
+		filesLimit:    newLimiter(cfg.FilesUploadPerMinute),
 	}
 
 	router := chi.NewMux()
@@ -435,6 +439,7 @@ func (s *Server) registerRoutes() {
 		Orgs:   s.deps.Orgs,
 		Authz:  s.deps.Snapshots,
 		Audit:  s.deps.Audit,
+		Files:  s.deps.Files,
 		Log:    s.log,
 
 		Telemetry: s.deps.Telemetry,

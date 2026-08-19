@@ -38,6 +38,8 @@ const (
 	FieldTwoFactorEnabled = "two_factor_enabled"
 	// FieldSuspendedAt holds the string denoting the suspended_at field in the database.
 	FieldSuspendedAt = "suspended_at"
+	// FieldAvatarID holds the string denoting the avatar_id field in the database.
+	FieldAvatarID = "avatar_id"
 	// EdgeMemberships holds the string denoting the memberships edge name in mutations.
 	EdgeMemberships = "memberships"
 	// EdgeDevices holds the string denoting the devices edge name in mutations.
@@ -52,6 +54,8 @@ const (
 	EdgeChallenges = "challenges"
 	// EdgeSystemRoles holds the string denoting the system_roles edge name in mutations.
 	EdgeSystemRoles = "system_roles"
+	// EdgeAvatar holds the string denoting the avatar edge name in mutations.
+	EdgeAvatar = "avatar"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// MembershipsTable is the table that holds the memberships relation/edge.
@@ -103,6 +107,13 @@ const (
 	SystemRolesInverseTable = "user_system_roles"
 	// SystemRolesColumn is the table column denoting the system_roles relation/edge.
 	SystemRolesColumn = "user_id"
+	// AvatarTable is the table that holds the avatar relation/edge.
+	AvatarTable = "users"
+	// AvatarInverseTable is the table name for the File entity.
+	// It exists in this package in order to avoid circular dependency with the "file" package.
+	AvatarInverseTable = "files"
+	// AvatarColumn is the table column denoting the avatar relation/edge.
+	AvatarColumn = "avatar_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -119,6 +130,7 @@ var Columns = []string{
 	FieldSessionEpoch,
 	FieldTwoFactorEnabled,
 	FieldSuspendedAt,
+	FieldAvatarID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -226,6 +238,11 @@ func BySuspendedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSuspendedAt, opts...).ToFunc()
 }
 
+// ByAvatarID orders the results by the avatar_id field.
+func ByAvatarID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAvatarID, opts...).ToFunc()
+}
+
 // ByMembershipsCount orders the results by memberships count.
 func ByMembershipsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -323,6 +340,13 @@ func BySystemRoles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSystemRolesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByAvatarField orders the results by avatar field.
+func ByAvatarField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAvatarStep(), sql.OrderByField(field, opts...))
+	}
+}
 func newMembershipsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -370,5 +394,12 @@ func newSystemRolesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SystemRolesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, SystemRolesTable, SystemRolesColumn),
+	)
+}
+func newAvatarStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(AvatarInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2O, true, AvatarTable, AvatarColumn),
 	)
 }

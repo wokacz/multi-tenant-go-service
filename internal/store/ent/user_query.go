@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
@@ -39,6 +40,7 @@ type UserQuery struct {
 	withEmailChanges   *EmailChangeQuery
 	withChallenges     *TwoFactorChallengeQuery
 	withSystemRoles    *UserSystemRoleQuery
+	withAvatar         *FileQuery
 	modifiers          []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -223,6 +225,28 @@ func (_q *UserQuery) QuerySystemRoles() *UserSystemRoleQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(usersystemrole.Table, usersystemrole.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.SystemRolesTable, user.SystemRolesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryAvatar chains the current query on the "avatar" edge.
+func (_q *UserQuery) QueryAvatar() *FileQuery {
+	query := (&FileClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(file.Table, file.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, user.AvatarTable, user.AvatarColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -429,6 +453,7 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withEmailChanges:   _q.withEmailChanges.Clone(),
 		withChallenges:     _q.withChallenges.Clone(),
 		withSystemRoles:    _q.withSystemRoles.Clone(),
+		withAvatar:         _q.withAvatar.Clone(),
 		// clone intermediate query.
 		sql:       _q.sql.Clone(),
 		path:      _q.path,
@@ -513,6 +538,17 @@ func (_q *UserQuery) WithSystemRoles(opts ...func(*UserSystemRoleQuery)) *UserQu
 	return _q
 }
 
+// WithAvatar tells the query-builder to eager-load the nodes that are connected to
+// the "avatar" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithAvatar(opts ...func(*FileQuery)) *UserQuery {
+	query := (&FileClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withAvatar = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -591,7 +627,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [7]bool{
+		loadedTypes = [8]bool{
 			_q.withMemberships != nil,
 			_q.withDevices != nil,
 			_q.withLoginEvents != nil,
@@ -599,6 +635,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withEmailChanges != nil,
 			_q.withChallenges != nil,
 			_q.withSystemRoles != nil,
+			_q.withAvatar != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -668,6 +705,12 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadSystemRoles(ctx, query, nodes,
 			func(n *User) { n.Edges.SystemRoles = []*UserSystemRole{} },
 			func(n *User, e *UserSystemRole) { n.Edges.SystemRoles = append(n.Edges.SystemRoles, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withAvatar; query != nil {
+		if err := _q.loadAvatar(ctx, query, nodes, nil,
+			func(n *User, e *File) { n.Edges.Avatar = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -884,6 +927,38 @@ func (_q *UserQuery) loadSystemRoles(ctx context.Context, query *UserSystemRoleQ
 	}
 	return nil
 }
+func (_q *UserQuery) loadAvatar(ctx context.Context, query *FileQuery, nodes []*User, init func(*User), assign func(*User, *File)) error {
+	ids := make([]uuid.UUID, 0, len(nodes))
+	nodeids := make(map[uuid.UUID][]*User)
+	for i := range nodes {
+		if nodes[i].AvatarID == nil {
+			continue
+		}
+		fk := *nodes[i].AvatarID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(file.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "avatar_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
 
 func (_q *UserQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
@@ -912,6 +987,9 @@ func (_q *UserQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != user.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withAvatar != nil {
+			_spec.Node.AddColumnOnce(user.FieldAvatarID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

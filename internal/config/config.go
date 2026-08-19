@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,6 +35,23 @@ const devAuthTokenSecret = "dev-only-not-for-production-use-32bytes"
 const devAuthResetSecret = "dev-only-reset-pepper-not-for-prod-32b"
 
 const minAuthTokenSecretBytes = 32
+
+const devFilesEncryptionKey = "dev-only-files-enc-key-32bytes!!"
+
+const (
+	maxFilesBytes      = 512 << 20
+	defaultFilesBytes  = 10 << 20
+	defaultAvatarBytes = 2 << 20
+)
+
+// ScanMode is how an upload treats the optional malware scanner.
+type ScanMode string
+
+const (
+	ScanOff      ScanMode = "off"
+	ScanOptional ScanMode = "optional"
+	ScanRequired ScanMode = "required"
+)
 
 // Config holds the configuration values for the application.
 type Config struct {
@@ -92,6 +110,53 @@ type Config struct {
 	// the budget meant onboarding a team from one office address stopped at the
 	// fifth person, and the fix was a number, not a bucket.
 	InvitePerMinute int
+
+	// FilesUploadPerMinute caps POST /v1/orgs/{orgID}/files and
+	// POST /v1/me/avatar. Zero disables the limiter, which is only for tests.
+	FilesUploadPerMinute int
+
+	// FilesStorageBackend is currently only "local". Named so an object-store
+	// backend can be added without renaming the rest of this block.
+	FilesStorageBackend string
+
+	// FilesStoragePath is the directory ciphertext is written under. Layout is
+	// {path}/{orgID}/{fileID} for organization files and {path}/account/{fileID}
+	// for account blobs. Production requires it; development on loopback
+	// defaults to var/files.
+	FilesStoragePath string
+
+	// FilesMaxBytes is the largest plaintext an upload may carry. It is also
+	// a memory bound: the pipeline buffers the file to sniff and encrypt it.
+	FilesMaxBytes int64
+
+	// FilesAvatarMaxBytes is the largest plaintext an avatar may carry. It is
+	// a separate cap from FilesMaxBytes because a profile picture that large
+	// is not a picture, it is a denial of service.
+	FilesAvatarMaxBytes int64
+
+	// FilesAllowedTypes is the allow-list of canonical media types. Empty
+	// means the product default in domain/files. There is no wildcard.
+	FilesAllowedTypes []string
+
+	// FilesScanMode is off, optional or required. required refuses the upload
+	// when the scanner cannot be reached; optional stores the file and records
+	// that the scan did not run.
+	FilesScanMode ScanMode
+
+	// FilesClamAVAddr is host:port of clamd. Required when FilesScanMode is
+	// required; ignored when off.
+	FilesClamAVAddr string
+
+	FilesClamAVTimeout time.Duration
+
+	// FilesEncryptionKey is 32 bytes for AES-256-GCM. Development on loopback
+	// fills in a well-known value when unset; anything reachable from another
+	// machine refuses to start without a unique one.
+	FilesEncryptionKey []byte
+
+	FilesRequireDeclaredMatch  bool
+	FilesRequireExtensionMatch bool
+	FilesBlockExecutables      bool
 
 	// MaxRequestBytes bounds the request body so a client cannot pin memory
 	// with an unbounded JSON document.
@@ -250,6 +315,15 @@ func Load() (*Config, error) {
 		InvitePerMinute:   getInt("INVITE_PER_MINUTE", 30),
 		MaxRequestBytes:   int64(getInt("MAX_REQUEST_BYTES", 1<<20)),
 
+		FilesUploadPerMinute: getInt("FILES_UPLOAD_PER_MINUTE", 20),
+		FilesStorageBackend:  getEnv("FILES_STORAGE_BACKEND", "local"),
+		FilesStoragePath:     getEnv("FILES_STORAGE_PATH", ""),
+		FilesMaxBytes:        int64(getInt("FILES_MAX_BYTES", defaultFilesBytes)),
+		FilesAvatarMaxBytes:  int64(getInt("FILES_AVATAR_MAX_BYTES", defaultAvatarBytes)),
+		FilesScanMode:        ScanMode(getEnv("FILES_SCAN_MODE", string(ScanOff))),
+		FilesClamAVAddr:      strings.TrimSpace(getEnv("FILES_CLAMAV_ADDR", "")),
+		FilesClamAVTimeout:   getDuration("FILES_CLAMAV_TIMEOUT", 10*time.Second),
+
 		LogFormat: LogFormat(getEnv("LOG_FORMAT", string(defaultLogFormat(env)))),
 		LogLevel:  ParseLogLevel(getEnv("LOG_LEVEL", defaultLogLevel(env))),
 		LogColour: getEnv("LOG_COLOR", "auto"),
@@ -291,6 +365,41 @@ func Load() (*Config, error) {
 		MailLogCodes: getEnvBool("MAIL_LOG_CODES"),
 	}
 
+	declaredMatch, err := getEnvBoolValue("FILES_REQUIRE_DECLARED_MATCH", true)
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.FilesRequireDeclaredMatch = declaredMatch
+	}
+
+	extensionMatch, err := getEnvBoolValue("FILES_REQUIRE_EXTENSION_MATCH", true)
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.FilesRequireExtensionMatch = extensionMatch
+	}
+
+	blockExec, err := getEnvBoolValue("FILES_BLOCK_EXECUTABLES", true)
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.FilesBlockExecutables = blockExec
+	}
+
+	types, err := parseAllowedTypes(os.Getenv("FILES_ALLOWED_TYPES"))
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.FilesAllowedTypes = types
+	}
+
+	key, err := parseEncryptionKey(os.Getenv("FILES_ENCRYPTION_KEY"))
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.FilesEncryptionKey = key
+	}
+
 	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
 	if err != nil {
 		errs = append(errs, err)
@@ -315,6 +424,14 @@ func Load() (*Config, error) {
 
 	if cfg.AuthResetSecret == "" && cfg.Env == EnvDevelopment && cfg.BindsLoopback() {
 		cfg.AuthResetSecret = devAuthResetSecret
+	}
+
+	if len(cfg.FilesEncryptionKey) == 0 && cfg.Env == EnvDevelopment && cfg.BindsLoopback() {
+		cfg.FilesEncryptionKey = []byte(devFilesEncryptionKey)
+	}
+
+	if cfg.FilesStoragePath == "" && cfg.Env == EnvDevelopment {
+		cfg.FilesStoragePath = "var/files"
 	}
 
 	errs = append(errs, cfg.validate()...)
@@ -393,6 +510,55 @@ func (c *Config) validate() []error {
 
 	if c.InvitePerMinute < 0 {
 		errs = append(errs, fmt.Errorf("config: INVITE_PER_MINUTE must be >= 0, got %d", c.InvitePerMinute))
+	}
+
+	if c.FilesUploadPerMinute < 0 {
+		errs = append(errs, fmt.Errorf("config: FILES_UPLOAD_PER_MINUTE must be >= 0, got %d", c.FilesUploadPerMinute))
+	}
+
+	if c.FilesStorageBackend != "local" {
+		errs = append(errs, fmt.Errorf("config: FILES_STORAGE_BACKEND must be %q, got %q", "local", c.FilesStorageBackend))
+	}
+
+	if c.FilesStoragePath == "" {
+		errs = append(errs, errors.New("config: FILES_STORAGE_PATH must not be empty"))
+	}
+
+	if c.FilesMaxBytes < 1024 || c.FilesMaxBytes > maxFilesBytes {
+		errs = append(errs, fmt.Errorf("config: FILES_MAX_BYTES must be between 1024 and %d, got %d", maxFilesBytes, c.FilesMaxBytes))
+	}
+
+	if c.FilesAvatarMaxBytes < 1024 || c.FilesAvatarMaxBytes > maxFilesBytes {
+		errs = append(errs, fmt.Errorf("config: FILES_AVATAR_MAX_BYTES must be between 1024 and %d, got %d", maxFilesBytes, c.FilesAvatarMaxBytes))
+	}
+
+	switch c.FilesScanMode {
+	case ScanOff, ScanOptional, ScanRequired:
+	default:
+		errs = append(errs, fmt.Errorf("config: FILES_SCAN_MODE must be %q, %q or %q, got %q",
+			ScanOff, ScanOptional, ScanRequired, c.FilesScanMode))
+	}
+
+	if c.FilesScanMode == ScanRequired && c.FilesClamAVAddr == "" {
+		errs = append(errs, errors.New("config: FILES_CLAMAV_ADDR is required when FILES_SCAN_MODE is required"))
+	}
+
+	if c.FilesClamAVTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("config: FILES_CLAMAV_TIMEOUT must be positive, got %s", c.FilesClamAVTimeout))
+	}
+
+	if len(c.FilesEncryptionKey) != 32 {
+		errs = append(errs, fmt.Errorf("config: FILES_ENCRYPTION_KEY must be 32 bytes, got %d", len(c.FilesEncryptionKey)))
+	}
+
+	if string(c.FilesEncryptionKey) == devFilesEncryptionKey && (c.Env.IsProduction() || !c.BindsLoopback()) {
+		errs = append(errs, errors.New("config: FILES_ENCRYPTION_KEY must not use the development default unless API_HOST is loopback"))
+	}
+
+	for _, mediaType := range c.FilesAllowedTypes {
+		if mediaTypeLooksWrong(mediaType) {
+			errs = append(errs, fmt.Errorf("config: FILES_ALLOWED_TYPES contains %q, which is not a media type", mediaType))
+		}
 	}
 
 	if c.LogFormat != LogFormatConsole && c.LogFormat != LogFormatJSON {
@@ -705,6 +871,97 @@ func getEnvBool(key string) bool {
 	default:
 		return false
 	}
+}
+
+func getEnvBoolValue(key string, defaultValue bool) (bool, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue, nil
+	}
+
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes":
+		return true, nil
+	case "0", "false", "no":
+		return false, nil
+	default:
+		return defaultValue, fmt.Errorf("config: %s must be true or false, got %q", key, raw)
+	}
+}
+
+func parseAllowedTypes(value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" {
+			continue
+		}
+
+		if part == "*" {
+			return nil, errors.New(`config: FILES_ALLOWED_TYPES must not be "*"; name the media types that may be stored`)
+		}
+
+		if mediaTypeLooksWrong(part) {
+			return nil, fmt.Errorf("config: FILES_ALLOWED_TYPES contains %q, which is not a media type like image/png", part)
+		}
+
+		out = append(out, part)
+	}
+
+	return out, nil
+}
+
+func mediaTypeLooksWrong(value string) bool {
+	slash := strings.IndexByte(value, '/')
+	if slash <= 0 || slash == len(value)-1 {
+		return true
+	}
+
+	if strings.ContainsAny(value, " \t;") {
+		return true
+	}
+
+	return strings.Count(value, "/") != 1
+}
+
+func parseEncryptionKey(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+
+	if len(value) == 64 && isHex(value) {
+		out := make([]byte, 32)
+		_, err := hex.Decode(out, []byte(value))
+		if err != nil {
+			return nil, fmt.Errorf("config: FILES_ENCRYPTION_KEY is not valid hex: %w", err)
+		}
+
+		return out, nil
+	}
+
+	if len(value) == 32 {
+		return []byte(value), nil
+	}
+
+	return nil, fmt.Errorf("config: FILES_ENCRYPTION_KEY must be 32 raw bytes or 64 hex characters, got %d bytes", len(value))
+}
+
+func isHex(value string) bool {
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+
+	return true
 }
 
 // getEnv retrieves the value of the environment variable named by the key.

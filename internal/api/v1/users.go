@@ -12,6 +12,7 @@ import (
 	"github.com/wokacz/multi-tenant-go-service/internal/api/reqctx"
 	"github.com/wokacz/multi-tenant-go-service/internal/auth"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/audit"
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/orgs"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/i18n"
@@ -38,8 +39,8 @@ type CreateUserInput struct {
 	Body CreateUserRequest
 }
 
-func registerUsers(api huma.API, users *user.Service, service *orgs.Service) {
-	h := &userHandlers{users: users, orgs: service}
+func registerUsers(api huma.API, users *user.Service, service *orgs.Service, fileService *files.Service) {
+	h := &userHandlers{users: users, orgs: service, files: fileService}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-me",
@@ -104,6 +105,7 @@ func registerUsers(api huma.API, users *user.Service, service *orgs.Service) {
 type userHandlers struct {
 	users *user.Service
 	orgs  *orgs.Service
+	files *files.Service
 }
 
 func (h *userHandlers) me(ctx context.Context, _ *GetMeInput) (*GetUserOutput, error) {
@@ -117,7 +119,12 @@ func (h *userHandlers) me(ctx context.Context, _ *GetMeInput) (*GetUserOutput, e
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &GetUserOutput{Body: newUserResponse(u)}, nil
+	body, err := newUserResponse(ctx, u, h.files)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return &GetUserOutput{Body: body}, nil
 }
 
 // UpdateMeRequest carries only what the account owner may change about
@@ -161,7 +168,12 @@ func (h *userHandlers) update(ctx context.Context, in *UpdateMeInput) (*GetUserO
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &GetUserOutput{Body: newUserResponse(updated)}, nil
+	body, err := newUserResponse(ctx, updated, h.files)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return &GetUserOutput{Body: body}, nil
 }
 
 func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutput, error) {
@@ -181,7 +193,12 @@ func (h *userHandlers) get(ctx context.Context, in *GetUserInput) (*GetUserOutpu
 		return nil, problem.Error(ctx, err)
 	}
 
-	return &GetUserOutput{Body: newUserResponse(u)}, nil
+	body, err := newUserResponse(ctx, u, h.files)
+	if err != nil {
+		return nil, problem.Error(ctx, err)
+	}
+
+	return &GetUserOutput{Body: body}, nil
 }
 
 // joinCtx names the new account as the actor of its own joining.

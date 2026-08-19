@@ -124,3 +124,7 @@ Desktop.ini
 
 FIX.md
 ENT.md
+.serena/
+
+# Local ciphertext of uploaded files (development default of FILES_STORAGE_PATH).
+var/files/

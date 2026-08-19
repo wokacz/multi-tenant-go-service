@@ -73,6 +73,9 @@ zawartości.
 | `user.ErrLocaleUnsupported`                                                                | 422    | `unsupported_locale`                            |
 | `authz.ErrUnknownPermission`, `ErrWrongScope`                                              | 422    | `unknown_permission`, `wrong_scope`             |
 | `orgs.ErrLastOwner`, `ErrRoleInUse`, `ErrRoleKeyTaken`, `ErrAlreadyMember`, `ErrSlugTaken` | 409    | odpowiedni kod                                  |
+| `files.ErrTooLarge`                                                                        | 413    | `file_too_large`                                |
+| `files.ErrEmpty`, `ErrNameInvalid`, `ErrTypeNotAllowed`, `ErrTypeMismatch`, `ErrExecutable`, `ErrInfected` | 422    | odpowiedni `file_*`                 |
+| `files.ErrScanUnavailable`                                                                 | 503    | `file_scan_unavailable`                         |
 | `ent.ErrProtected`                                                                         | 409    | `record_protected`                              |
 | błędy walidacji domenowej                                                                  | 422    | odpowiedni kod                                  |
 | `context.Canceled`                                                                         | 499    | `client_closed`                                 |

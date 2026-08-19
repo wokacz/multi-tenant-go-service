@@ -425,6 +425,29 @@ func HasInvitationsWith(preds ...predicate.Invitation) predicate.Organization {
 	})
 }
 
+// HasFiles applies the HasEdge predicate on the "files" edge.
+func HasFiles() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, FilesTable, FilesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasFilesWith applies the HasEdge predicate on the "files" edge with a given conditions (other predicates).
+func HasFilesWith(preds ...predicate.File) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newFilesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Organization) predicate.Organization {
 	return predicate.Organization(sql.AndPredicates(predicates...))

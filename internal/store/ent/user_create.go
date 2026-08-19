@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
@@ -161,6 +162,20 @@ func (_c *UserCreate) SetNillableSuspendedAt(v *time.Time) *UserCreate {
 	return _c
 }
 
+// SetAvatarID sets the "avatar_id" field.
+func (_c *UserCreate) SetAvatarID(v uuid.UUID) *UserCreate {
+	_c.mutation.SetAvatarID(v)
+	return _c
+}
+
+// SetNillableAvatarID sets the "avatar_id" field if the given value is not nil.
+func (_c *UserCreate) SetNillableAvatarID(v *uuid.UUID) *UserCreate {
+	if v != nil {
+		_c.SetAvatarID(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *UserCreate) SetID(v uuid.UUID) *UserCreate {
 	_c.mutation.SetID(v)
@@ -278,6 +293,11 @@ func (_c *UserCreate) AddSystemRoles(v ...*UserSystemRole) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddSystemRoleIDs(ids...)
+}
+
+// SetAvatar sets the "avatar" edge to the File entity.
+func (_c *UserCreate) SetAvatar(v *File) *UserCreate {
+	return _c.SetAvatarID(v.ID)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -591,6 +611,23 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
+	if nodes := _c.mutation.AvatarIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   user.AvatarTable,
+			Columns: []string{user.AvatarColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.AvatarID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
 	return _node, _spec
 }
 
@@ -784,6 +821,24 @@ func (u *UserUpsert) UpdateSuspendedAt() *UserUpsert {
 // ClearSuspendedAt clears the value of the "suspended_at" field.
 func (u *UserUpsert) ClearSuspendedAt() *UserUpsert {
 	u.SetNull(user.FieldSuspendedAt)
+	return u
+}
+
+// SetAvatarID sets the "avatar_id" field.
+func (u *UserUpsert) SetAvatarID(v uuid.UUID) *UserUpsert {
+	u.Set(user.FieldAvatarID, v)
+	return u
+}
+
+// UpdateAvatarID sets the "avatar_id" field to the value that was provided on create.
+func (u *UserUpsert) UpdateAvatarID() *UserUpsert {
+	u.SetExcluded(user.FieldAvatarID)
+	return u
+}
+
+// ClearAvatarID clears the value of the "avatar_id" field.
+func (u *UserUpsert) ClearAvatarID() *UserUpsert {
+	u.SetNull(user.FieldAvatarID)
 	return u
 }
 
@@ -1003,6 +1058,27 @@ func (u *UserUpsertOne) UpdateSuspendedAt() *UserUpsertOne {
 func (u *UserUpsertOne) ClearSuspendedAt() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearSuspendedAt()
+	})
+}
+
+// SetAvatarID sets the "avatar_id" field.
+func (u *UserUpsertOne) SetAvatarID(v uuid.UUID) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAvatarID(v)
+	})
+}
+
+// UpdateAvatarID sets the "avatar_id" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateAvatarID() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAvatarID()
+	})
+}
+
+// ClearAvatarID clears the value of the "avatar_id" field.
+func (u *UserUpsertOne) ClearAvatarID() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearAvatarID()
 	})
 }
 
@@ -1389,6 +1465,27 @@ func (u *UserUpsertBulk) UpdateSuspendedAt() *UserUpsertBulk {
 func (u *UserUpsertBulk) ClearSuspendedAt() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearSuspendedAt()
+	})
+}
+
+// SetAvatarID sets the "avatar_id" field.
+func (u *UserUpsertBulk) SetAvatarID(v uuid.UUID) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAvatarID(v)
+	})
+}
+
+// UpdateAvatarID sets the "avatar_id" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateAvatarID() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAvatarID()
+	})
+}
+
+// ClearAvatarID clears the value of the "avatar_id" field.
+func (u *UserUpsertBulk) ClearAvatarID() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearAvatarID()
 	})
 }
 

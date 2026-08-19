@@ -62,10 +62,11 @@ internal/
   i18n/                 language negotiation + embedded locale catalogs
   logging/              slog handlers (console, JSON)
   mail/                 outbound mail
+  filestore/            local ciphertext + ClamAV INSTREAM client
   telemetry/            OpenTelemetry (optional export)
   seed/                 development seed data (not runtime API)
   domain/               business rules; one directory per entity
-    audit/ authz/ orgs/ user/
+    audit/ authz/ files/ orgs/ user/
   store/                the only place entgo.io appears
     ent/schema/         the source of truth for the schema
     ent/                generated types — these are the models; no parallel package
@@ -97,6 +98,7 @@ task openapi                     # after changing a handler
 task seed                        # development seed data (see docs/guides/009)
 task bootstrap -- -email …       # first owner; see docs/design/007
 task otel                        # alias for compose:otel — OTLP collector + Grafana
+task compose:clamav              # optional ClamAV for FILES_SCAN_MODE
 task test:store                  # Postgres-backed repository tests
 ```
 
@@ -189,7 +191,7 @@ Do not add a dependency without saying why in your response. The direct dependen
 | read-modify-write on a counter                         | concurrent requests lose increments; use one conditional `UPDATE`                          |
 | query that bypasses the ent client                     | the soft-delete interceptor does not apply; filter `deleted_at` yourself                   |
 | unique index on a nullable column                      | in Postgres two `NULL`s do not collide                                                     |
-| new route with a path variable                         | the rate limiter matches literal paths; see `isMembersPath`                                |
+| new route with a path variable                         | the rate limiter matches literal paths; see `isMembersPath` / `isFilesUploadPath` (the latter also covers `POST /v1/me/avatar`) |
 
 ## Where to look
 
@@ -207,6 +209,7 @@ Start at [`docs/README.md`](docs/README.md). Direct routes:
 | understand a boundary before changing it                | [design/002](docs/design/002_architecture.md)          |
 | understand an authorization decision                    | [design/007](docs/design/007_authorization.md)         |
 | understand an error status or code                      | [design/008](docs/design/008_errors_and_i18n.md)       |
+| understand a file upload or the malware scan            | [design/011](docs/design/011_files.md)                 |
 
 ## Known gaps
 

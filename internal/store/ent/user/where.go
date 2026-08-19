@@ -111,6 +111,11 @@ func SuspendedAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldSuspendedAt, v))
 }
 
+// AvatarID applies equality check predicate on the "avatar_id" field. It's identical to AvatarIDEQ.
+func AvatarID(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAvatarID, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -621,6 +626,36 @@ func SuspendedAtNotNil() predicate.User {
 	return predicate.User(sql.FieldNotNull(FieldSuspendedAt))
 }
 
+// AvatarIDEQ applies the EQ predicate on the "avatar_id" field.
+func AvatarIDEQ(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAvatarID, v))
+}
+
+// AvatarIDNEQ applies the NEQ predicate on the "avatar_id" field.
+func AvatarIDNEQ(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldAvatarID, v))
+}
+
+// AvatarIDIn applies the In predicate on the "avatar_id" field.
+func AvatarIDIn(vs ...uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldIn(FieldAvatarID, vs...))
+}
+
+// AvatarIDNotIn applies the NotIn predicate on the "avatar_id" field.
+func AvatarIDNotIn(vs ...uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldAvatarID, vs...))
+}
+
+// AvatarIDIsNil applies the IsNil predicate on the "avatar_id" field.
+func AvatarIDIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldAvatarID))
+}
+
+// AvatarIDNotNil applies the NotNil predicate on the "avatar_id" field.
+func AvatarIDNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldAvatarID))
+}
+
 // HasMemberships applies the HasEdge predicate on the "memberships" edge.
 func HasMemberships() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
@@ -774,6 +809,29 @@ func HasSystemRoles() predicate.User {
 func HasSystemRolesWith(preds ...predicate.UserSystemRole) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := newSystemRolesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasAvatar applies the HasEdge predicate on the "avatar" edge.
+func HasAvatar() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, AvatarTable, AvatarColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasAvatarWith applies the HasEdge predicate on the "avatar" edge with a given conditions (other predicates).
+func HasAvatarWith(preds ...predicate.File) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newAvatarStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

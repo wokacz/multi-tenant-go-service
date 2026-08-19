@@ -2,6 +2,7 @@ package httptest
 
 import (
 	"net/http"
+	stdhttptest "net/http/httptest"
 	"slices"
 	"testing"
 	"time"
@@ -114,11 +115,14 @@ var mutatingProbes = map[string]ent.AuthzAction{
 	// which is the point of it reusing Invite rather than a bulk insert.
 	"invite-members":      ent.ActionMemberInvited,
 	"withdraw-invitation": ent.ActionMemberInvitationWithdrawn,
+	"upload-file":         ent.ActionFileUploaded,
+	"delete-file":         ent.ActionFileDeleted,
 }
 
 var readOnlyProbes = []string{
 	"get-organization", "list-members", "list-roles", "get-role", "list-audit-events",
 	"list-invitations",
+	"list-files", "get-file", "download-file",
 }
 
 // TestEveryMutatingOperationIsAudited is the guard the audit trail actually
@@ -178,7 +182,9 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 			invitation := f.Repo.SeedInvitation(f.OrgID, "invited@example.com",
 				"a-probe-token", time.Now().UTC().Add(orgs.InvitationTTL), held)
 
-			probes := auditProbes(f, held, free, other, invitation, outsider)
+			seededFile := f.Repo.SeedFile(f.OrgID, uuid.Nil, f.UserID, "seed.png", "image/png")
+
+			probes := auditProbes(f, held, free, other, invitation, outsider, seededFile.ID)
 
 			p, ok := probes[id]
 			if !ok {
@@ -187,8 +193,13 @@ func TestEveryMutatingOperationIsAudited(t *testing.T) {
 
 			before := len(f.auditLog(t))
 
-			rec := Do(t, f.Server.Handler(),
-				Authed(t, p.method, p.path, p.body, f.Token, ""))
+			var rec *stdhttptest.ResponseRecorder
+			if id == "upload-file" {
+				rec = Do(t, f.Server.Handler(), authedUpload(t, f, p.path, "shot.png", minimalPNG()))
+			} else {
+				rec = Do(t, f.Server.Handler(),
+					Authed(t, p.method, p.path, p.body, f.Token, ""))
+			}
 			if rec.Code >= http.StatusBadRequest {
 				t.Fatalf("%s %s = %d; body %s", p.method, p.path, rec.Code, rec.Body.Bytes())
 			}
@@ -258,6 +269,7 @@ func auditProbes(
 	f *AuthzFixture,
 	heldRole, freeRole, memberID, invitationID uuid.UUID,
 	outsider string,
+	fileID uuid.UUID,
 ) map[string]probe {
 	org := f.orgPath("")
 	member := f.orgPath("/members/" + memberID.String())
@@ -281,6 +293,9 @@ func auditProbes(
 		// same event from the invitee's side, and the entry says which address.
 		"reissue-invitation":  {http.MethodPost, invitation + "/reissue", ""},
 		"withdraw-invitation": {http.MethodDelete, invitation, ""},
+
+		"upload-file": {http.MethodPost, org + "/files", ""},
+		"delete-file": {http.MethodDelete, org + "/files/" + fileID.String(), ""},
 	}
 }
 

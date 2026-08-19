@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/invitation"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/organization"
@@ -132,6 +133,21 @@ func (_u *OrganizationUpdate) AddInvitations(v ...*Invitation) *OrganizationUpda
 	return _u.AddInvitationIDs(ids...)
 }
 
+// AddFileIDs adds the "files" edge to the File entity by IDs.
+func (_u *OrganizationUpdate) AddFileIDs(ids ...uuid.UUID) *OrganizationUpdate {
+	_u.mutation.AddFileIDs(ids...)
+	return _u
+}
+
+// AddFiles adds the "files" edges to the File entity.
+func (_u *OrganizationUpdate) AddFiles(v ...*File) *OrganizationUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddFileIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdate) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -198,6 +214,27 @@ func (_u *OrganizationUpdate) RemoveInvitations(v ...*Invitation) *OrganizationU
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveInvitationIDs(ids...)
+}
+
+// ClearFiles clears all "files" edges to the File entity.
+func (_u *OrganizationUpdate) ClearFiles() *OrganizationUpdate {
+	_u.mutation.ClearFiles()
+	return _u
+}
+
+// RemoveFileIDs removes the "files" edge to File entities by IDs.
+func (_u *OrganizationUpdate) RemoveFileIDs(ids ...uuid.UUID) *OrganizationUpdate {
+	_u.mutation.RemoveFileIDs(ids...)
+	return _u
+}
+
+// RemoveFiles removes "files" edges to File entities.
+func (_u *OrganizationUpdate) RemoveFiles(v ...*File) *OrganizationUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveFileIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -420,6 +457,51 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.FilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.FilesTable,
+			Columns: []string{organization.FilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedFilesIDs(); len(nodes) > 0 && !_u.mutation.FilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.FilesTable,
+			Columns: []string{organization.FilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.FilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.FilesTable,
+			Columns: []string{organization.FilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -541,6 +623,21 @@ func (_u *OrganizationUpdateOne) AddInvitations(v ...*Invitation) *OrganizationU
 	return _u.AddInvitationIDs(ids...)
 }
 
+// AddFileIDs adds the "files" edge to the File entity by IDs.
+func (_u *OrganizationUpdateOne) AddFileIDs(ids ...uuid.UUID) *OrganizationUpdateOne {
+	_u.mutation.AddFileIDs(ids...)
+	return _u
+}
+
+// AddFiles adds the "files" edges to the File entity.
+func (_u *OrganizationUpdateOne) AddFiles(v ...*File) *OrganizationUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddFileIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdateOne) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -607,6 +704,27 @@ func (_u *OrganizationUpdateOne) RemoveInvitations(v ...*Invitation) *Organizati
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveInvitationIDs(ids...)
+}
+
+// ClearFiles clears all "files" edges to the File entity.
+func (_u *OrganizationUpdateOne) ClearFiles() *OrganizationUpdateOne {
+	_u.mutation.ClearFiles()
+	return _u
+}
+
+// RemoveFileIDs removes the "files" edge to File entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveFileIDs(ids ...uuid.UUID) *OrganizationUpdateOne {
+	_u.mutation.RemoveFileIDs(ids...)
+	return _u
+}
+
+// RemoveFiles removes "files" edges to File entities.
+func (_u *OrganizationUpdateOne) RemoveFiles(v ...*File) *OrganizationUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveFileIDs(ids...)
 }
 
 // Where appends a list predicates to the OrganizationUpdate builder.
@@ -852,6 +970,51 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(invitation.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.FilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.FilesTable,
+			Columns: []string{organization.FilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedFilesIDs(); len(nodes) > 0 && !_u.mutation.FilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.FilesTable,
+			Columns: []string{organization.FilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.FilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.FilesTable,
+			Columns: []string{organization.FilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

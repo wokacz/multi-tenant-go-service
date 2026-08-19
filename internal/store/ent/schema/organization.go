@@ -32,6 +32,7 @@ func (Organization) Edges() []ent.Edge {
 		edge.To("roles", Role.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("memberships", Membership.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("invitations", Invitation.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("files", File.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 

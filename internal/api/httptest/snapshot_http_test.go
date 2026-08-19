@@ -96,6 +96,12 @@ func probesFor(f *AuthzFixture, roleID uuid.UUID) map[string]probe {
 		"withdraw-invitation": {http.MethodDelete, invitation, ""},
 
 		"list-audit-events": {http.MethodGet, org + "/audit", ""},
+
+		"list-files":    {http.MethodGet, org + "/files", ""},
+		"get-file":      {http.MethodGet, org + "/files/" + uuid.Must(uuid.NewV7()).String(), ""},
+		"download-file": {http.MethodGet, org + "/files/" + uuid.Must(uuid.NewV7()).String() + "/content", ""},
+		"upload-file":   {http.MethodPost, org + "/files", ""},
+		"delete-file":   {http.MethodDelete, org + "/files/" + uuid.Must(uuid.NewV7()).String(), ""},
 	}
 }
 

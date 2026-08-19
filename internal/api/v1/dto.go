@@ -1,10 +1,13 @@
 package v1
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/wokacz/multi-tenant-go-service/internal/domain/files"
 	"github.com/wokacz/multi-tenant-go-service/internal/domain/user"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent"
 )
@@ -39,19 +42,45 @@ const (
 // it makes the API contract explicit — adding a column to the model cannot
 // silently widen the response.
 type UserResponse struct {
-	ID               uuid.UUID `json:"id" format:"uuid" doc:"Unique identifier"`
-	Name             string    `json:"name" doc:"Display name"`
-	Email            string    `json:"email" format:"email" doc:"Email address, normalised to lower case"`
-	TwoFactorEnabled bool      `json:"two_factor_enabled" doc:"Whether sign-in from an untrusted device needs an emailed code"`
-	Locale           string    `json:"locale,omitempty" doc:"Preferred language, remembered from registration. Outranks Accept-Language."`
-	CreatedAt        time.Time `json:"created_at" doc:"When the account was registered"`
+	ID               uuid.UUID       `json:"id" format:"uuid" doc:"Unique identifier"`
+	Name             string          `json:"name" doc:"Display name"`
+	Email            string          `json:"email" format:"email" doc:"Email address, normalised to lower case"`
+	TwoFactorEnabled bool            `json:"two_factor_enabled" doc:"Whether sign-in from an untrusted device needs an emailed code"`
+	Locale           string          `json:"locale,omitempty" doc:"Preferred language, remembered from registration. Outranks Accept-Language."`
+	CreatedAt        time.Time       `json:"created_at" doc:"When the account was registered"`
+	Avatar           *AvatarResponse `json:"avatar,omitempty" doc:"Metadata of the account photo, absent when none is set"`
+}
+
+// AvatarResponse is the metadata of the caller's photo. The bytes themselves
+// are at GET /v1/me/avatar; putting them here would force every profile read
+// to decrypt.
+type AvatarResponse struct {
+	ID           uuid.UUID `json:"id" format:"uuid" doc:"File id in the shared files table"`
+	DetectedType string    `json:"detected_type" doc:"Media type detected from magic bytes"`
+	SizeBytes    int64     `json:"size_bytes" doc:"Plaintext size in bytes"`
+	SHA256       string    `json:"sha256" doc:"SHA-256 of the plaintext, hex"`
+	ScanStatus   string    `json:"scan_status" enum:"skipped,clean,unavailable" doc:"What the malware scanner concluded"`
+	ScanEngine   string    `json:"scan_engine,omitempty" doc:"Scanner that produced scan_status"`
+}
+
+func newAvatarResponse(f *ent.File) AvatarResponse {
+	return AvatarResponse{
+		ID:           f.ID,
+		DetectedType: f.DetectedType,
+		SizeBytes:    f.SizeBytes,
+		SHA256:       f.Sha256,
+		ScanStatus:   string(f.ScanStatus),
+		ScanEngine:   f.ScanEngine,
+	}
 }
 
 // newUserResponse is the only place a model becomes a DTO. Keeping the
 // conversion in one function means a new model field is invisible to clients
-// until someone deliberately adds it here.
-func newUserResponse(u *ent.User) UserResponse {
-	return UserResponse{
+// until someone deliberately adds it here. Avatar metadata is loaded from
+// files, not from columns on the account: ByID must stay cheap for
+// requireBearer.
+func newUserResponse(ctx context.Context, u *ent.User, svc *files.Service) (UserResponse, error) {
+	out := UserResponse{
 		ID:               u.ID,
 		Name:             u.Name,
 		Email:            u.Email,
@@ -59,6 +88,23 @@ func newUserResponse(u *ent.User) UserResponse {
 		Locale:           u.Locale,
 		CreatedAt:        u.CreatedAt,
 	}
+	if svc == nil {
+		return out, nil
+	}
+
+	row, err := svc.AvatarMeta(ctx, u.ID)
+	if err != nil {
+		if errors.Is(err, files.ErrNotFound) || errors.Is(err, user.ErrNotFound) {
+			return out, nil
+		}
+
+		return UserResponse{}, err
+	}
+
+	av := newAvatarResponse(row)
+	out.Avatar = &av
+
+	return out, nil
 }
 
 // DeviceResponse is a device as its owner sees it.

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/device"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/emailchange"
+	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/file"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/loginevent"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/membership"
 	"github.com/wokacz/multi-tenant-go-service/internal/store/ent/passwordreset"
@@ -194,6 +195,26 @@ func (_u *UserUpdate) ClearSuspendedAt() *UserUpdate {
 	return _u
 }
 
+// SetAvatarID sets the "avatar_id" field.
+func (_u *UserUpdate) SetAvatarID(v uuid.UUID) *UserUpdate {
+	_u.mutation.SetAvatarID(v)
+	return _u
+}
+
+// SetNillableAvatarID sets the "avatar_id" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableAvatarID(v *uuid.UUID) *UserUpdate {
+	if v != nil {
+		_u.SetAvatarID(*v)
+	}
+	return _u
+}
+
+// ClearAvatarID clears the value of the "avatar_id" field.
+func (_u *UserUpdate) ClearAvatarID() *UserUpdate {
+	_u.mutation.ClearAvatarID()
+	return _u
+}
+
 // AddMembershipIDs adds the "memberships" edge to the Membership entity by IDs.
 func (_u *UserUpdate) AddMembershipIDs(ids ...uuid.UUID) *UserUpdate {
 	_u.mutation.AddMembershipIDs(ids...)
@@ -297,6 +318,11 @@ func (_u *UserUpdate) AddSystemRoles(v ...*UserSystemRole) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddSystemRoleIDs(ids...)
+}
+
+// SetAvatar sets the "avatar" edge to the File entity.
+func (_u *UserUpdate) SetAvatar(v *File) *UserUpdate {
+	return _u.SetAvatarID(v.ID)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -449,6 +475,12 @@ func (_u *UserUpdate) RemoveSystemRoles(v ...*UserSystemRole) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSystemRoleIDs(ids...)
+}
+
+// ClearAvatar clears the "avatar" edge to the File entity.
+func (_u *UserUpdate) ClearAvatar() *UserUpdate {
+	_u.mutation.ClearAvatar()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -893,6 +925,35 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.AvatarCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   user.AvatarTable,
+			Columns: []string{user.AvatarColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AvatarIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   user.AvatarTable,
+			Columns: []string{user.AvatarColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -1072,6 +1133,26 @@ func (_u *UserUpdateOne) ClearSuspendedAt() *UserUpdateOne {
 	return _u
 }
 
+// SetAvatarID sets the "avatar_id" field.
+func (_u *UserUpdateOne) SetAvatarID(v uuid.UUID) *UserUpdateOne {
+	_u.mutation.SetAvatarID(v)
+	return _u
+}
+
+// SetNillableAvatarID sets the "avatar_id" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableAvatarID(v *uuid.UUID) *UserUpdateOne {
+	if v != nil {
+		_u.SetAvatarID(*v)
+	}
+	return _u
+}
+
+// ClearAvatarID clears the value of the "avatar_id" field.
+func (_u *UserUpdateOne) ClearAvatarID() *UserUpdateOne {
+	_u.mutation.ClearAvatarID()
+	return _u
+}
+
 // AddMembershipIDs adds the "memberships" edge to the Membership entity by IDs.
 func (_u *UserUpdateOne) AddMembershipIDs(ids ...uuid.UUID) *UserUpdateOne {
 	_u.mutation.AddMembershipIDs(ids...)
@@ -1175,6 +1256,11 @@ func (_u *UserUpdateOne) AddSystemRoles(v ...*UserSystemRole) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.AddSystemRoleIDs(ids...)
+}
+
+// SetAvatar sets the "avatar" edge to the File entity.
+func (_u *UserUpdateOne) SetAvatar(v *File) *UserUpdateOne {
+	return _u.SetAvatarID(v.ID)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -1327,6 +1413,12 @@ func (_u *UserUpdateOne) RemoveSystemRoles(v ...*UserSystemRole) *UserUpdateOne 
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSystemRoleIDs(ids...)
+}
+
+// ClearAvatar clears the "avatar" edge to the File entity.
+func (_u *UserUpdateOne) ClearAvatar() *UserUpdateOne {
+	_u.mutation.ClearAvatar()
+	return _u
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -1794,6 +1886,35 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usersystemrole.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.AvatarCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   user.AvatarTable,
+			Columns: []string{user.AvatarColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AvatarIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   user.AvatarTable,
+			Columns: []string{user.AvatarColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

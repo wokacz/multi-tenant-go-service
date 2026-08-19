@@ -8,7 +8,7 @@ Decyzja rozkłada się na dwie połowy, rozstrzygane w różnych warstwach. To j
 implementacji.
 
 | Pytanie                                           | Gdzie                                                    | Jak                                                           |
-|---------------------------------------------------|----------------------------------------------------------|---------------------------------------------------------------|
+| ------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------- |
 | Czy wołający ma uprawnienie X w organizacji O?    | middleware `requirePermission` (`internal/api/authz.go`) | mapa `operationAccess` + `authz.Authorize`                    |
 | Czy zasób, na który działa, leży w organizacji O? | repozytorium                                             | `orgID` jest **obowiązkowym drugim parametrem** każdej metody |
 
@@ -22,9 +22,9 @@ wypatrzeć na review.
 Rozszerzenie wzorca, który kod stosował już przy `publicOperations`.
 
 | Kategoria     | Zbiór                   | Znaczenie                                      |
-|---------------|-------------------------|------------------------------------------------|
+| ------------- | ----------------------- | ---------------------------------------------- |
 | publiczna     | `publicOperations`      | bez tokenu                                     |
-| samoobsługowa | `selfServiceOperations` | token wystarcza — tożsamość *jest* autoryzacją |
+| samoobsługowa | `selfServiceOperations` | token wystarcza — tożsamość _jest_ autoryzacją |
 | chroniona     | `operationAccess`       | wymaga uprawnienia w zakresie                  |
 
 Operacja spoza wszystkich trzech zbiorów jest **odrzucana z 403** i logowana jako defekt konfiguracji.
@@ -102,20 +102,21 @@ Dodanie uprawnienia:
 
 ## Role domyślne
 
-| Klucz            | Zakres      | Uprawnienia                                      |
-|------------------|-------------|--------------------------------------------------|
-| `platform_admin` | system      | wszystkie `platform.*` — wyprowadzone z katalogu |
-| `owner`          | organizacja | **cały katalog organizacyjny** — wyprowadzony    |
-| `admin`          | organizacja | wszystko poza `organization.delete` — wypisane   |
-| `member`         | organizacja | `organization.read`, `members.read`              |
-| `viewer`         | organizacja | `organization.read`                              |
+| Klucz            | Zakres      | Uprawnienia                                                       |
+| ---------------- | ----------- | ----------------------------------------------------------------- |
+| `platform_admin` | system      | wszystkie `platform.*` — wyprowadzone z katalogu                  |
+| `owner`          | organizacja | **cały katalog organizacyjny** — wyprowadzony                     |
+| `admin`          | organizacja | wszystko poza `organization.delete` — wypisane                    |
+| `member`         | organizacja | `organization.read`, `members.read`, `files.read`, `files.create` |
+| `viewer`         | organizacja | `organization.read`, `files.read`                                 |
 
 `owner` jest wyprowadzany z katalogu, więc nowe uprawnienie trafia do niego w tym samym commicie i nie może stać się
 funkcją, która nie działa dla nikogo i nie zgłasza powodu. `admin` celowo **nie** jest wyprowadzany: nowe uprawnienie
 lądujące automatycznie u każdego administratora to cicha zmiana przywilejów dowieziona razem z niepowiązaną funkcją.
 
 Role systemowe są materializowane per organizacja przy jej tworzeniu. Koszt:
-migracja uzupełniająca przy rozszerzeniu katalogu. Zysk: właściciel widzi dokładny skład roli `admin` i może ją
+migracja uzupełniająca przy rozszerzeniu katalogu — ta przy plikach dopisuje `files.*` do
+istniejących `owner`/`admin`/`member`/`viewer`. Zysk: właściciel widzi dokładny skład roli `admin` i może ją
 sklonować.
 
 ## Trzy drogi do eskalacji, jedna reguła
@@ -152,7 +153,7 @@ to jedynie reguła ostatniego właściciela, czyli przy dwóch właścicielach a
 
 Reguła: **nie wolno działać na członku, którego uprawnienia nie są podzbiorem twoich** (`authz.EnsureCanAffect`).
 Obowiązuje w trzech miejscach: usunięcie, zmiana statusu, zmiana ról. Przy zmianie ról działają obie kontrole — najpierw
-ranga (co cel *ma*), potem anty-eskalacja (co cel *dostanie*).
+ranga (co cel _ma_), potem anty-eskalacja (co cel _dostanie_).
 
 Szczegóły warte zapamiętania:
 
@@ -174,7 +175,7 @@ Szczegóły warte zapamiętania:
 ## Statusy odmowy
 
 | Sytuacja                                              | Status | `code`                        |
-|-------------------------------------------------------|--------|-------------------------------|
+| ----------------------------------------------------- | ------ | ----------------------------- |
 | brak/niepoprawny token                                | 401    | `unauthorized`                |
 | członek bez uprawnienia                               | 403    | `forbidden_requires`          |
 | organizacja nie istnieje **lub** nie jesteś członkiem | 404    | `not_found`                   |
@@ -293,7 +294,7 @@ Bootstrap przerywa koło, ale nie może być jedyną drogą. Rola `platform_admi
 martwym kodem, podczas gdy [Audyt](#audyt) obiecywał, że każda zmiana uprawnień jest zapisywana.
 
 | Operacja  | Ścieżka                                               | Uprawnienie                    |
-|-----------|-------------------------------------------------------|--------------------------------|
+| --------- | ----------------------------------------------------- | ------------------------------ |
 | lista     | `GET /v1/platform/system-roles`                       | `platform.system_roles.read`   |
 | nadanie   | `POST /v1/platform/system-roles`                      | `platform.system_roles.assign` |
 | odebranie | `DELETE /v1/platform/system-roles/{userID}/{roleKey}` | `platform.system_roles.remove` |
@@ -326,7 +327,7 @@ zarejestrował zaproszony adres, dziedziczył ofertę razem z rolami w organizac
 przenosi dowód z „twierdzę, że to mój adres" na „umiem przeczytać tę skrzynkę".
 
 | Kolumna       | Po co                                                                          |
-|---------------|--------------------------------------------------------------------------------|
+| ------------- | ------------------------------------------------------------------------------ |
 | `email`       | dokąd wysłano; unikalna w organizacji, wciąż porównywana przy przyjęciu        |
 | `token_hash`  | jedyna kopia tokenu po tej stronie                                             |
 | `expires_at`  | oferta bez wygaśnięcia to poświadczenie leżące bezterminowo w skrzynce         |
@@ -356,7 +357,7 @@ czyli dokładnie to, co token miał zlikwidować. Token istnieje w tym procesie 
 ### Cykl życia po stronie organizacji
 
 | Operacja             | Ścieżka                                          | Uprawnienie      |
-|----------------------|--------------------------------------------------|------------------|
+| -------------------- | ------------------------------------------------ | ---------------- |
 | zaproszenie          | `POST /v1/orgs/{orgID}/members`                  | `members.invite` |
 | zaproszenie zbiorcze | `POST /v1/orgs/{orgID}/invitations`              | `members.invite` |
 | lista                | `GET /v1/orgs/{orgID}/invitations`               | `members.read`   |
@@ -425,7 +426,7 @@ zakończył" jest dokładnie tym pytaniem, na które wpis odpowiada.
 ### Przyjęcie: dwa warunki, dwa różne pytania
 
 | Operacja   | Ścieżka                           | Kategoria     |
-|------------|-----------------------------------|---------------|
+| ---------- | --------------------------------- | ------------- |
 | lista      | `GET /v1/me/invitations`          | samoobsługowa |
 | przyjęcie  | `POST /v1/me/invitations/accept`  | samoobsługowa |
 | odrzucenie | `POST /v1/me/invitations/decline` | samoobsługowa |
@@ -444,14 +445,14 @@ Statusy odmowy są rozróżnione, bo wołający **trzyma token** — istnienie z
 `404` nie dałby mu nic, co mógłby powiedzieć osobie zapraszającej:
 
 | Sytuacja       | Status | `code`               |
-|----------------|--------|----------------------|
+| -------------- | ------ | -------------------- |
 | token nieznany | 404    | `not_found`          |
 | oferta wygasła | 410    | `invitation_expired` |
 
 ## Wyjście z organizacji
 
 | Operacja           | Ścieżka                                      | Kategoria        |
-|--------------------|----------------------------------------------|------------------|
+| ------------------ | -------------------------------------------- | ---------------- |
 | opuszczenie własne | `DELETE /v1/me/memberships/{membershipID}`   | samoobsługowa    |
 | usunięcie kogoś    | `DELETE /v1/orgs/{orgID}/members/{memberID}` | `members.remove` |
 
@@ -522,7 +523,7 @@ Repozytorium przyjmuje **strażnika** i woła go wewnątrz transakcji, po zablok
 policzone fakty (`OwnerState{Owners, SubjectHoldsOwner}` albo liczbę posiadaczy roli). Rozkład jest taki:
 
 | Co                             | Gdzie           |
-|--------------------------------|-----------------|
+| ------------------------------ | --------------- |
 | decyzja („czy odmówić")        | domena (`orgs`) |
 | transakcja, blokada, zliczenie | repozytorium    |
 
