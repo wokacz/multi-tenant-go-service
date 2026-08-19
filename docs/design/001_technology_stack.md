@@ -1,6 +1,7 @@
 # Stack technologiczny
 
-Serwis HTTP w Go, z Postgresem, bez frontendu. Kontrakt API jest generowany z kodu i commitowany.
+Serwis HTTP w Go z Postgresem. Kontrakt API jest generowany z kodu i commitowany. Opcjonalny klient Angular w
+`clients/web/` nie jest częścią obrazu API.
 
 ## Zależności bezpośrednie
 
@@ -13,6 +14,7 @@ Serwis HTTP w Go, z Postgresem, bez frontendu. Kontrakt API jest generowany z ko
 | `github.com/google/uuid`             | v1.6.0  | identyfikatory UUIDv7                            |
 | `golang.org/x/crypto`                | v0.55.0 | bcrypt                                           |
 | `golang.org/x/text`                  | v0.41.0 | negocjacja języka (`Accept-Language`)            |
+| OpenTelemetry (`go.opentelemetry.io/*`) | v1.45.0 | ślady, metryki, logi — opcjonalny eksport OTLP; patrz [010](../design/010_observability.md) |
 
 Go **1.26.6**, wersja w `go.mod`. CI czyta ją stamtąd (`go-version-file`). Obraz developerski pinuje minor tagiem
 `golang:1.26-alpine` — `FROM` nie czyta `go.mod`.
@@ -36,7 +38,7 @@ Lista jest krótka i to jest celowe — każda pozycja to decyzja, nie zaniedban
 
 | Brak                      | Dlaczego                                                                                                           |
 |---------------------------|--------------------------------------------------------------------------------------------------------------------|
-| biblioteki JWT            | parser HMAC-SHA256 to ~50 linii w `internal/auth/token.go`; atak `alg=none` jest zamknięty jawnie i pokryty testem |
+| biblioteki JWT            | parser HMAC-SHA256 w `internal/auth/token.go`, bez zewnętrznej biblioteki; atak `alg=none` zamknięty jawnie i pokryty testem |
 | frameworka testowego      | wystarcza `testing` ze standardowej biblioteki; brak testify to brak drugiego języka asercji                       |
 | biblioteki konfiguracji   | `internal/config` czyta zmienne środowiskowe i zwraca **wszystkie** błędy naraz                                    |
 | biblioteki rate limitingu | token bucket per adres IP mieści się w `internal/api/limit.go`                                                     |
@@ -44,7 +46,7 @@ Lista jest krótka i to jest celowe — każda pozycja to decyzja, nie zaniedban
 | biblioteki i18n           | katalogi JSON wkompilowane przez `go:embed`, dopasowanie przez `x/text/language`                                   |
 | ORM-owego `AutoMigrate`   | zgaduje zmiany kolumn i nigdy nic nie usuwa, więc schemat cicho by się rozjeżdżał                                  |
 
-`go.sum` ma około pięćdziesięciu linii. To jest miara, którą warto pilnować przy dokładaniu zależności.
+`go.sum` pozostaje relatywnie krótki — pilnuj go przy dokładaniu zależności.
 
 ## Dwa moduły Go i narzędzia
 

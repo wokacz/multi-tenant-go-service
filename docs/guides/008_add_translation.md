@@ -85,4 +85,5 @@ User.Locale  →  Accept-Language  →  en
 rozróżnienia służy `Catalog.Match` (zwraca też informację, czy w ogóle poproszono), w odróżnieniu od
 `Catalog.Negotiate`, które zawsze odpowiada, bo odpowiedź trzeba w czymś napisać.
 
-Nie ma jeszcze endpointu zmieniającego język po rejestracji.
+Po rejestracji język zmienia `PATCH /v1/me` (`locale` opcjonalne; puste = negocjacja z `Accept-Language` na każdym
+żądaniu). Szczegóły: [design/008 — pierwszeństwo](../design/008_errors_and_i18n.md#pierwszeństwo).

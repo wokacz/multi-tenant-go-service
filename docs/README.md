@@ -36,6 +36,7 @@ element, nie czytając wszystkiego od zera.
 | [007 Pisanie testów](guides/007_write_tests.md)                       | zawsze                                         |
 | [008 Tłumaczenia](guides/008_add_translation.md)                      | nowy komunikat lub nowy język                  |
 | [009 Dane rozwojowe](guides/009_seed_data.md)                         | konta i organizacje do klikania i testów       |
+| [clients/web/](../../clients/web/)                                    | opcjonalny klient Angular (nie w obrazie API)  |
 
 ## Szybkie odpowiedzi
 
@@ -54,6 +55,7 @@ element, nie czytając wszystkiego od zera.
 | Skąd wziąć konta do klikania po aplikacji?        | [guides/009](guides/009_seed_data.md)                 |
 | Gdzie zobaczyć ślady i metryki?                   | [design/010](design/010_observability.md)             |
 | Dlaczego log nie ma `trace_id`?                   | [design/010](design/010_observability.md#logi)        |
+| Jak zmienić język po rejestracji?                 | `PATCH /v1/me` — [design/008](design/008_errors_and_i18n.md#pierwszeństwo) |
 
 ## Konwencja
 

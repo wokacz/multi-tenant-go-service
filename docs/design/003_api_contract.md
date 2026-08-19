@@ -110,7 +110,7 @@ Grupy:
 |----------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `/health`                                          | sonda; sięga do bazy, bo instancja bez Postgresa nie obsłuży niczego                         |
 | `/v1/users`, `/v1/sessions`, `/v1/password-resets` | rejestracja, logowanie, reset hasła                                                          |
-| `/v1/me/*`                                         | własne konto: profil, urządzenia, zaproszenia, historia logowań, drugi składnik, uprawnienia |
+| `/v1/me/*`                                         | własne konto: profil (`GET`/`PATCH /v1/me`), zmiana adresu (`POST /v1/me/email`, `…/verify`), hasło (`POST /v1/me/password`), sesje (`DELETE /v1/me/sessions`), urządzenia, zaproszenia, członkostwa, historia logowań, drugi składnik, uprawnienia |
 | `/v1/permissions`                                  | katalog uprawnień produktu                                                                   |
 | `/v1/orgs/{orgID}/*`                               | organizacja: członkowie, role, dziennik zmian                                                |
 | `/v1/platform/*`                                   | cała instalacja: organizacje, konta, dziennik                                                |

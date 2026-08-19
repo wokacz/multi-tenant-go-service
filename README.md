@@ -166,6 +166,7 @@ brew install golangci-lint
 
 ```bash
 task bootstrap -- -email you@example.com
+task bootstrap -- -email you@example.com -org seed-acme   # inna organizacja niż default
 # albo, bez Go na hoście:
 task compose:bootstrap -- -email you@example.com
 ```
@@ -182,9 +183,13 @@ task up              # cały stos w kontenerach
 task down            # zatrzymaj (dane zostają)
 task check           # tidy + lint + test + openapi:check
 task test            # go test ./... -race
+task test:store      # testy repozytoriów na Postgresie (POSTGRES_TEST=1)
 task run             # API na hoście
+task seed            # dane rozwojowe (patrz docs/guides/009)
+task otel            # kolektor OTLP + Grafana (profil compose)
 task migrate         # migracje (Atlas na hoście)
 task compose:migrate # migracje (obraz Atlasa)
+task web:serve       # klient Angular (clients/web/)
 ```
 
 Testy domyślnie **nie potrzebują bazy**. Testy repozytoriów pomijają się, dopóki nie ustawisz `POSTGRES_TEST=1`. CI

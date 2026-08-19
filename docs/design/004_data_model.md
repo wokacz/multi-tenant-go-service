@@ -132,9 +132,9 @@ func (s Status) GrantsPermissions() bool { return s == StatusActive }
 rozsianym po kodzie — to właśnie takie porównania się rozjeżdżają, aż któreś zostanie zapisane jako
 `!= MembershipSuspended` i nowy status po cichu zacznie nadawać uprawnienia.
 
-Zaproszenie **nie jest** członkostwem: mieszka we własnej tabeli, trzyma tożsamość na kolumnie `email` i nie ma
-`user_id`. Unikalność `(organization_id, email)` zamyka orakl rejestracji. Członkostwo zawsze ma konto — `user_id` jest
-`NOT NULL`.
+Zaproszenie **nie jest** członkostwem: mieszka we własnej tabeli i nie ma `user_id`. Dowód to hash tokenu
+(`token_hash`); kolumna `email` służy do wysyłki i musi się zgadzać z adresem konta przy przyjęciu. Unikalność
+`(organization_id, email)` zamyka orakl rejestracji. Członkostwo zawsze ma konto — `user_id` jest `NOT NULL`.
 
 Wyjątkiem jest `AuthzAction`, która nie ma ograniczenia w bazie: lista rośnie z każdą operacją administracyjną, a
 `check` zamieniałby każde dopisanie w migrację. Tabela jest append-only i zapisywana z jednego miejsca, więc walidacja
@@ -150,7 +150,7 @@ po stronie Go jest tym, co ją naprawdę pilnuje.
 | `password_resets`, `two_factor_challenges`, `email_changes` | kody jednorazowe (HMAC z osobnym `purpose`, TTL, licznik prób) |
 | `organizations`                                             | najemcy                                                        |
 | `memberships`                                               | kto należy do której organizacji i w jakim stanie              |
-| `invitations`, `invitation_roles`                           | oferty członkostwa; tożsamością jest hash tokenu, nie adres    |
+| `invitations`, `invitation_roles`                           | oferty członkostwa; dowód to `token_hash`; `email` do wysyłki i dopasowania przy przyjęciu |
 | `roles`, `role_permissions`                                 | role organizacji i to, co nadają                               |
 | `membership_roles`                                          | przypisania ról                                                |
 | `user_system_roles`                                         | role platformowe, przypisywane kluczem                         |

@@ -15,7 +15,7 @@ Komunikat mówi **co było i czego oczekiwano**, a przy testach nieoczywistych �
 t.Fatalf("attempts = %d, want %d — nakładające się próby zostały zgubione", got, want)
 ```
 
-## Cztery poziomy
+## Poziomy testów
 
 | Poziom                     | Gdzie                                                         | Potrzebuje bazy |
 |----------------------------|---------------------------------------------------------------|-----------------|

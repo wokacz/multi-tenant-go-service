@@ -43,8 +43,7 @@ sequenceDiagram
 
 ## Token
 
-Kompaktowy JWT podpisany HMAC-SHA256, bez biblioteki — parser ma ~50 linii w
-`internal/auth/token.go`.
+Kompaktowy JWT podpisany HMAC-SHA256, bez biblioteki — parser w `internal/auth/token.go`.
 
 | Claim         | Znaczenie                                                |
 |---------------|----------------------------------------------------------|

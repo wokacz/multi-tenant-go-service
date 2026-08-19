@@ -219,9 +219,10 @@ odświeżenie migawki, przerysowanie widoku. Nigdy ekran błędu krytycznego.
 `ETag` jest haszem odpowiedzi, nie licznikiem. Licznik trzeba bezbłędnie inkrementować w każdej ścieżce zapisu;
 pominięcie jednej daje nieświeże UI bez żadnego objawu. Hasz nie może się pomylić.
 
-**`TestTheSnapshotAgreesWithEnforcement`** to jedyny test gwarantujący, że front i backend się nie rozjadą: dla każdej
-chronionej operacji pyta migawkę, czy wołający ma uprawnienie, a potem faktycznie wywołuje endpoint. 403 musi wystąpić
-dokładnie wtedy, gdy migawka powiedziała „nie".
+**`TestTheSnapshotAgreesWithEnforcement`** wiąże **migawkę** (`GET /v1/me/permissions`) z egzekwowaniem operacji
+**organizacyjnych**: dla każdej chronionej operacji w zakresie organizacji pyta migawkę, czy wołający ma uprawnienie, a
+potem faktycznie wywołuje endpoint. 403 musi wystąpić dokładnie wtedy, gdy migawka powiedziała „nie". Operacje
+platformowe pilnuje `TestSystemScopeIsEnforcedEndToEnd` — ten sam wzorzec sondy, bez ETag.
 
 ## Audyt
 
@@ -262,7 +263,11 @@ nikt jeszcze nie ma. Koło przerywa polecenie poza API:
 
 ```bash
 task bootstrap -- -email ada@example.com
+task bootstrap -- -email ada@example.com -org seed-acme   # inna organizacja niż default
 ```
+
+Flaga `-org` wybiera organizację po `slug` (domyślnie `default`). API może już nadawać właściciela w dowolnej
+organizacji; bootstrap pozostaje dla przypadku, w którym nikogo z uprawnieniami jeszcze nie ma.
 
 Nie „pierwszy zarejestrowany wygrywa" — przy otwartej rejestracji to wyścig, w którym może wziąć udział każdy.
 
@@ -539,11 +544,24 @@ Trzy szczegóły, które trzymają to razem:
 `OwnerCount` jako metoda repozytorium **została usunięta**. Liczba istnieje teraz tylko wewnątrz transakcji; osobna
 metoda do liczenia z puli byłaby drugą odpowiedzią na to samo pytanie, a dwie odpowiedzi w końcu się rozjeżdżają.
 
+## Rejestracja nie jest przyjęciem
+
+`POST /v1/users` tworzy konto i dołącza je do organizacji `default` jako zwykłego członka. **Nie przyjmuje** oczekujących
+zaproszeń na ten adres — zaproszenia czekają na `POST /v1/me/invitations/{id}/accept`.
+
+Powód jest prosty: adres na nowym kontie **nie jest zweryfikowany**. Rejestracja to „ktoś wpisał ten adres i zna hasło",
+a nie „ta osoba czyta skrzynkę". Gdyby rejestracja automatycznie przyjmowała zaproszenia, pierwszy, kto zarejestruje
+zaproszony adres, dziedziczył rolę w organizacji, do której nigdy nie należał. Wcześniej istniała metoda
+`AcceptInvitationsByEmail` — została usunięta właśnie po to, żeby ten kanał nie wrócił.
+
+Ta zasada łączy się z brakiem weryfikacji e-mail przy signup — patrz [Czego tu nie ma](#czego-tu-nie-ma).
+
 ## Czego tu nie ma
 
-- **Weryfikacja adresu e-mail.** Nie ma ani kolumny, ani endpointu: adres na koncie jest niepotwierdzony przez cały czas
-  jego życia. Dlatego adres **nie może być czynnikiem, który cokolwiek nadaje** — na tym opiera się decyzja, że
-  [rejestracja nie jest przyjęciem](#rejestracja-nie-jest-przyjęciem).
+- **Weryfikacja adresu przy rejestracji.** Brak kolumny `verified_at` i brak flow „potwierdź skrzynkę po signup": adres
+  na koncie jest niepotwierdzony przez cały czas jego życia. Zmiana adresu to osobny flow (`POST /v1/me/email` → kod na
+  nowy adres → `POST /v1/me/email/verify`); to nie jest weryfikacja konta przy rejestracji. Na tym opiera się
+  [decyzja, że rejestracja nie jest przyjęciem](#rejestracja-nie-jest-przyjęciem).
 - **Tłumaczenia ról własnych.** Świadomie nie ma. Nazwa roli utworzonej przez klienta jest pokazywana tak, jak ją
   wpisał — jest już w języku, w którym pracuje. Tabela `role_translations` na drugą odpowiedź istniała bez czytelnika i
   pisarza; została usunięta. Nazwy ról **shipowanych** są tłumaczone, z katalogu, po `Key`.

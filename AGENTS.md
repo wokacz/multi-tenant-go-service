@@ -60,6 +60,10 @@ internal/
   auth/                 JWT signing and parsing
   config/               process configuration
   i18n/                 language negotiation + embedded locale catalogs
+  logging/              slog handlers (console, JSON)
+  mail/                 outbound mail
+  telemetry/            OpenTelemetry (optional export)
+  seed/                 development seed data (not runtime API)
   domain/               business rules; one directory per entity
     audit/ authz/ orgs/ user/
   store/                the only place entgo.io appears
@@ -75,6 +79,7 @@ migrations/             Atlas migrations, generated
 compose.yml             include pointer so `docker compose up` works from the root
 .docker/                compose.yml, Dockerfile, air.toml — not a production image
 api/openapi.yaml        the HTTP contract, generated and committed
+clients/web/            optional Angular client (not part of the API image)
 docs/                   design decisions and how-to guides (Polish)
 ```
 
@@ -89,12 +94,17 @@ task run                # API on the host (Postgres still from compose)
 task migrate
 task migrate:diff NAME=<name>    # after changing a model
 task openapi                     # after changing a handler
+task seed                        # development seed data (see docs/guides/009)
+task bootstrap -- -email …       # first owner; see docs/design/007
+task otel                        # alias for compose:otel — OTLP collector + Grafana
+task test:store                  # Postgres-backed repository tests
 ```
 
 Database-backed tests skip unless enabled:
 
 ```bash
 POSTGRES_TEST=1 go test ./internal/store/repositories -v
+# or: task test:store
 ```
 
 ## Before you finish
@@ -203,9 +213,11 @@ Start at [`docs/README.md`](docs/README.md). Direct routes:
 Documented as absent in [design/007](docs/design/007_authorization.md). Do not
 "fix" them by inventing a design; ask first.
 
-- `role_translations` exists as a table but nothing reads or writes it — custom role names are single-language.
-- No endpoint changes `User.Locale` after registration.
-- No permission cache; permissions are resolved per request, deliberately.
+- No signup email verification (`verified_at`, verify-on-register flow) — the address on an account is never confirmed.
+  Email **change** (`POST /v1/me/email` → verify) proves a new mailbox only; it is not account verification at signup.
+- Custom role names are single-language (`roles.name`); shipped roles are translated from the catalog by `Key`.
+- No server-side permission cache; each gated request re-resolves grants. The permissions snapshot is client-cacheable via
+  `ETag` only (`GET /v1/me/permissions`).
 
 ## How to work
 

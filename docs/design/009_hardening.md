@@ -30,14 +30,18 @@ zamknąć.
 
 Token bucket per adres IP, osobne kubełki dla grup:
 
-| Zmienna               | Domyślnie | Chroni                                               |
-|-----------------------|-----------|------------------------------------------------------|
-| `REGISTER_PER_MINUTE` | 5         | `POST /v1/users` **i** `POST /v1/orgs/{id}/members`  |
-| `LOGIN_PER_MINUTE`    | 5         | `POST /v1/sessions` **i** `POST /v1/sessions/verify` |
-| `RESET_PER_MINUTE`    | 5         | `POST /v1/password-resets` i `…/confirm`             |
+| Zmienna               | Domyślnie | Chroni                                                                                      |
+|-----------------------|-----------|---------------------------------------------------------------------------------------------|
+| `REGISTER_PER_MINUTE` | 5         | `POST /v1/users`, `POST /v1/orgs/{id}/members`, **`POST /v1/me/email`**                     |
+| `LOGIN_PER_MINUTE`    | 5         | `POST /v1/sessions` **i** `POST /v1/sessions/verify`                                        |
+| `RESET_PER_MINUTE`    | 5         | `POST /v1/password-resets` i `…/confirm`, **`POST /v1/me/password`**                        |
+| `INVITE_PER_MINUTE`   | 30        | `POST /v1/orgs/{id}/members`, `POST /v1/orgs/{id}/invitations`, `POST …/invitations/{id}/reissue` |
 
 Oba kroki logowania dzielą kubełek — to jedno logowanie, a osobny kubełek byłby tylko drugim miejscem do zgadywania.
-Zaproszenie członka dzieli kubełek z rejestracją, bo oba wysyłają pocztę na dowolny adres, który wołający podał.
+Zaproszenia mają własny kubełek (`INVITE_PER_MINUTE`), bo administrator może wysłać wiele ofert w krótkim czasie —
+wspólny budżet z rejestracją byłby zbyt restrykcyjny. `POST /v1/me/email` dzieli kubełek z rejestracją: oba wysyłają
+pocztę na dowolny adres podany przez wołającego. `POST /v1/me/password` dzieli kubełek z resetem hasła — aktualne hasło
+jest sekretem, który da się zgadywać uwierzytelnionym tokenem.
 
 Klucz to adres klienta. Domyślnie jest to realny peer TCP. `X-Forwarded-For` jest czytany **tylko** wtedy, gdy ten peer
 siedzi w `TRUSTED_PROXIES` (lista CIDR), idąc od prawej i biorąc pierwszy skok, który sam nie jest zaufany. chi `RealIP`

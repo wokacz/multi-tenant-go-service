@@ -146,6 +146,7 @@ Na hoście:
 
 ```bash
 task bootstrap -- -email ada@example.com
+task bootstrap -- -email ada@example.com -org seed-acme   # organizacja inna niż default
 ```
 
 W kontenerach, bez Go na hoście:
@@ -154,7 +155,7 @@ W kontenerach, bez Go na hoście:
 task compose:bootstrap -- -email ada@example.com
 ```
 
-Polecenie jest idempotentne. `-platform-admin` jest wyłączone domyślnie: trzeba go poprosić, żeby pierwsza osoba w
+Polecenie jest idempotentne. `-org` wybiera organizację po `slug` (domyślnie `default`). `-platform-admin` jest wyłączone domyślnie: trzeba go poprosić, żeby pierwsza osoba w
 organizacji nie stała się milcząco administratorem całej instalacji. Dlaczego nie „pierwszy zarejestrowany wygrywa":
 [Autoryzacja](../design/007_authorization.md#bootstrap).
 

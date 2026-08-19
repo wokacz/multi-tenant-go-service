@@ -63,6 +63,9 @@ internal/
 ├── config/         konfiguracja procesu
 ├── i18n/           języki
 ├── mail/           wysyłka
+├── logging/        slog (console, JSON)
+├── telemetry/      OpenTelemetry — opcjonalny eksport OTLP
+├── seed/           dane rozwojowe (nie runtime API)
 ├── domain/         reguły biznesowe
 │   ├── audit/      ślad zmian uprawnień
 │   ├── authz/      katalog uprawnień i decyzja autoryzacyjna
