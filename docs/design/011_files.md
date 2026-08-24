@@ -30,10 +30,10 @@ osobno (`FILES_BLOCK_EXECUTABLES`), także po rozszerzeniu.
 
 Dwie flagi, obie domyślnie włączone:
 
-| Zmienna                         | Co robi                                                                          |
-|---------------------------------|----------------------------------------------------------------------------------|
-| `FILES_REQUIRE_DECLARED_MATCH`  | zadeklarowany MIME musi zgadzać się z wykrytym (pusty / octet-stream = brak)     |
-| `FILES_REQUIRE_EXTENSION_MATCH` | rozszerzenie, jeśli znane, musi zgadzać się z wykrytym typem                     |
+| Zmienna                         | Co robi                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `FILES_REQUIRE_DECLARED_MATCH`  | zadeklarowany MIME musi zgadzać się z wykrytym (pusty / octet-stream = brak) |
+| `FILES_REQUIRE_EXTENSION_MATCH` | rozszerzenie, jeśli znane, musi zgadzać się z wykrytym typem                 |
 
 CSV wolno pomylić z `text/plain`: oba są tekstem UTF-8 i sniffer nie ma jak ich rozróżnić.
 
@@ -41,11 +41,11 @@ CSV wolno pomylić z `text/plain`: oba są tekstem UTF-8 i sniffer nie ma jak ic
 
 ClamAV przez TCP (`INSTREAM`), bez biblioteki klienckiej. Protokół to prefiksowane długością kawałki.
 
-| `FILES_SCAN_MODE` | Gdy skaner odpowiada        | Gdy skaner nie wstaje                         |
-|-------------------|-----------------------------|-----------------------------------------------|
-| `off`             | nie wołany; status `skipped` | —                                             |
-| `optional`        | `clean` albo odmowa         | plik **zostaje**; status `unavailable`        |
-| `required`        | `clean` albo odmowa         | upload pada `503 file_scan_unavailable`       |
+| `FILES_SCAN_MODE` | Gdy skaner odpowiada         | Gdy skaner nie wstaje                   |
+| ----------------- | ---------------------------- | --------------------------------------- |
+| `off`             | nie wołany; status `skipped` | —                                       |
+| `optional`        | `clean` albo odmowa          | plik **zostaje**; status `unavailable`  |
+| `required`        | `clean` albo odmowa          | upload pada `503 file_scan_unavailable` |
 
 Zainfekowany payload **nigdy nie jest zapisywany**. Nie ma wartości `infected` w enumeracji: taki wiersz byłby
 dowodem, którego nie chcemy trzymać, i kusiłby do ponownego pobrania.
@@ -65,7 +65,7 @@ YARA, VirusTotal i skan po zapisie świadomie nie wchodzą.
 AES-256-GCM, jeden klucz procesu, koperta `wersja (1) || nonce (12) || ciphertext+tag`. Wersja jest po to, żeby rotacja
 mogła wprowadzić drugi algorytm bez czytania każdego bloba.
 
-`encryption_key_id` to pierwsze 8 bajtów SHA-256 klucza, hex. Nie jest sekretem: mówi przyszłej rotacji, *którym*
+`encryption_key_id` to pierwsze 8 bajtów SHA-256 klucza, hex. Nie jest sekretem: mówi przyszłej rotacji, _którym_
 kluczem ten blob jeszcze otworzyć.
 
 Klucz: 32 surowe bajty albo 64 znaki hex (`FILES_ENCRYPTION_KEY`). Na loopbacku w developmencie, gdy pusty, wchodzi
@@ -105,13 +105,13 @@ DELETE tenanta to zdarzenie operacyjne, nie ścieżka API.
 
 ## HTTP
 
-| Operacja        | Ścieżka                                      | Uprawnienie     |
-|-----------------|----------------------------------------------|-----------------|
-| lista           | `GET /v1/orgs/{orgID}/files`                 | `files.read`    |
-| metadane        | `GET /v1/orgs/{orgID}/files/{fileID}`        | `files.read`    |
-| treść           | `GET /v1/orgs/{orgID}/files/{fileID}/content`| `files.read`    |
-| wgranie         | `POST /v1/orgs/{orgID}/files` (multipart `file`) | `files.create` |
-| usunięcie       | `DELETE /v1/orgs/{orgID}/files/{fileID}`     | `files.delete`  |
+| Operacja  | Ścieżka                                          | Uprawnienie    |
+| --------- | ------------------------------------------------ | -------------- |
+| lista     | `GET /v1/orgs/{orgID}/files`                     | `files.read`   |
+| metadane  | `GET /v1/orgs/{orgID}/files/{fileID}`            | `files.read`   |
+| treść     | `GET /v1/orgs/{orgID}/files/{fileID}/content`    | `files.read`   |
+| wgranie   | `POST /v1/orgs/{orgID}/files` (multipart `file`) | `files.create` |
+| usunięcie | `DELETE /v1/orgs/{orgID}/files/{fileID}`         | `files.delete` |
 
 Lista oddaje metadane, nigdy bajtów. Pobieranie jest załącznikiem (`Content-Disposition`); `Content-Type` to wykryty
 typ, nie zadeklarowany.
@@ -138,12 +138,12 @@ organizacji filtruje po `organization_id`, więc wiersz z NULL nie wycieka do `G
 Obecność awatara to ustawione `users.avatar_id`. `GET /v1/me` oddaje metadane z tego wiersza (`avatar`, `omitempty`);
 bajty są na `GET /v1/me/avatar`. `ByID` konta **nie** joinuje `files` — middleware Bearer woła go na każdym żądaniu.
 
-| Operacja   | Ścieżka                 | Autoryzacja                          |
-|------------|-------------------------|--------------------------------------|
-| metadane   | w `GET /v1/me`          | samoobsługa (token)                  |
-| treść      | `GET /v1/me/avatar`     | samoobsługa                          |
-| wgranie    | `POST /v1/me/avatar`    | samoobsługa; multipart `file`        |
-| usunięcie  | `DELETE /v1/me/avatar`  | samoobsługa                          |
+| Operacja  | Ścieżka                | Autoryzacja                   |
+| --------- | ---------------------- | ----------------------------- |
+| metadane  | w `GET /v1/me`         | samoobsługa (token)           |
+| treść     | `GET /v1/me/avatar`    | samoobsługa                   |
+| wgranie   | `POST /v1/me/avatar`   | samoobsługa; multipart `file` |
+| usunięcie | `DELETE /v1/me/avatar` | samoobsługa                   |
 
 `/v1/me/*` nie może być pod uprawnieniem — ta sama reguła co profil i urządzenia. Drugie wgranie wstawia **nowy** wiersz
 i kasuje poprzedni (blob + wiersz), nie nadpisuje ścieżki. Gdy `CreateAccountFile` albo `AttachAvatar` padnie po `Put`,
@@ -155,21 +155,21 @@ już nie zdjęcie. POST dzieli kubełek `FILES_UPLOAD_PER_MINUTE` z uploadem org
 
 ## Konfiguracja
 
-| Zmienna                          | Domyślnie                         | Uwagi                                                                 |
-|----------------------------------|-----------------------------------|-----------------------------------------------------------------------|
-| `FILES_STORAGE_BACKEND`          | `local`                           | jedyna zaimplementowana wartość                                       |
-| `FILES_STORAGE_PATH`             | `var/files` (dev)                 | produkcja wymaga jawnej; Compose: `/tmp/air/files`                    |
-| `FILES_ENCRYPTION_KEY`           | wartość dev na loopbacku          | 32 bajty albo 64 znaki hex                                            |
-| `FILES_MAX_BYTES`                | 10 MiB                            | sufit 512 MiB; na POST upload limit ciała = to + 256 KiB na multipart |
-| `FILES_AVATAR_MAX_BYTES`         | 2 MiB                             | osobny sufit na `POST /v1/me/avatar`                                 |
-| `FILES_ALLOWED_TYPES`            | lista produktu                    | przecinek; `*` jest odrzucane przy starcie                            |
-| `FILES_SCAN_MODE`                | `off`                             | `off` / `optional` / `required`                                       |
-| `FILES_CLAMAV_ADDR`              | puste                             | wymagane przy `required`                                              |
-| `FILES_CLAMAV_TIMEOUT`           | `10s`                             |                                                                       |
-| `FILES_UPLOAD_PER_MINUTE`        | 20                                | `0` wyłącza (tylko testy); `POST …/files` i `POST /v1/me/avatar`      |
-| `FILES_REQUIRE_DECLARED_MATCH`   | `true`                            |                                                                       |
-| `FILES_REQUIRE_EXTENSION_MATCH`  | `true`                            |                                                                       |
-| `FILES_BLOCK_EXECUTABLES`        | `true`                            |                                                                       |
+| Zmienna                         | Domyślnie                | Uwagi                                                                 |
+| ------------------------------- | ------------------------ | --------------------------------------------------------------------- |
+| `FILES_STORAGE_BACKEND`         | `local`                  | jedyna zaimplementowana wartość                                       |
+| `FILES_STORAGE_PATH`            | `var/files` (dev)        | produkcja wymaga jawnej; Compose: `/tmp/air/files`                    |
+| `FILES_ENCRYPTION_KEY`          | wartość dev na loopbacku | 32 bajty albo 64 znaki hex                                            |
+| `FILES_MAX_BYTES`               | 10 MiB                   | sufit 512 MiB; na POST upload limit ciała = to + 256 KiB na multipart |
+| `FILES_AVATAR_MAX_BYTES`        | 2 MiB                    | osobny sufit na `POST /v1/me/avatar`                                  |
+| `FILES_ALLOWED_TYPES`           | lista produktu           | przecinek; `*` jest odrzucane przy starcie                            |
+| `FILES_SCAN_MODE`               | `off`                    | `off` / `optional` / `required`                                       |
+| `FILES_CLAMAV_ADDR`             | puste                    | wymagane przy `required`                                              |
+| `FILES_CLAMAV_TIMEOUT`          | `10s`                    |                                                                       |
+| `FILES_UPLOAD_PER_MINUTE`       | 20                       | `0` wyłącza (tylko testy); `POST …/files` i `POST /v1/me/avatar`      |
+| `FILES_REQUIRE_DECLARED_MATCH`  | `true`                   |                                                                       |
+| `FILES_REQUIRE_EXTENSION_MATCH` | `true`                   |                                                                       |
+| `FILES_BLOCK_EXECUTABLES`       | `true`                   |                                                                       |
 
 `MAX_REQUEST_BYTES` (1 MiB) zostaje limitem JSON-a. Upload, który ma prawo być większy, dostaje własny sufit — inaczej
 domyślne 10 MiB (pliki) albo 2 MiB (awatar) byłoby nieosiągalne.
