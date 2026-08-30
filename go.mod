@@ -6,21 +6,21 @@ require (
 	ariga.io/atlas v0.36.2-0.20250730182955-2c6300d0a3e1
 	entgo.io/ent v0.14.6
 	github.com/danielgtaylor/huma/v2 v2.39.1
-	github.com/go-chi/chi/v5 v5.3.1
+	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
-	go.opentelemetry.io/contrib/bridges/otelslog v0.20.0
+	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
-	go.opentelemetry.io/otel v1.45.0
+	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.21.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.45.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.45.0
-	go.opentelemetry.io/otel/log v0.21.0
-	go.opentelemetry.io/otel/metric v1.45.0
+	go.opentelemetry.io/otel/log v0.22.0
+	go.opentelemetry.io/otel/metric v1.46.0
 	go.opentelemetry.io/otel/sdk v1.45.0
 	go.opentelemetry.io/otel/sdk/log v0.21.0
 	go.opentelemetry.io/otel/sdk/metric v1.45.0
-	go.opentelemetry.io/otel/trace v1.45.0
+	go.opentelemetry.io/otel/trace v1.46.0
 	golang.org/x/crypto v0.55.0
 	golang.org/x/text v0.41.0
 )
@@ -43,7 +43,6 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/zclconf/go-cty v1.14.4 // indirect
 	github.com/zclconf/go-cty-yaml v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
